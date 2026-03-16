@@ -14,11 +14,18 @@ class WhatsappController extends Controller
     {
 
         try {
-            $data = $request->all();
+                        
+            $bodyContent = json_decode($request->getContent(), true);
 
-            $phone = $data['from'];
-            $message = $data['text'];
-
+            $value = $bodyContent['entry'][0]['changes'][0]['value'];
+            
+            if (!empty($value['messages'])) {
+                if ($value['messages'][0]['type'] == 'text') {
+                    $message = $value['messages'][0]['text']['body'];
+                    $phone = $value['messages'][0]['from'];
+                }
+            }
+            
             $client = Cliente::firstOrCreate(
                 ['phone' => $phone]
             );
