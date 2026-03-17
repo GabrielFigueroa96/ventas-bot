@@ -520,54 +520,103 @@ Cuando alguien pide sugerencia para una ocasión:
 
     private function generatePriceListImage(array $productos): string
     {
-        $lineH   = 34;
-        $padding = 24;
-        $headerH = 64;
-        $footerH = 38;
-        $width   = 620;
-        $height  = $headerH + $footerH + $padding * 2 + count($productos) * $lineH;
+        $fontDir  = storage_path('fonts');
+        $fontReg  = $fontDir . '/arial.ttf';
+        $fontBold = $fontDir . '/arialbd.ttf';
+
+        // Fallback a fuentes del sistema si no están en storage
+        if (!file_exists($fontReg)) {
+            $fontReg  = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
+            $fontBold = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+        }
+
+        $useTTF  = function_exists('imagettftext') && file_exists($fontReg);
+
+        $lineH   = 42;
+        $padding = 28;
+        $headerH = 80;
+        $footerH = 44;
+        $width   = 680;
+        $height  = $headerH + $footerH + ($padding / 2) + count($productos) * $lineH + $padding;
 
         $img = imagecreatetruecolor($width, $height);
+        imagesavealpha($img, true);
 
         $white     = imagecolorallocate($img, 255, 255, 255);
-        $red       = imagecolorallocate($img, 220,  38,  38);
-        $dark      = imagecolorallocate($img,  31,  41,  55);
-        $gray      = imagecolorallocate($img, 107, 114, 128);
-        $lightGray = imagecolorallocate($img, 243, 244, 246);
+        $red       = imagecolorallocate($img, 204,  30,  30);
+        $redLight  = imagecolorallocate($img, 220,  38,  38);
+        $dark      = imagecolorallocate($img,  30,  30,  30);
+        $gray      = imagecolorallocate($img, 120, 120, 120);
+        $rowAlt    = imagecolorallocate($img, 250, 250, 250);
+        $rowNorm   = imagecolorallocate($img, 255, 255, 255);
+        $divider   = imagecolorallocate($img, 230, 230, 230);
 
         // Fondo blanco
         imagefilledrectangle($img, 0, 0, $width, $height, $white);
 
-        // Header rojo
-        imagefilledrectangle($img, 0, 0, $width, $headerH, $red);
-        $font   = 5;
-        $titulo = 'LISTA DE PRECIOS';
-        $tW     = imagefontwidth($font) * strlen($titulo);
-        $tH     = imagefontheight($font);
-        imagestring($img, $font, (int)(($width - $tW) / 2), (int)(($headerH - $tH) / 2), $titulo, $white);
+        // Header rojo degradado simulado (dos bandas)
+        imagefilledrectangle($img, 0, 0, $width, $headerH - 4, $red);
+        imagefilledrectangle($img, 0, $headerH - 4, $width, $headerH, $redLight);
+
+        // Título en header
+        if ($useTTF) {
+            $titulo = 'Lista de Precios';
+            $bbox   = imagettfbbox(22, 0, $fontBold ?: $fontReg, $titulo);
+            $tW     = $bbox[2] - $bbox[0];
+            imagettftext($img, 22, 0, (int)(($width - $tW) / 2), 52, $white, $fontBold ?: $fontReg, $titulo);
+        } else {
+            $f  = 5;
+            $tW = imagefontwidth($f) * strlen('Lista de Precios');
+            imagestring($img, $f, (int)(($width - $tW) / 2), 28, 'Lista de Precios', $white);
+        }
+
+        // Cabecera de columnas
+        $yHead = $headerH + 10;
+        if ($useTTF) {
+            imagettftext($img, 10, 0, $padding, $yHead + 14, $gray, $fontReg, 'PRODUCTO');
+            $pLabel = 'PRECIO';
+            $pBbox  = imagettfbbox(10, 0, $fontReg, $pLabel);
+            imagettftext($img, 10, 0, $width - $padding - ($pBbox[2] - $pBbox[0]), $yHead + 14, $gray, $fontReg, $pLabel);
+        }
+        imagefilledrectangle($img, $padding, $yHead + 18, $width - $padding, $yHead + 19, $divider);
 
         // Filas de productos
-        $y = $headerH + $padding;
+        $y = $headerH + $lineH + 6;
         foreach ($productos as $i => $p) {
-            if ($i % 2 === 0) {
-                imagefilledrectangle($img, 0, $y - 4, $width, $y + $lineH - 6, $lightGray);
-            }
-            $unidad  = $p->tipo === 'Unidad' ? '/u' : '/kg';
-            $nombre  = mb_substr($p->des, 0, 38);
-            $precio  = '$' . number_format($p->PRE, 0, ',', '.') . $unidad;
-            $precioW = imagefontwidth(4) * strlen($precio);
+            $bgColor = $i % 2 === 0 ? $rowNorm : $rowAlt;
+            imagefilledrectangle($img, 0, $y - 4, $width, $y + $lineH - 8, $bgColor);
 
-            imagestring($img, 4, $padding, $y, $nombre, $dark);
-            imagestring($img, 4, $width - $padding - $precioW, $y, $precio, $red);
+            $unidad = $p->tipo === 'Unidad' ? '/u' : '/kg';
+            $nombre = mb_strtoupper(mb_substr($p->des, 0, 40));
+            $precio = '$' . number_format($p->PRE, 0, ',', '.') . ' ' . $unidad;
+
+            if ($useTTF) {
+                imagettftext($img, 13, 0, $padding, $y + 22, $dark, $fontReg, $nombre);
+                $pBbox   = imagettfbbox(13, 0, $fontBold ?: $fontReg, $precio);
+                $precioW = $pBbox[2] - $pBbox[0];
+                imagettftext($img, 13, 0, $width - $padding - $precioW, $y + 22, $redLight, $fontBold ?: $fontReg, $precio);
+            } else {
+                imagestring($img, 4, $padding, $y + 8, $nombre, $dark);
+                $precioW = imagefontwidth(4) * strlen($precio);
+                imagestring($img, 4, $width - $padding - $precioW, $y + 8, $precio, $red);
+            }
+
+            // Línea divisoria sutil
+            imagefilledrectangle($img, $padding, $y + $lineH - 9, $width - $padding, $y + $lineH - 8, $divider);
+
             $y += $lineH;
         }
 
         // Footer
-        $fecha = now()->format('d/m/Y');
-        imagestring($img, 2, $padding, $height - $footerH + 12, "Precios al {$fecha}", $gray);
+        $fecha = now()->locale('es')->isoFormat('D [de] MMMM YYYY');
+        if ($useTTF) {
+            imagettftext($img, 10, 0, $padding, $height - 14, $gray, $fontReg, "Precios al {$fecha}");
+        } else {
+            imagestring($img, 2, $padding, $height - $footerH + 16, "Precios al {$fecha}", $gray);
+        }
 
         $path = sys_get_temp_dir() . '/precios_' . time() . '.png';
-        imagepng($img, $path);
+        imagepng($img, $path, 6);
         imagedestroy($img);
 
         return $path;
