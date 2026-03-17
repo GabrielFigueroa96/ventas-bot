@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Database\UniqueConstraintViolationException;
 use App\Models\Cliente;
 use App\Models\Message;
 use App\Services\BotService;
@@ -53,11 +54,6 @@ class WebhookController extends Controller
             $wamid = $msg['id'];
             $bot   = app(BotService::class);
 
-            // Ignorar si ya procesamos este mensaje (webhook duplicado)
-            if (Message::where('wamid', $wamid)->exists()) {
-                return response()->json(['status' => 'duplicate']);
-            }
-
             $image   = null;
             $message = '';
 
@@ -69,14 +65,13 @@ class WebhookController extends Controller
                     return response()->json(['status' => 'empty_transcription']);
                 }
             } elseif ($type === 'image') {
-                $image     = $bot->downloadWhatsappMedia($msg['image']['id']);
-                $message   = $msg['image']['caption'] ?? '';
-                $imgPath   = 'chat-images/' . md5($wamid) . '.jpg';
-                $fullPath  = public_path($imgPath);
+                $image   = $bot->downloadWhatsappMedia($msg['image']['id']);
+                $message = $msg['image']['caption'] ?? '';
+                $imgPath = 'chat-images/' . md5($wamid) . '.jpg';
                 if (!is_dir(public_path('chat-images'))) {
                     mkdir(public_path('chat-images'), 0755, true);
                 }
-                file_put_contents($fullPath, base64_decode($image['base64']));
+                file_put_contents(public_path($imgPath), base64_decode($image['base64']));
             } else {
                 $client = Cliente::firstOrCreate(['phone' => $phone]);
                 $bot->sendWhatsapp($phone, "Por ahora solo proceso texto, voz e imágenes. 😊");
@@ -85,14 +80,20 @@ class WebhookController extends Controller
 
             $client = Cliente::firstOrCreate(['phone' => $phone]);
 
-            Message::create([
-                'cliente_id' => $client->id,
-                'message'    => $image ? ($message ?: '') : $message,
-                'direction'  => 'incoming',
-                'type'       => $type,
-                'wamid'      => $wamid,
-                'media_path' => $imgPath ?? null,
-            ]);
+            // Guardado atómico: la constraint UNIQUE en wamid rechaza duplicados a nivel DB.
+            // Si dos webhooks llegan simultáneamente, el segundo falla aquí sin procesar nada.
+            try {
+                Message::create([
+                    'cliente_id' => $client->id,
+                    'message'    => $image ? ($message ?: '') : $message,
+                    'direction'  => 'incoming',
+                    'type'       => $type,
+                    'wamid'      => $wamid,
+                    'media_path' => $imgPath ?? null,
+                ]);
+            } catch (UniqueConstraintViolationException) {
+                return response()->json(['status' => 'duplicate']);
+            }
 
             // Si el admin tomó control, no responde el bot
             if ($client->modo === 'humano') {
