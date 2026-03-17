@@ -142,6 +142,7 @@ let atBottom       = true;
 const pollUrl      = "{{ route('admin.chat.mensajes', $cliente) }}";
 const pedidosUrl   = "{{ route('admin.chat.pedidos', $cliente) }}";
 let lastPedidoReg  = {{ $lastPedidoReg }};
+let pollingMsg     = false;   // lock: evita polls simultáneos
 
 // Detectar si el admin scrolleó hacia arriba (no forzar scroll en ese caso)
 chatBox?.addEventListener('scroll', () => {
@@ -181,22 +182,34 @@ function escHtml(str) {
 }
 
 async function pollMensajes() {
+    if (pollingMsg) return;     // ya hay un poll en curso, esperamos
+    pollingMsg = true;
     try {
         const res  = await fetch(`${pollUrl}?since=${lastId}`);
         const data = await res.json();
         if (data.length > 0) {
+            let hayNuevos = false;
             data.forEach(msg => {
+                // Deduplicar: saltar si el mensaje ya está en el DOM
+                if (chatBox.querySelector(`[data-id="${msg.id}"]`)) {
+                    lastId = msg.id;
+                    return;
+                }
                 chatBox.insertAdjacentHTML('beforeend', bubbleHtml(msg));
                 lastId = msg.id;
+                hayNuevos = true;
             });
-            scrollBottom();
-
-            // Indicador de nuevo mensaje si el admin scrolleó arriba
-            if (!atBottom) {
-                document.getElementById('nuevo-msg')?.classList.remove('hidden');
+            if (hayNuevos) {
+                scrollBottom();
+                if (!atBottom) {
+                    document.getElementById('nuevo-msg')?.classList.remove('hidden');
+                }
             }
         }
     } catch (_) {}
+    finally {
+        pollingMsg = false;
+    }
 }
 
 async function pollPedidos() {
@@ -240,10 +253,11 @@ formEnviar?.addEventListener('submit', async function(e) {
     btn.disabled   = true;
     btn.textContent = '...';
 
-    // Agregar burbuja inmediatamente (optimistic UI)
+    // Burbuja optimista (solo si hay texto, no para imágenes solas)
     const textoLocal = input.value.trim();
+    let tmpId = null;
     if (textoLocal) {
-        const tmpId = 'tmp-' + Date.now();
+        tmpId = 'tmp-' + Date.now();
         chatBox.insertAdjacentHTML('beforeend', `
             <div class="flex justify-end opacity-60" id="${tmpId}">
                 <div class="max-w-xs px-4 py-2 rounded-2xl text-sm bg-red-600 text-white rounded-br-none">
@@ -267,18 +281,22 @@ formEnviar?.addEventListener('submit', async function(e) {
         const data = await res.json();
 
         if (res.ok) {
-            // Reemplazar burbuja temporal por la definitiva con id real
-            const tmp = document.getElementById('tmp-' + (Date.now() - 1)) ?? chatBox.lastElementChild;
-            if (tmp) tmp.remove();
+            // Eliminar burbuja temporal si existe
+            if (tmpId) document.getElementById(tmpId)?.remove();
 
-            chatBox.insertAdjacentHTML('beforeend', bubbleHtml(data));
+            // Insertar solo si el poll no lo agregó ya
+            if (!chatBox.querySelector(`[data-id="${data.id}"]`)) {
+                chatBox.insertAdjacentHTML('beforeend', bubbleHtml(data));
+            }
             lastId = data.id;
             atBottom = true;
             scrollBottom();
         } else {
+            if (tmpId) document.getElementById(tmpId)?.remove();
             alert(data.message ?? 'Error al enviar.');
         }
     } catch (err) {
+        if (tmpId) document.getElementById(tmpId)?.remove();
         alert('Error de red al enviar el mensaje.');
     } finally {
         btn.disabled    = false;
