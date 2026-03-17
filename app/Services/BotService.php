@@ -337,7 +337,7 @@ Cuando alguien pide sugerencia para una ocasión:
             $result = match ($funcName) {
                 'crear_pedido'    => $this->createOrder($cliente, $args['items'] ?? [], $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['obs'] ?? ''),
                 'ver_pedidos'     => $this->orderStatus($cliente),
-                'ver_precios'     => $this->priceList(),
+                'ver_precios'     => $this->priceList($cliente),
                 'calcular_total'  => $this->calcularTotal($args['items'] ?? []),
                 'cancelar_pedido' => $this->cancelOrder($cliente, (int) ($args['nro'] ?? 0)),
                 default           => 'Función desconocida.',
@@ -490,9 +490,8 @@ Cuando alguien pide sugerencia para una ocasión:
         return "Pedido #{$nro} cancelado correctamente.";
     }
 
-    private function priceList(): string
+    private function priceList($cliente): string
     {
-        // Forzar refresco del cache al pedir precios
         Cache::forget('productos_bot_lista');
         Cache::forget('productos_bot_precios');
 
@@ -502,11 +501,93 @@ Cuando alguien pide sugerencia para una ocasión:
             return 'No hay productos disponibles en este momento.';
         }
 
-        return $productos->map(
-            fn($p) => $p->tipo === 'unidad'
-                ? "{$p->des} — \${$p->PRE}/u"
-                : "{$p->des} — \${$p->PRE}/kg"
-        )->implode("\n");
+        try {
+            $path    = $this->generatePriceListImage($productos->all());
+            $mediaId = $this->uploadMediaFromPath($path);
+            $this->sendWhatsappMedia($cliente->phone, $mediaId, 'image');
+            @unlink($path);
+            return 'Lista de precios enviada como imagen.';
+        } catch (\Throwable $e) {
+            Log::error('priceList imagen: ' . $e->getMessage());
+            // Fallback a texto si falla la imagen
+            return $productos->map(
+                fn($p) => $p->tipo === 'Unidad'
+                    ? "{$p->des} — \${$p->PRE}/u"
+                    : "{$p->des} — \${$p->PRE}/kg"
+            )->implode("\n");
+        }
+    }
+
+    private function generatePriceListImage(array $productos): string
+    {
+        $lineH   = 34;
+        $padding = 24;
+        $headerH = 64;
+        $footerH = 38;
+        $width   = 620;
+        $height  = $headerH + $footerH + $padding * 2 + count($productos) * $lineH;
+
+        $img = imagecreatetruecolor($width, $height);
+
+        $white     = imagecolorallocate($img, 255, 255, 255);
+        $red       = imagecolorallocate($img, 220,  38,  38);
+        $dark      = imagecolorallocate($img,  31,  41,  55);
+        $gray      = imagecolorallocate($img, 107, 114, 128);
+        $lightGray = imagecolorallocate($img, 243, 244, 246);
+
+        // Fondo blanco
+        imagefilledrectangle($img, 0, 0, $width, $height, $white);
+
+        // Header rojo
+        imagefilledrectangle($img, 0, 0, $width, $headerH, $red);
+        $font   = 5;
+        $titulo = 'LISTA DE PRECIOS';
+        $tW     = imagefontwidth($font) * strlen($titulo);
+        $tH     = imagefontheight($font);
+        imagestring($img, $font, (int)(($width - $tW) / 2), (int)(($headerH - $tH) / 2), $titulo, $white);
+
+        // Filas de productos
+        $y = $headerH + $padding;
+        foreach ($productos as $i => $p) {
+            if ($i % 2 === 0) {
+                imagefilledrectangle($img, 0, $y - 4, $width, $y + $lineH - 6, $lightGray);
+            }
+            $unidad  = $p->tipo === 'Unidad' ? '/u' : '/kg';
+            $nombre  = mb_substr($p->des, 0, 38);
+            $precio  = '$' . number_format($p->PRE, 0, ',', '.') . $unidad;
+            $precioW = imagefontwidth(4) * strlen($precio);
+
+            imagestring($img, 4, $padding, $y, $nombre, $dark);
+            imagestring($img, 4, $width - $padding - $precioW, $y, $precio, $red);
+            $y += $lineH;
+        }
+
+        // Footer
+        $fecha = now()->format('d/m/Y');
+        imagestring($img, 2, $padding, $height - $footerH + 12, "Precios al {$fecha}", $gray);
+
+        $path = sys_get_temp_dir() . '/precios_' . time() . '.png';
+        imagepng($img, $path);
+        imagedestroy($img);
+
+        return $path;
+    }
+
+    private function uploadMediaFromPath(string $path, string $mime = 'image/png'): string
+    {
+        $response = Http::withToken(config('api.whatsapp.key'))
+            ->attach('file', file_get_contents($path), basename($path), ['Content-Type' => $mime])
+            ->attach('messaging_product', 'whatsapp')
+            ->attach('type', $mime)
+            ->post('https://graph.facebook.com/v19.0/295131097015095/media');
+
+        $mediaId = $response->json('id');
+
+        if (!$mediaId) {
+            throw new \RuntimeException('Error al subir imagen: ' . $response->body());
+        }
+
+        return $mediaId;
     }
 
     // -------------------------------------------------------------------------
