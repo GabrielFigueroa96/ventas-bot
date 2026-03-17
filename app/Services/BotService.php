@@ -156,7 +156,7 @@ Reglas:
                 'function' => [
                     'name'        => 'ver_pedidos',
                     'description' => 'Muestra el historial y estado de los últimos pedidos del cliente.',
-                    'parameters'  => ['type' => 'object', 'properties' => []],
+                    'parameters'  => ['type' => 'object', 'properties' => new \stdClass()],
                 ],
             ],
             [
@@ -164,7 +164,7 @@ Reglas:
                 'function' => [
                     'name'        => 'ver_precios',
                     'description' => 'Muestra la lista de precios de productos disponibles.',
-                    'parameters'  => ['type' => 'object', 'properties' => []],
+                    'parameters'  => ['type' => 'object', 'properties' => new \stdClass()],
                 ],
             ],
         ];
