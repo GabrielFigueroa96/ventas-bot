@@ -124,7 +124,7 @@ Productos disponibles:
 
 Reglas:
 - Solo respondés preguntas relacionadas a la carnicería (pedidos, precios, productos). Si te preguntan otra cosa, decí amablemente que solo podés ayudar con eso.
-- Para pedir: preguntá qué y cuánto, confirmá ('¿Confirmás: 2kg asado?') y llamá a crear_pedido solo cuando confirme.
+- Para pedir: preguntá qué y cuánto. Antes de llamar a crear_pedido, preguntá siempre: 1) ¿Para cuándo lo necesitás? 2) ¿Alguna observación? (si responde que no, dejá obs vacío). Convertí la fecha a Y-m-d (hoy es {$fecha}). Luego confirmá el resumen completo y llamá a crear_pedido.
 - Si el cliente no especifica qué quiere, sugerile sus productos favoritos o los más populares.
 - Cuando alguien pide carne para asar, ofrecé también chorizos/morcillas si están disponibles (una sola vez, sin insistir).
 - ver_precios → consultas de precios o lista de productos.
@@ -138,11 +138,18 @@ Porciones estándar por persona:
 - Por peso: asado de tira/vacío/costilla 0.500kg | entraña/colita 0.300kg | pollo 0.300kg | cerdo 0.300kg
 - Por unidad: chorizo 1u | morcilla 1u | hamburguesa 2u
 
-IMPORTANTE — productos y precios:
-- NUNCA menciones un producto que no esté exactamente en la lista de productos disponibles.
+IMPORTANTE — productos, precios y unidades:
+- NUNCA menciones un producto que no esté en la lista de productos disponibles.
 - NUNCA inventes ni estimes un precio. Los únicos precios válidos son los de la lista.
-- Si un producto típico de una ocasión no está en la lista, simplemente no lo mencionés.
-- verificar si el producto que recomiendo es de tipo peso o unidad, para no dar información errónea.
+- Si un producto típico de una ocasión no está en la lista, no lo mencionés.
+- Cada producto indica si es por peso o por unidad. Respetá siempre esa unidad al pedir y al calcular.
+- Si el cliente pide en UNIDADES un producto que se vende POR PESO: convertí a kg y aclaráselo.
+  Pesos de referencia: chorizo 0.15kg, morcilla 0.20kg, bife 0.25kg, milanesa 0.15kg, hamburguesa 0.12kg, pechuga 0.35kg, muslo 0.25kg.
+  Si no está en esa lista, preguntale el peso aproximado por unidad.
+  Ejemplo: 6 chorizos → Son aprox. 0.9kg de chorizo, ¿te parece bien?
+- Si el cliente pide en KG un producto que se vende POR UNIDAD: convertí a unidades y aclaráselo.
+  Ejemplo: 1kg de hamburguesas → Son aprox. 8 hamburguesas, ¿confirmás?
+- Siempre confirmá con la unidad correcta del sistema antes de llamar a crear_pedido.
 
 Sugerencias por ocasión (filtrá contra la lista de productos disponibles):
 - Parrillada/asado: asado de tira, vacío, costillas, entraña, chorizos, morcilla, achuras. Tip: empezá con achuras y chorizos, después las carnes.
@@ -240,8 +247,16 @@ Cuando alguien pide sugerencia para una ocasión:
                                     'required' => ['descrip', 'cantidad'],
                                 ],
                             ],
+                            'fecha_entrega' => [
+                                'type'        => 'string',
+                                'description' => 'Fecha en que el cliente necesita el pedido, formato Y-m-d (ej: 2026-03-20).',
+                            ],
+                            'obs' => [
+                                'type'        => 'string',
+                                'description' => 'Observaciones opcionales del cliente (instrucciones de entrega, corte especial, etc.).',
+                            ],
                         ],
-                        'required' => ['items'],
+                        'required' => ['items', 'fecha_entrega'],
                     ],
                 ],
             ],
@@ -316,7 +331,7 @@ Cuando alguien pide sugerencia para una ocasión:
         $args     = json_decode($toolCall['function']['arguments'], true) ?? [];
 
         $result = match ($funcName) {
-            'crear_pedido'   => $this->createOrder($cliente, $args['items'] ?? []),
+            'crear_pedido'   => $this->createOrder($cliente, $args['items'] ?? [], $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['obs'] ?? ''),
             'ver_pedidos'    => $this->orderStatus($cliente),
             'ver_precios'    => $this->priceList(),
             'calcular_total' => $this->calcularTotal($args['items'] ?? []),
@@ -342,14 +357,14 @@ Cuando alguien pide sugerencia para una ocasión:
     // Acciones del negocio
     // -------------------------------------------------------------------------
 
-    private function createOrder($client, array $items): string
+    private function createOrder($client, array $items, string $fechaEntrega = '', string $obs = ''): string
     {
         if (empty($items)) {
             return 'Sin artículos para registrar.';
         }
 
         $nro      = (Pedido::max('nro') ?? 0) + 1;
-        $fecha    = now()->format('Y-m-d');
+        $fecha    = $fechaEntrega ?: now()->format('Y-m-d');
         $codcli   = $client->cuenta ? $client->cuenta->cod : $client->id;
         $nomcli   = $client->cuenta ? $client->cuenta->nom : $client->name;
 
@@ -382,6 +397,7 @@ Cuando alguien pide sugerencia para una ocasión:
                 'kilos'   => $esPeso ? $cantidad : 0,
                 'cant'    => $esPeso ? 1           : (int) $cantidad,
                 'estado'  => Pedido::ESTADO_PENDIENTE,
+                'obs'     => $obs,
                 'venta'   => 0,
             ]);
         }
@@ -519,7 +535,7 @@ Cuando alguien pide sugerencia para una ocasión:
 
         // Guardar uso de tokens
         if (isset($response['usage'])) {
-            \DB::table('token_usos')->insert([
+            DB::table('token_usos')->insert([
                 'modelo'            => $response['model'] ?? self::OPENAI_MODEL,
                 'prompt_tokens'     => $response['usage']['prompt_tokens'],
                 'completion_tokens' => $response['usage']['completion_tokens'],
