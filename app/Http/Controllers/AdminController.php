@@ -108,10 +108,11 @@ class AdminController extends Controller
             ->orderByDesc('reg')
             ->get();
 
-        $pedidos    = $pedidosRaw->groupBy('nro');
-        $factventas = $this->loadFactventas($pedidosRaw);
+        $pedidos       = $pedidosRaw->groupBy('nro');
+        $factventas    = $this->loadFactventas($pedidosRaw);
+        $lastPedidoReg = (int) ($pedidosRaw->max('reg') ?? 0);
 
-        return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas'));
+        return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas', 'lastPedidoReg'));
     }
 
     public function pedidos(Request $request)

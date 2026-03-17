@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cliente;
+use App\Models\Factventas;
 use App\Models\Message;
+use App\Models\Pedido;
 use App\Services\BotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class AdminChatController extends Controller
 {
@@ -49,35 +52,50 @@ class AdminChatController extends Controller
             'archivo' => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf|max:16384',
         ]);
 
-        $bot = app(BotService::class);
+        $bot       = app(BotService::class);
+        $texto     = '';
+        $mediaPath = null;
+        $tipo      = 'text';
 
         try {
             if ($request->hasFile('archivo')) {
                 $file    = $request->file('archivo');
                 $mime    = $file->getMimeType();
                 $isImage = str_starts_with($mime, 'image/');
-                $mediaId = $bot->uploadMedia($file);
                 $caption = $request->input('mensaje', '');
 
+                // Guardar localmente para mostrar en la conversación
+                $filename  = 'chat-images/' . \Str::uuid() . '.' . $file->getClientOriginalExtension();
+                if (!is_dir(public_path('chat-images'))) {
+                    mkdir(public_path('chat-images'), 0755, true);
+                }
+                copy($file->getRealPath(), public_path($filename));
+                $mediaPath = $filename;
+
+                // Subir a WhatsApp y enviar
+                $mediaId = $bot->uploadMedia($file);
                 $bot->sendWhatsappMedia($cliente->phone, $mediaId, $isImage ? 'image' : 'document', $caption);
 
-                $texto = $isImage
-                    ? '[Imagen enviada]' . ($caption ? ": {$caption}" : '')
-                    : '[PDF enviado]'    . ($caption ? ": {$caption}" : '');
+                $texto = $caption;
+                $tipo  = 'media';
             } else {
-                $texto = $request->input('mensaje');
+                $texto = $request->input('mensaje', '');
                 $bot->sendWhatsapp($cliente->phone, $texto);
             }
         } catch (\Throwable $e) {
             Log::error("AdminChat enviar error: {$e->getMessage()}");
-            return back()->withErrors(['archivo' => $e->getMessage()]);
+            $jsonError = ['error' => $e->getMessage()];
+            return $request->expectsJson()
+                ? response()->json($jsonError, 500)
+                : back()->withErrors(['archivo' => $e->getMessage()]);
         }
 
         $msg = Message::create([
             'cliente_id' => $cliente->id,
             'message'    => $texto,
             'direction'  => 'outgoing',
-            'type'       => $request->hasFile('archivo') ? 'media' : 'text',
+            'type'       => $tipo,
+            'media_path' => $mediaPath,
         ]);
 
         if ($request->expectsJson()) {
@@ -92,5 +110,42 @@ class AdminChatController extends Controller
         }
 
         return back();
+    }
+
+    public function pedidosPanel(Cliente $cliente)
+    {
+        $pedidosRaw = Pedido::where('codcli', $cliente->id)
+            ->orderByDesc('reg')
+            ->get();
+
+        $pedidos    = $pedidosRaw->groupBy('nro');
+        $factventas = $this->loadFactventas($pedidosRaw);
+        $lastReg    = (int) ($pedidosRaw->max('reg') ?? 0);
+
+        $html = view('admin.partials.pedidos', compact('pedidos', 'factventas'))->render();
+
+        return response()->json(['html' => $html, 'lastReg' => $lastReg]);
+    }
+
+    private function loadFactventas($pedidos): \Illuminate\Support\Collection
+    {
+        $pares = $pedidos
+            ->where('estado', Pedido::ESTADO_FINALIZADO)
+            ->whereNotNull('venta')
+            ->where('venta', '>', 0)
+            ->unique(fn($p) => "{$p->venta}-{$p->pv}")
+            ->values();
+
+        if ($pares->isEmpty()) {
+            return collect();
+        }
+
+        $rows = Factventas::where(function ($q) use ($pares) {
+            foreach ($pares as $p) {
+                $q->orWhere(fn($s) => $s->where('nro', $p->venta)->where('pv', $p->pv));
+            }
+        })->get();
+
+        return $rows->groupBy(fn($f) => "{$f->nro}-{$f->pv}");
     }
 }

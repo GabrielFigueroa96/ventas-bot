@@ -20,8 +20,9 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::get('/pedidos',                     [AdminController::class,     'pedidos'])->name('pedidos');
 
     // Control manual del chat
-    Route::get ('/clientes/{cliente}/mensajes', [AdminChatController::class, 'mensajesNuevos'])->name('chat.mensajes');
-    Route::post('/clientes/{cliente}/tomar',    [AdminChatController::class, 'tomarControl'])->name('chat.tomar');
-    Route::post('/clientes/{cliente}/liberar',  [AdminChatController::class, 'liberarControl'])->name('chat.liberar');
-    Route::post('/clientes/{cliente}/enviar',   [AdminChatController::class, 'enviar'])->name('chat.enviar');
+    Route::get ('/clientes/{cliente}/mensajes',      [AdminChatController::class, 'mensajesNuevos'])->name('chat.mensajes');
+    Route::get ('/clientes/{cliente}/pedidos-panel', [AdminChatController::class, 'pedidosPanel'])->name('chat.pedidos');
+    Route::post('/clientes/{cliente}/tomar',         [AdminChatController::class, 'tomarControl'])->name('chat.tomar');
+    Route::post('/clientes/{cliente}/liberar',       [AdminChatController::class, 'liberarControl'])->name('chat.liberar');
+    Route::post('/clientes/{cliente}/enviar',        [AdminChatController::class, 'enviar'])->name('chat.enviar');
 });
