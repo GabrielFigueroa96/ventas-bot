@@ -46,11 +46,11 @@
     </div>
 @endif
 
-<div class="grid md:grid-cols-2 gap-6">
+<div class="grid md:grid-cols-2 gap-6 items-start">
 
     {{-- Conversación + envío --}}
-    <div class="bg-white rounded-xl shadow flex flex-col">
-        <div class="px-5 py-4 border-b font-semibold text-gray-700 flex items-center justify-between">
+    <div class="bg-white rounded-xl shadow flex flex-col" style="height: calc(100vh - 220px);">
+        <div class="px-5 py-4 border-b font-semibold text-gray-700 flex items-center justify-between shrink-0">
             <span>Conversación</span>
             @if($cliente->modo === 'humano')
                 <span class="text-xs text-orange-500 font-medium">Respondiendo manualmente</span>
@@ -60,8 +60,8 @@
         </div>
 
         {{-- Mensajes --}}
-        <div class="relative flex-1">
-            <div id="chat-box" class="p-4 space-y-3 overflow-y-auto" style="max-height: 420px;">
+        <div class="relative flex-1 min-h-0">
+            <div id="chat-box" class="p-4 space-y-3 overflow-y-auto h-full">
                 @forelse($mensajes as $msg)
                 <div class="flex {{ $msg->direction === 'outgoing' ? 'justify-end' : 'justify-start' }}" data-id="{{ $msg->id }}">
                     <div class="max-w-xs px-4 py-2 rounded-2xl text-sm
