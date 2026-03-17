@@ -37,4 +37,9 @@ class Cliente extends Model
     {
         return $this->belongsTo(Cuenta::class, 'cuenta_cod', 'cod');
     }
+
+    public function seguimientos()
+    {
+        return $this->hasMany(Seguimiento::class);
+    }
 }

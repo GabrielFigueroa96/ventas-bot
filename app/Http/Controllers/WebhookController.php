@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Database\UniqueConstraintViolationException;
 use App\Models\Cliente;
 use App\Models\Message;
+use App\Models\Seguimiento;
 use App\Services\BotService;
 
 use Exception;
@@ -94,6 +95,11 @@ class WebhookController extends Controller
             } catch (UniqueConstraintViolationException) {
                 return response()->json(['status' => 'duplicate']);
             }
+
+            // Si el cliente responde, marcar seguimientos pendientes como respondidos
+            Seguimiento::where('cliente_id', $client->id)
+                ->where('respondio', false)
+                ->update(['respondio' => true]);
 
             // Si el admin tomó control, no responde el bot
             if ($client->modo === 'humano') {

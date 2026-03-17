@@ -7,7 +7,9 @@ use App\Models\Empresa;
 use App\Models\Factventas;
 use App\Models\Message;
 use App\Models\Pedido;
+use App\Models\Seguimiento;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
 {
@@ -18,15 +20,19 @@ class AdminController extends Controller
         // Precios gpt-4o-mini por token (USD)
         $precioPorMillon = ['input' => 0.150, 'output' => 0.600];
 
-        $tokensMes = \DB::table('token_usos')
+        $tokensMes = DB::table('token_usos')
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
             ->selectRaw('SUM(prompt_tokens) as input, SUM(completion_tokens) as output, SUM(total_tokens) as total')
             ->first();
 
+        $inputTokens  = (int) ($tokensMes->input  ?? 0);
+        $outputTokens = (int) ($tokensMes->output ?? 0);
+        $totalTokens  = (int) ($tokensMes->total  ?? 0);
+
         $costoMesUsd = round(
-            (($tokensMes->input  ?? 0) / 1_000_000 * $precioPorMillon['input']) +
-            (($tokensMes->output ?? 0) / 1_000_000 * $precioPorMillon['output']),
+            ($inputTokens  / 1_000_000 * $precioPorMillon['input']) +
+            ($outputTokens / 1_000_000 * $precioPorMillon['output']),
             6
         );
 
@@ -34,12 +40,17 @@ class AdminController extends Controller
         $dolarArs = (float) env('DOLAR_ARS', 1300);
         $costoMes = $costoMesUsd;
 
+        $seguimientos = Seguimiento::with('cliente')
+            ->orderByDesc('enviado_at')
+            ->take(10)
+            ->get();
+
         $stats = [
             'clientes'     => Cliente::count(),
             'pedidos_hoy'  => Pedido::whereDate('fecha', today())->distinct('nro')->count('nro'),
             'pedidos_pend' => Pedido::where('estado', Pedido::ESTADO_PENDIENTE)->distinct('nro')->count('nro'),
             'mensajes_hoy' => Message::whereDate('created_at', today())->count(),
-            'tokens_mes'   => number_format($tokensMes->total ?? 0),
+            'tokens_mes'   => number_format($totalTokens),
             'costo_mes_usd'=> $costoMes,
             'costo_mes_ars'=> round($costoMes * $dolarArs, 2),
         ];
@@ -102,6 +113,7 @@ class AdminController extends Controller
             'chartEstados',
             'chartArticulosLabels', 'chartArticulosData',
             'chartSemanas', 'chartClientes',
+            'seguimientos',
         ));
     }
 

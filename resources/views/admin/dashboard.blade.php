@@ -102,6 +102,38 @@
     </div>
 </div>
 
+{{-- Seguimientos --}}
+@if($seguimientos->isNotEmpty())
+<div class="bg-white rounded-xl shadow overflow-hidden mb-6">
+    <div class="px-4 sm:px-6 py-4 border-b flex items-center justify-between">
+        <h2 class="font-semibold text-gray-700">Seguimientos enviados</h2>
+        <span class="text-xs text-gray-400">Últimos 10</span>
+    </div>
+    <div class="divide-y">
+        @foreach($seguimientos as $s)
+        <div class="px-4 sm:px-6 py-3 flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="{{ route('admin.cliente', $s->cliente) }}" class="font-medium text-gray-800 hover:underline text-sm">
+                        {{ $s->cliente->name ?? $s->cliente->phone }}
+                    </a>
+                    <span class="text-xs px-2 py-0.5 rounded-full font-medium
+                        {{ $s->tipo === 'sin_pedido' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500' }}">
+                        {{ $s->tipo === 'sin_pedido' ? 'Sin pedido' : 'Inactivo' }}
+                    </span>
+                    @if($s->respondio)
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-600 font-medium">✓ Respondió</span>
+                    @endif
+                </div>
+                <p class="text-xs text-gray-400 mt-0.5 truncate">{{ $s->mensaje_enviado }}</p>
+            </div>
+            <span class="text-xs text-gray-400 shrink-0">{{ \Carbon\Carbon::parse($s->enviado_at)->format('d/m H:i') }}</span>
+        </div>
+        @endforeach
+    </div>
+</div>
+@endif
+
 {{-- Pedidos recientes --}}
 <div class="bg-white rounded-xl shadow overflow-hidden">
     <div class="px-4 sm:px-6 py-4 border-b flex items-center justify-between">
