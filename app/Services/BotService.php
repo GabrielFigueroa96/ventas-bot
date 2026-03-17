@@ -327,6 +327,45 @@ Reglas:
         return $response->json('text') ?? '';
     }
 
+    public function uploadMedia(\Illuminate\Http\UploadedFile $file): string
+    {
+        $response = Http::withToken(config('api.whatsapp.key'))
+            ->attach('file', file_get_contents($file->getRealPath()), $file->getClientOriginalName())
+            ->post('https://graph.facebook.com/v19.0/295131097015095/media', [
+                'messaging_product' => 'whatsapp',
+                'type'              => $file->getMimeType(),
+            ]);
+
+        $mediaId = $response->json('id');
+
+        if (!$mediaId) {
+            throw new \RuntimeException('Error al subir el archivo a WhatsApp.');
+        }
+
+        return $mediaId;
+    }
+
+    public function sendWhatsappMedia(string $phone, string $mediaId, string $type, string $caption = ''): void
+    {
+        $body = ['id' => $mediaId];
+
+        if ($caption) {
+            $body['caption'] = $caption;
+        }
+
+        try {
+            Http::withToken(config('api.whatsapp.key'))
+                ->post('https://graph.facebook.com/v19.0/295131097015095/messages', [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $phone,
+                    'type'              => $type,
+                    $type               => $body,
+                ]);
+        } catch (\Throwable) {
+            // silencioso
+        }
+    }
+
     public function sendWhatsapp(string $phone, string $message): void
     {
         try {

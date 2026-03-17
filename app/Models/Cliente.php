@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $phone
  * @property string $name
  * @property string $estado
+ * @property string $modo
  * @property string $last_order_at
  */
 class Cliente extends Model
@@ -20,6 +21,7 @@ class Cliente extends Model
         'phone',
         'name',
         'estado',
+        'modo',
         'last_order_at',
     ];
 

@@ -79,6 +79,11 @@ class WebhookController extends Controller
                 'type'       => $type,
             ]);
 
+            // Si el admin tomó control, no responde el bot
+            if ($client->modo === 'humano') {
+                return response()->json(['status' => 'human_mode']);
+            }
+
             $reply = $bot->process($client, $message);
 
             Message::create([

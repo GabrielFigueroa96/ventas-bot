@@ -14,7 +14,12 @@ class Message extends Model
         'cliente_id',
         'message',
         'direction',
-        'type'
+        'type',
+    ];
+
+    protected $casts = [
+        'created_at' => 'datetime:d/m H:i',
+        'updated_at' => 'datetime:d/m H:i',
     ];
 
     public function client()
