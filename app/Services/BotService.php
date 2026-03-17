@@ -5,190 +5,294 @@ namespace App\Services;
 use Illuminate\Support\Facades\Http;
 use App\Models\Producto;
 use App\Models\Message;
+use App\Models\Pedido;
 
 class BotService
 {
-    public function process($client, $message)
+    private const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+    private const OPENAI_MODEL = 'gpt-4o-mini';
+
+    // -------------------------------------------------------------------------
+    // Punto de entrada principal
+    // -------------------------------------------------------------------------
+
+    public function process($client, $message): string
     {
-
-        $nombre = $client->name ?? "";
-        $message = strtolower($message);
-        $response = "";
-
-        if (str_contains($message, 'precio')) {
-            $response = $this->priceList();
+        // Registro de nombre (flujo multi-turno simple)
+        if (empty($client->name)) {
+            if ($client->estado !== 'esperando_nombre') {
+                $client->update(['estado' => 'esperando_nombre']);
+                $response = "¡Hola! Soy el asistente de la carnicería. ¿Cuál es tu nombre?";
+            } else {
+                $nombre = ucfirst(strtolower(trim($message)));
+                $client->update(['name' => $nombre, 'estado' => 'activo']);
+                $response = "¡Gracias, {$nombre}! ¿En qué puedo ayudarte hoy?";
+            }
+            $this->sendWhatsapp($client->phone, $response);
+            return $response;
         }
 
-        if (str_contains($message, 'pedido') && $response == "") {
-            $response = $this->createOrder($client, $message);
-        }
-
-        if ($response == "") {
-            $response = $this->askChatGPT($message, $client);
-        }
-
+        $response = $this->askChatGPT($message, $client);
         $this->sendWhatsapp($client->phone, $response);
         return $response;
     }
 
-    private function priceList()
+    // -------------------------------------------------------------------------
+    // ChatGPT con Function Calling
+    // -------------------------------------------------------------------------
+
+    public function askChatGPT(string $message, $cliente): string
     {
-        $products = Producto::where("pre", ">", "10000")->get();
+        $messages = $this->buildMessages($message, $cliente);
 
-        $text = "Lista de precios:\n";
+        // Primera llamada: ChatGPT decide si responde o llama una función
+        $response = $this->callOpenAI($messages, $this->tools());
+        $choice   = $response['choices'][0];
 
-        foreach ($products as $p) {
-            $text .= $p->des . " - $ " . $p->PRE . "\n";
+        if ($choice['finish_reason'] === 'tool_calls') {
+            return $this->handleToolCalls($choice, $messages, $cliente);
         }
 
-        return $text;
+        return $choice['message']['content'];
     }
 
-    private function createOrder($client, $message)
+    // -------------------------------------------------------------------------
+    // Construcción del contexto para ChatGPT
+    // -------------------------------------------------------------------------
+
+    private function buildMessages(string $message, $cliente): array
     {
-        // Order::create([
-        //     'client_id' => $client->id,
-        //     'order_text' => $message,
-        //     'status' => 'pending'
-        // ]);
-        return "Pedido recibido. En breve lo confirmamos.";
-    }
+        $nombre = $cliente->name ?? 'cliente';
 
-    public function askChatGPT($message, $cliente)
-    {
+        $lista = Producto::select('des', 'PRE')->get()
+            ->map(fn($p) => "{$p->des} \${$p->PRE}")
+            ->implode("\n");
 
-        $productos = Producto::select('des', 'PRE')->get();
-        $lista = "";
-
-        foreach ($productos as $p) {
-            $lista .= $p->des . " $ " . $p->PRE . "\n";
-        }
-
-        // $cliente = Cliente::where('phone',$phone)->first();
-        $nombre = $cliente->name ?? "cliente";
+        $ultimoPedido = Pedido::where('codcli', $cliente->id)->latest('reg')->first();
+        $ultimoPedidoTexto = $ultimoPedido
+            ? "#{$ultimoPedido->nro} ({$ultimoPedido->fecha}): {$ultimoPedido->descrip} — {$ultimoPedido->estado_texto}"
+            : 'ninguno';
 
         $history = Message::where('cliente_id', $cliente->id)
             ->latest()
-            ->take(5)
+            ->take(6)
             ->get()
             ->reverse();
-
-        $ultimoPedido = null;
-
-        $clienteContexto = "
-        Cliente: {$nombre}
-        
-        Último pedido:
-        " . ($ultimoPedido ? $ultimoPedido->notes : "ninguno") . "
-        ";
 
         $messages = [];
 
         $messages[] = [
-            "role" => "system",
-            "content" => "
-            Eres el asistente de una carnicería.
-            
-            Productos disponibles:
-            {$lista}
-            
-            Información del cliente:
-            {$clienteContexto}
-            
-            Funciones:
-                - tomar pedidos
-                - informar precios
-                - responder consultas
+            'role'    => 'system',
+            'content' => "Eres el asistente de una carnicería. Sos amable, breve y directo.
 
-            Reglas:
-            - responde corto
-            - ayuda a hacer pedidos
-            - usa los precios reales
-            "
+Productos disponibles:
+{$lista}
+
+Cliente: {$nombre}
+Último pedido: {$ultimoPedidoTexto}
+
+Reglas:
+- Si el cliente quiere hacer un pedido, preguntá qué productos y cantidades necesita.
+- Confirmá el pedido con el cliente ANTES de llamar a crear_pedido (ej: '¿Confirmás: 2kg asado y 1 pollo?').
+- Solo llamá a crear_pedido cuando el cliente confirme explícitamente (sí, dale, confirmo, etc.).
+- Usá ver_precios cuando pregunten por precios o lista de productos.
+- Usá ver_pedidos cuando pregunten por el estado o historial de sus pedidos.
+- Respondé siempre en español, de forma corta y amigable.",
         ];
 
         foreach ($history as $msg) {
-
             $messages[] = [
-                "role" => $msg->direction == "incoming" ? "user" : "assistant",
-                "content" => $msg->message
+                'role'    => $msg->direction === 'incoming' ? 'user' : 'assistant',
+                'content' => $msg->message,
             ];
         }
 
+        $messages[] = ['role' => 'user', 'content' => $message];
+
+        return $messages;
+    }
+
+    // -------------------------------------------------------------------------
+    // Definición de herramientas (functions)
+    // -------------------------------------------------------------------------
+
+    private function tools(): array
+    {
+        return [
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'crear_pedido',
+                    'description' => 'Guarda el pedido en el sistema cuando el cliente ya confirmó qué quiere.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'items' => [
+                                'type'        => 'array',
+                                'description' => 'Lista de artículos del pedido.',
+                                'items'       => [
+                                    'type'       => 'object',
+                                    'properties' => [
+                                        'descrip' => [
+                                            'type'        => 'string',
+                                            'description' => 'Nombre del producto con unidad (ej: "asado kg", "pollo unidad").',
+                                        ],
+                                        'kilos' => [
+                                            'type'        => 'number',
+                                            'description' => 'Cantidad (kilos o unidades según corresponda).',
+                                        ],
+                                    ],
+                                    'required' => ['descrip', 'kilos'],
+                                ],
+                            ],
+                        ],
+                        'required' => ['items'],
+                    ],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'ver_pedidos',
+                    'description' => 'Muestra el historial y estado de los últimos pedidos del cliente.',
+                    'parameters'  => ['type' => 'object', 'properties' => []],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'ver_precios',
+                    'description' => 'Muestra la lista de precios de productos disponibles.',
+                    'parameters'  => ['type' => 'object', 'properties' => []],
+                ],
+            ],
+        ];
+    }
+
+    // -------------------------------------------------------------------------
+    // Ejecución de la función elegida por ChatGPT
+    // -------------------------------------------------------------------------
+
+    private function handleToolCalls(array $choice, array $messages, $cliente): string
+    {
+        $toolCall = $choice['message']['tool_calls'][0];
+        $funcName = $toolCall['function']['name'];
+        $args     = json_decode($toolCall['function']['arguments'], true) ?? [];
+
+        $result = match ($funcName) {
+            'crear_pedido' => $this->createOrder($cliente, $args['items'] ?? []),
+            'ver_pedidos'  => $this->orderStatus($cliente),
+            'ver_precios'  => $this->priceList(),
+            default        => 'Función desconocida.',
+        };
+
+        // Agregamos el mensaje del asistente (con el tool_call) y el resultado
+        $messages[] = $choice['message'];
         $messages[] = [
-            "role" => "user",
-            "content" => $message
+            'role'         => 'tool',
+            'tool_call_id' => $toolCall['id'],
+            'content'      => $result,
         ];
 
-        $response = Http::withToken(config('api.openai.key'))
-            ->post('https://api.openai.com/v1/chat/completions', [
-                "model" => "gpt-4o-mini",
-                "messages" => $messages,
-                "max_tokens" => 200
-            ]);
+        // Segunda llamada: ChatGPT transforma el resultado en lenguaje natural
+        $response = $this->callOpenAI($messages);
 
         return $response['choices'][0]['message']['content'];
     }
 
-    public function sendWhatsapp($phone, $message)
+    // -------------------------------------------------------------------------
+    // Acciones del negocio
+    // -------------------------------------------------------------------------
+
+    private function createOrder($client, array $items): string
     {
+        if (empty($items)) {
+            return 'Sin artículos para registrar.';
+        }
 
-        try {
-            // URL a la que deseas enviar la solicitud
+        $nro   = (Pedido::max('nro') ?? 0) + 1;
+        $fecha = now()->format('Y-m-d');
 
-            $url = 'https://graph.facebook.com/v19.0/295131097015095/messages';
-
-            // Datos que deseas enviar en la solicitud (si los hay)
-
-            $data = [
-                'messaging_product' => 'whatsapp',
-                'to' => $phone, //$request->numero
-                'type' => 'text',
-                "text" => [
-                    "body" => $message
-                ]
-            ];
-
-            // Convertir el array de datos a formato JSON
-            $jsonData = json_encode($data);
-
-            // Token de acceso para la autenticación
-            $accessToken = config('api.whatsapp.key');
-
-            // Inicializar cURL
-            $ch = curl_init();
-
-            // Establecer opciones de cURL
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-            // Agregar encabezado de autorización con el token de acceso
-            // Agregar encabezado de autorización con el token de acceso
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $accessToken,
-                'Content-Type: application/json', // Especificar el tipo de contenido como JSON
-                'Content-Length: ' . strlen($jsonData), // Especificar la longitud del JSON
+        foreach ($items as $item) {
+            Pedido::create([
+                'fecha'   => $fecha,
+                'nro'     => $nro,
+                'nomcli'  => $client->name,
+                'codcli'  => $client->id,
+                'descrip' => $item['descrip'],
+                'kilos'   => $item['kilos'],
+                'cant'    => 1,
+                'estado'  => Pedido::ESTADO_PENDIENTE,
+                'venta'   => 0,
             ]);
+        }
 
-            // Ejecutar la solicitud y obtener la respuesta
-            $response = curl_exec($ch);
+        $resumen = implode(', ', array_map(fn($i) => "{$i['kilos']} {$i['descrip']}", $items));
 
-            // Verificar si ocurrió algún error
-            if ($response === false) {
-                $error = curl_error($ch);
-                // Manejar el error
-                return response()->json(['error' => $error], 500);
-            }
+        return "Pedido #{$nro} registrado: {$resumen}.";
+    }
 
-            // Cerrar la sesión de cURL
-            curl_close($ch);
+    private function orderStatus($client): string
+    {
+        $pedidos = Pedido::where('codcli', $client->id)
+            ->orderByDesc('reg')
+            ->take(5)
+            ->get();
 
-            // Devolver la respuesta
-            //return response()->json($response);
-        } catch (\Throwable $th) {
-            // return $th;
+        if ($pedidos->isEmpty()) {
+            return 'El cliente no tiene pedidos registrados.';
+        }
+
+        return $pedidos->map(
+            fn($p) => "#{$p->nro} ({$p->fecha}): {$p->descrip} {$p->kilos}kg — {$p->estado_texto}"
+        )->implode("\n");
+    }
+
+    private function priceList(): string
+    {
+        $productos = Producto::where('PRE', '>', 0)->get();
+
+        if ($productos->isEmpty()) {
+            return 'No hay productos disponibles en este momento.';
+        }
+
+        return $productos->map(fn($p) => "{$p->des} — \${$p->PRE}")->implode("\n");
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    private function callOpenAI(array $messages, array $tools = []): array
+    {
+        $payload = [
+            'model'      => self::OPENAI_MODEL,
+            'messages'   => $messages,
+            'max_tokens' => 300,
+        ];
+
+        if (!empty($tools)) {
+            $payload['tools']       = $tools;
+            $payload['tool_choice'] = 'auto';
+        }
+
+        return Http::withToken(config('api.openai.key'))
+            ->post(self::OPENAI_URL, $payload)
+            ->json();
+    }
+
+    public function sendWhatsapp(string $phone, string $message): void
+    {
+        try {
+            Http::withToken(config('api.whatsapp.key'))
+                ->post('https://graph.facebook.com/v19.0/295131097015095/messages', [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $phone,
+                    'type'              => 'text',
+                    'text'              => ['body' => $message],
+                ]);
+        } catch (\Throwable) {
+            // silencioso para no romper el flujo
         }
     }
 }

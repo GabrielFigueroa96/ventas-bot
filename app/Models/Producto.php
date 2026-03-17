@@ -11,7 +11,7 @@ class Producto extends Model
 
     protected $table = "tablaplu";
 
-    protected $hidden = [
+    protected $fillable = [
         'des',
         'pre',
         'grupo',
