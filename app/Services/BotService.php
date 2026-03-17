@@ -389,7 +389,7 @@ Cuando alguien pide sugerencia para una ocasión:
                     stripos($item['descrip'], $p->des) !== false
             );
 
-            $esPeso = !$producto || $producto->tipo !== 'unidad';
+            $esPeso = !$producto || $producto->tipo !== 'Unidad';
 
             Pedido::create([
                 'fecha'   => $fecha,
@@ -405,7 +405,7 @@ Cuando alguien pide sugerencia para una ocasión:
             ]);
         }
 
-        $resumen = implode(', ', array_map(fn($i) => "{$i['kilos']} {$i['descrip']}", $items));
+        $resumen = implode(', ', array_map(fn($i) => "{$i['cantidad']} {$i['descrip']}", $items));
 
         return "Pedido #{$nro} registrado: {$resumen}.";
     }
