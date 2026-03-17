@@ -37,6 +37,8 @@ class Pedido extends Model
         'cant',
         'descrip',
         'kilos',
+        'precio',
+        'neto',
         'codigo',
         'codcli',
         'estado',

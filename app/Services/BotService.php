@@ -75,8 +75,8 @@ class BotService
                 ->select('des', 'PRE', 'tipo')
                 ->get()
                 ->map(fn($p) => $p->tipo === 'Unidad'
-                    ? "{$p->des} \${$p->PRE}/u (por unidad)"
-                    : "{$p->des} \${$p->PRE}/kg (por peso)")
+                    ? "{$p->des} " . number_format($p->PRE, 2, ',', '.') . " \$/u (por unidad)"
+                    : "{$p->des} " . number_format($p->PRE, 2, ',', '.') . " \$/kg (por peso)")
                 ->implode("\n");
         });
 
@@ -390,6 +390,8 @@ Cuando alguien pide sugerencia para una ocasión:
             );
 
             $esPeso = !$producto || $producto->tipo !== 'Unidad';
+            $precio = $producto ? (float) $producto->PRE : 0;
+            $neto   = round($precio * $cantidad, 2);
 
             Pedido::create([
                 'fecha'   => $fecha,
@@ -399,6 +401,8 @@ Cuando alguien pide sugerencia para una ocasión:
                 'descrip' => $item['descrip'],
                 'kilos'   => $esPeso ? $cantidad : 0,
                 'cant'    => $esPeso ? 1           : (int) $cantidad,
+                'precio'  => $precio,
+                'neto'    => $neto,
                 'estado'  => Pedido::ESTADO_PENDIENTE,
                 'obs'     => $obs,
                 'venta'   => 0,
@@ -458,13 +462,15 @@ Cuando alguien pide sugerencia para una ocasión:
                 $unidad   = $esPeso ? 'kg' : 'u';
                 $subtotal = round($match->PRE * $cantidad, 2);
                 $total   += $subtotal;
-                $lineas[] = "{$descrip} {$cantidad}{$unidad} × \${$match->PRE} = \${$subtotal}";
+                $precioFmt    = number_format($match->PRE, 2, ',', '.');
+                $subtotalFmt  = number_format($subtotal, 2, ',', '.');
+                $lineas[] = "{$descrip} {$cantidad}{$unidad} × {$precioFmt} $ = {$subtotalFmt} $";
             } else {
                 $lineas[] = "{$descrip} {$cantidad} × precio no disponible";
             }
         }
 
-        $lineas[] = "TOTAL ESTIMADO: \${$total}";
+        $lineas[] = "TOTAL ESTIMADO: " . number_format($total, 2, ',', '.') . " $";
 
         return implode("\n", $lineas);
     }
@@ -503,8 +509,8 @@ Cuando alguien pide sugerencia para una ocasión:
 
         return $productos->map(
             fn($p) => $p->tipo === 'Unidad'
-                ? "{$p->des} — \${$p->PRE}/u"
-                : "{$p->des} — \${$p->PRE}/kg"
+                ? "{$p->des} — " . number_format($p->PRE, 2, ',', '.') . " \$/u"
+                : "{$p->des} — " . number_format($p->PRE, 2, ',', '.') . " \$/kg"
         )->implode("\n");
     }
 
