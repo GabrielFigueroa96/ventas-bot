@@ -275,6 +275,77 @@ document.getElementById('nuevo-msg')?.addEventListener('click', () => {
     document.getElementById('nuevo-msg').classList.add('hidden');
 });
 
+// ── Envío AJAX ──────────────────────────────────────────────────────────────
+const formEnviar = document.getElementById('form-enviar');
+
+formEnviar?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const btn    = formEnviar.querySelector('button[type=submit]');
+    const input  = document.getElementById('mensaje');
+    const archivo = document.getElementById('archivo');
+
+    if (!input.value.trim() && !archivo?.files.length) return;
+
+    // Deshabilitar mientras envía
+    btn.disabled   = true;
+    btn.textContent = '...';
+
+    // Agregar burbuja inmediatamente (optimistic UI)
+    const textoLocal = input.value.trim();
+    if (textoLocal) {
+        const tmpId = 'tmp-' + Date.now();
+        chatBox.insertAdjacentHTML('beforeend', `
+            <div class="flex justify-end opacity-60" id="${tmpId}">
+                <div class="max-w-xs px-4 py-2 rounded-2xl text-sm bg-red-600 text-white rounded-br-none">
+                    <p>${escHtml(textoLocal)}</p>
+                    <p class="text-xs mt-1 opacity-60">enviando...</p>
+                </div>
+            </div>`);
+        atBottom = true;
+        scrollBottom();
+    }
+
+    try {
+        const formData = new FormData(formEnviar);
+        const res = await fetch(formEnviar.action, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json',
+                        'X-CSRF-TOKEN': formEnviar.querySelector('[name=_token]').value },
+            body: formData,
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            // Reemplazar burbuja temporal por la definitiva con id real
+            const tmp = document.getElementById('tmp-' + (Date.now() - 1)) ?? chatBox.lastElementChild;
+            if (tmp) tmp.remove();
+
+            chatBox.insertAdjacentHTML('beforeend', bubbleHtml(data));
+            lastId = data.id;
+            atBottom = true;
+            scrollBottom();
+        } else {
+            alert(data.message ?? 'Error al enviar.');
+        }
+    } catch (err) {
+        alert('Error de red al enviar el mensaje.');
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = 'Enviar';
+        input.value     = '';
+        clearFile();
+    }
+});
+
+document.getElementById('mensaje')?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        formEnviar?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+});
+
 function previewFile(input) {
     const preview = document.getElementById('file-preview');
     const fileName = document.getElementById('file-name');
@@ -288,12 +359,5 @@ function clearFile() {
     document.getElementById('archivo').value = '';
     document.getElementById('file-preview').classList.add('hidden');
 }
-
-document.getElementById('mensaje')?.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        document.getElementById('form-enviar').submit();
-    }
-});
 </script>
 @endsection

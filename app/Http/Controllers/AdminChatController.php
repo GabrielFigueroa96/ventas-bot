@@ -73,12 +73,23 @@ class AdminChatController extends Controller
             return back()->withErrors(['archivo' => $e->getMessage()]);
         }
 
-        Message::create([
+        $msg = Message::create([
             'cliente_id' => $cliente->id,
             'message'    => $texto,
             'direction'  => 'outgoing',
             'type'       => $request->hasFile('archivo') ? 'media' : 'text',
         ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'id'         => $msg->id,
+                'message'    => $msg->message,
+                'direction'  => $msg->direction,
+                'type'       => $msg->type,
+                'media_path' => $msg->media_path ? asset($msg->media_path) : null,
+                'created_at' => $msg->fecha,
+            ]);
+        }
 
         return back();
     }
