@@ -17,7 +17,7 @@ class BotService
     // Punto de entrada principal
     // -------------------------------------------------------------------------
 
-    public function process($client, $message): string
+    public function process($client, $message, ?array $image = null): string
     {
         // Registro de nombre (flujo multi-turno simple)
         if (empty($client->name)) {
@@ -33,7 +33,7 @@ class BotService
             return $response;
         }
 
-        $response = $this->askChatGPT($message, $client);
+        $response = $this->askChatGPT($message, $client, $image);
         $this->sendWhatsapp($client->phone, $response);
         return $response;
     }
@@ -42,9 +42,9 @@ class BotService
     // ChatGPT con Function Calling
     // -------------------------------------------------------------------------
 
-    public function askChatGPT(string $message, $cliente): string
+    public function askChatGPT(string $message, $cliente, ?array $image = null): string
     {
-        $messages = $this->buildMessages($message, $cliente);
+        $messages = $this->buildMessages($message, $cliente, $image);
 
         // Primera llamada: ChatGPT decide si responde o llama una función
         $response = $this->callOpenAI($messages, $this->tools());
@@ -61,7 +61,7 @@ class BotService
     // Construcción del contexto para ChatGPT
     // -------------------------------------------------------------------------
 
-    private function buildMessages(string $message, $cliente): array
+    private function buildMessages(string $message, $cliente, ?array $image = null): array
     {
         $nombre = $cliente->name ?? 'cliente';
 
@@ -98,6 +98,7 @@ Reglas:
 - Solo llamá a crear_pedido cuando el cliente confirme explícitamente (sí, dale, confirmo, etc.).
 - Usá ver_precios cuando pregunten por precios o lista de productos.
 - Usá ver_pedidos cuando pregunten por el estado o historial de sus pedidos.
+- Si recibís una imagen, describí lo que ves e intentá relacionarlo con un pedido o consulta.
 - Respondé siempre en español, de forma corta y amigable.",
         ];
 
@@ -108,9 +109,52 @@ Reglas:
             ];
         }
 
-        $messages[] = ['role' => 'user', 'content' => $message];
+        // Si viene con imagen, el mensaje del usuario es multimodal (texto + imagen)
+        if ($image) {
+            $userContent = [];
+
+            if ($message) {
+                $userContent[] = ['type' => 'text', 'text' => $message];
+            }
+
+            $userContent[] = [
+                'type'      => 'image_url',
+                'image_url' => [
+                    'url'    => "data:{$image['mime']};base64,{$image['base64']}",
+                    'detail' => 'auto',
+                ],
+            ];
+
+            $messages[] = ['role' => 'user', 'content' => $userContent];
+        } else {
+            $messages[] = ['role' => 'user', 'content' => $message];
+        }
 
         return $messages;
+    }
+
+    // Descarga un archivo de WhatsApp y lo devuelve como base64
+    public function downloadWhatsappMedia(string $mediaId): array
+    {
+        $waToken = config('api.whatsapp.key');
+
+        $meta = Http::withToken($waToken)
+            ->get("https://graph.facebook.com/v19.0/{$mediaId}")
+            ->json();
+
+        $url  = $meta['url']  ?? null;
+        $mime = $meta['mime_type'] ?? 'image/jpeg';
+
+        if (!$url) {
+            throw new \RuntimeException('No se pudo obtener la URL de la imagen.');
+        }
+
+        $content = Http::withToken($waToken)->get($url)->body();
+
+        return [
+            'base64' => base64_encode($content),
+            'mime'   => $mime,
+        ];
     }
 
     // -------------------------------------------------------------------------

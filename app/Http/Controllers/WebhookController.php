@@ -58,21 +58,22 @@ class WebhookController extends Controller
                 return response()->json(['status' => 'duplicate']);
             }
 
-            // Resolver el texto según el tipo de mensaje
+            $image   = null;
+            $message = '';
+
             if ($type === 'text') {
                 $message = $msg['text']['body'];
             } elseif ($type === 'audio') {
-                $mediaId = $msg['audio']['id'];
-                $message = $bot->transcribeAudio($mediaId);
-
+                $message = $bot->transcribeAudio($msg['audio']['id']);
                 if (empty($message)) {
                     return response()->json(['status' => 'empty_transcription']);
                 }
+            } elseif ($type === 'image') {
+                $image   = $bot->downloadWhatsappMedia($msg['image']['id']);
+                $message = $msg['image']['caption'] ?? '';
             } else {
-                // Tipo no soportado (imagen, video, documento, etc.)
                 $client = Cliente::firstOrCreate(['phone' => $phone]);
-                $reply  = "Por ahora solo proceso mensajes de texto y de voz. 😊";
-                $bot->sendWhatsapp($phone, $reply);
+                $bot->sendWhatsapp($phone, "Por ahora solo proceso texto, voz e imágenes. 😊");
                 return response()->json(['status' => 'unsupported_type']);
             }
 
@@ -80,7 +81,7 @@ class WebhookController extends Controller
 
             Message::create([
                 'cliente_id' => $client->id,
-                'message'    => $message,
+                'message'    => $image ? '[Imagen recibida]' . ($message ? ": {$message}" : '') : $message,
                 'direction'  => 'incoming',
                 'type'       => $type,
                 'wamid'      => $wamid,
@@ -91,7 +92,7 @@ class WebhookController extends Controller
                 return response()->json(['status' => 'human_mode']);
             }
 
-            $reply = $bot->process($client, $message);
+            $reply = $bot->process($client, $message, $image);
 
             Message::create([
                 'cliente_id' => $client->id,
