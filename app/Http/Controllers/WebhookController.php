@@ -50,7 +50,13 @@ class WebhookController extends Controller
             $msg   = $value['messages'][0];
             $phone = $msg['from'];
             $type  = $msg['type'];
+            $wamid = $msg['id'];
             $bot   = app(BotService::class);
+
+            // Ignorar si ya procesamos este mensaje (webhook duplicado)
+            if (Message::where('wamid', $wamid)->exists()) {
+                return response()->json(['status' => 'duplicate']);
+            }
 
             // Resolver el texto según el tipo de mensaje
             if ($type === 'text') {
@@ -77,6 +83,7 @@ class WebhookController extends Controller
                 'message'    => $message,
                 'direction'  => 'incoming',
                 'type'       => $type,
+                'wamid'      => $wamid,
             ]);
 
             // Si el admin tomó control, no responde el bot

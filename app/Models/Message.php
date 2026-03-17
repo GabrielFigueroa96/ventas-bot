@@ -15,6 +15,7 @@ class Message extends Model
         'message',
         'direction',
         'type',
+        'wamid',
     ];
 
     protected $casts = [
