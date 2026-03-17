@@ -326,28 +326,31 @@ Cuando alguien pide sugerencia para una ocasión:
 
     private function handleToolCalls(array $choice, array $messages, $cliente): string
     {
-        $toolCall = $choice['message']['tool_calls'][0];
-        $funcName = $toolCall['function']['name'];
-        $args     = json_decode($toolCall['function']['arguments'], true) ?? [];
-
-        $result = match ($funcName) {
-            'crear_pedido'   => $this->createOrder($cliente, $args['items'] ?? [], $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['obs'] ?? ''),
-            'ver_pedidos'    => $this->orderStatus($cliente),
-            'ver_precios'    => $this->priceList(),
-            'calcular_total' => $this->calcularTotal($args['items'] ?? []),
-            'cancelar_pedido' => $this->cancelOrder($cliente, (int) ($args['nro'] ?? 0)),
-            default          => 'Función desconocida.',
-        };
-
-        // Agregamos el mensaje del asistente (con el tool_call) y el resultado
+        // Agregar el mensaje del asistente con todos sus tool_calls
         $messages[] = $choice['message'];
-        $messages[] = [
-            'role'         => 'tool',
-            'tool_call_id' => $toolCall['id'],
-            'content'      => $result,
-        ];
 
-        // Segunda llamada: ChatGPT transforma el resultado en lenguaje natural
+        // Responder a cada tool_call (OpenAI exige respuesta para cada ID)
+        foreach ($choice['message']['tool_calls'] as $toolCall) {
+            $funcName = $toolCall['function']['name'];
+            $args     = json_decode($toolCall['function']['arguments'], true) ?? [];
+
+            $result = match ($funcName) {
+                'crear_pedido'    => $this->createOrder($cliente, $args['items'] ?? [], $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['obs'] ?? ''),
+                'ver_pedidos'     => $this->orderStatus($cliente),
+                'ver_precios'     => $this->priceList(),
+                'calcular_total'  => $this->calcularTotal($args['items'] ?? []),
+                'cancelar_pedido' => $this->cancelOrder($cliente, (int) ($args['nro'] ?? 0)),
+                default           => 'Función desconocida.',
+            };
+
+            $messages[] = [
+                'role'         => 'tool',
+                'tool_call_id' => $toolCall['id'],
+                'content'      => $result,
+            ];
+        }
+
+        // Segunda llamada: ChatGPT transforma los resultados en lenguaje natural
         $response = $this->callOpenAI($messages);
 
         return $response['choices'][0]['message']['content'];
