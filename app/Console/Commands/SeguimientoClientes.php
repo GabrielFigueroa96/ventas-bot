@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Cliente;
+use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Seguimiento;
 use App\Services\BotService;
@@ -123,12 +124,20 @@ class SeguimientoClientes extends Command
         try {
             $bot->sendWhatsapp($cliente->phone, $mensaje);
 
+            // Grabar en la conversación para que se vea en el chat
+            Message::create([
+                'cliente_id' => $cliente->id,
+                'message'    => $mensaje,
+                'direction'  => 'outgoing',
+                'type'       => 'text',
+            ]);
+
             Seguimiento::create([
-                'cliente_id'     => $cliente->id,
-                'tipo'           => $tipo,
+                'cliente_id'      => $cliente->id,
+                'tipo'            => $tipo,
                 'mensaje_enviado' => $mensaje,
-                'respondio'      => false,
-                'enviado_at'     => now(),
+                'respondio'       => false,
+                'enviado_at'      => now(),
             ]);
 
             $this->line("✓ [{$tipo}] {$cliente->name} ({$cliente->phone})");
