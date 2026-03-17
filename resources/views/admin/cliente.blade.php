@@ -5,7 +5,7 @@
 <a href="{{ route('admin.clientes') }}" class="text-sm text-red-600 hover:underline mb-4 inline-block">← Volver</a>
 
 {{-- Cabecera cliente --}}
-<div class="flex items-center justify-between mb-6">
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
     <div class="flex items-center gap-4">
         <div class="bg-red-100 text-red-700 rounded-full w-14 h-14 flex items-center justify-center text-2xl font-bold">
             {{ strtoupper(substr($cliente->name ?? '?', 0, 1)) }}

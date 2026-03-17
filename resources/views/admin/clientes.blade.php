@@ -14,7 +14,43 @@
         class="w-full md:w-80 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
 </form>
 
-<div class="bg-white rounded-xl shadow overflow-hidden">
+{{-- Mobile: cards --}}
+<div class="sm:hidden space-y-3">
+    @forelse($clientes as $c)
+    <a href="{{ route('admin.cliente', $c) }}" class="block bg-white rounded-xl shadow px-4 py-3">
+        <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+                <p class="font-semibold text-gray-800 truncate">{{ $c->name ?? '—' }}</p>
+                <p class="text-xs text-gray-500 mt-0.5">{{ $c->phone }}</p>
+                @if($c->cuenta)
+                    <p class="text-xs text-blue-600 mt-0.5">{{ $c->cuenta->nom }} <span class="text-gray-400">#{{ $c->cuenta->cod }}</span></p>
+                @endif
+            </div>
+            <div class="flex flex-col items-end gap-1 shrink-0">
+                <span class="px-2 py-0.5 rounded-full text-xs font-medium
+                    {{ $c->estado === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
+                    {{ $c->estado ?? '—' }}
+                </span>
+                @if($c->modo === 'humano')
+                <span class="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-600">
+                    <span class="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
+                    Manual
+                </span>
+                @endif
+            </div>
+        </div>
+        <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
+            <span>💬 {{ $c->messages_count }}</span>
+            <span>Desde {{ $c->created_at->format('d/m/Y') }}</span>
+        </div>
+    </a>
+    @empty
+    <p class="text-center text-gray-400 text-sm py-6">No hay clientes.</p>
+    @endforelse
+</div>
+
+{{-- Desktop: tabla --}}
+<div class="hidden sm:block bg-white rounded-xl shadow overflow-hidden">
     <table class="w-full text-sm">
         <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
             <tr>
