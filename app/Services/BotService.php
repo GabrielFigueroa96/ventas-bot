@@ -99,10 +99,10 @@ class BotService
             ? "\nCuenta: {$cliente->cuenta->nom} | {$cliente->cuenta->dom}, {$cliente->cuenta->loca}"
             : '';
 
-        // Historial reducido a 4 mensajes (ahorra tokens)
+        // Historial de últimos 10 mensajes para mantener contexto del pedido
         $history = Message::where('cliente_id', $cliente->id)
             ->latest()
-            ->take(4)
+            ->take(10)
             ->get()
             ->reverse();
 
