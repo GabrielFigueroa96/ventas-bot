@@ -13,6 +13,27 @@
         <div>
             <h1 class="text-2xl font-bold text-gray-800">{{ $cliente->name ?? 'Sin nombre' }}</h1>
             <p class="text-gray-500 text-sm">{{ $cliente->phone }} · Cliente desde {{ $cliente->created_at->format('d/m/Y') }}</p>
+            {{-- Cuenta vinculada --}}
+            <div class="mt-1.5 flex items-center gap-2" id="cuenta-display">
+                @if($cliente->cuenta)
+                    <span class="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
+                        {{ $cliente->cuenta->nom }}
+                        <span class="opacity-60">#{{ $cliente->cuenta->cod }}</span>
+                    </span>
+                    <button onclick="abrirBuscarCuenta()" class="text-xs text-gray-400 hover:text-gray-600 underline">cambiar</button>
+                @else
+                    <span class="text-xs text-gray-400">Sin cuenta vinculada</span>
+                    <button onclick="abrirBuscarCuenta()" class="text-xs text-red-600 hover:underline font-medium">+ Vincular cuenta</button>
+                @endif
+            </div>
+            {{-- Buscador de cuentas (oculto por defecto) --}}
+            <div id="cuenta-buscar" class="hidden mt-2 relative w-72">
+                <input type="text" id="cuenta-input" placeholder="Buscar por nombre o código..."
+                    class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    oninput="buscarCuenta(this.value)" autocomplete="off">
+                <ul id="cuenta-resultados"
+                    class="hidden absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 text-sm max-h-48 overflow-y-auto"></ul>
+            </div>
         </div>
     </div>
 
@@ -149,8 +170,9 @@ chatBox?.addEventListener('scroll', () => {
     atBottom = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 40;
 });
 
-function scrollBottom() {
-    if (atBottom) chatBox.scrollTop = chatBox.scrollHeight;
+function scrollBottom(smooth = false) {
+    if (!atBottom) return;
+    chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
 }
 
 function bubbleHtml(msg) {
@@ -233,7 +255,7 @@ setInterval(pollPedidos, 3000);
 // Botón "nuevo mensaje"
 document.getElementById('nuevo-msg')?.addEventListener('click', () => {
     atBottom = true;
-    scrollBottom();
+    scrollBottom(true);
     document.getElementById('nuevo-msg').classList.add('hidden');
 });
 
@@ -326,5 +348,69 @@ function clearFile() {
     document.getElementById('archivo').value = '';
     document.getElementById('file-preview').classList.add('hidden');
 }
+
+// ── Vinculación de cuenta ────────────────────────────────────────────────────
+const buscarUrl  = "{{ route('admin.cuentas.buscar') }}";
+const cuentaUrl  = "{{ route('admin.chat.setCuenta', $cliente) }}";
+let   buscarTimer = null;
+
+function abrirBuscarCuenta() {
+    document.getElementById('cuenta-buscar').classList.remove('hidden');
+    document.getElementById('cuenta-input').focus();
+}
+
+function buscarCuenta(q) {
+    clearTimeout(buscarTimer);
+    const lista = document.getElementById('cuenta-resultados');
+    if (q.length < 1) { lista.classList.add('hidden'); return; }
+    buscarTimer = setTimeout(async () => {
+        const res  = await fetch(`${buscarUrl}?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        lista.innerHTML = '';
+        if (!data.length) {
+            lista.innerHTML = '<li class="px-3 py-2 text-gray-400">Sin resultados</li>';
+        } else {
+            data.forEach(c => {
+                const li = document.createElement('li');
+                li.className = 'px-3 py-2 hover:bg-gray-50 cursor-pointer flex justify-between';
+                li.innerHTML = `<span class="font-medium text-gray-800">${escHtml(c.nom)}</span>
+                                <span class="text-gray-400 text-xs">#${escHtml(c.cod)}</span>`;
+                li.onclick = () => asignarCuenta(c);
+                lista.appendChild(li);
+            });
+        }
+        lista.classList.remove('hidden');
+    }, 300);
+}
+
+async function asignarCuenta(cuenta) {
+    await fetch(cuentaUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content
+                         ?? document.querySelector('[name=_token]')?.value ?? '',
+        },
+        body: JSON.stringify({ cuenta_cod: cuenta.cod }),
+    });
+
+    // Actualizar display sin recargar
+    document.getElementById('cuenta-display').innerHTML = `
+        <span class="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
+            ${escHtml(cuenta.nom)} <span class="opacity-60">#${escHtml(cuenta.cod)}</span>
+        </span>
+        <button onclick="abrirBuscarCuenta()" class="text-xs text-gray-400 hover:text-gray-600 underline">cambiar</button>`;
+
+    document.getElementById('cuenta-buscar').classList.add('hidden');
+    document.getElementById('cuenta-input').value = '';
+    document.getElementById('cuenta-resultados').classList.add('hidden');
+}
+
+// Cerrar dropdown al hacer click fuera
+document.addEventListener('click', e => {
+    if (!e.target.closest('#cuenta-buscar') && !e.target.closest('#cuenta-display')) {
+        document.getElementById('cuenta-buscar')?.classList.add('hidden');
+    }
+});
 </script>
 @endsection

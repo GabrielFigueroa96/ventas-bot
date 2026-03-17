@@ -88,6 +88,7 @@ class AdminController extends Controller
         $search = $request->input('search');
 
         $clientes = Cliente::withCount('messages')
+            ->with('cuenta')
             ->when($search, fn($q) =>
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('phone', 'like', "%{$search}%")
@@ -100,11 +101,14 @@ class AdminController extends Controller
 
     public function cliente(Cliente $cliente)
     {
+        $cliente->load('cuenta');
+
         $mensajes = Message::where('cliente_id', $cliente->id)
             ->oldest()
             ->get();
 
-        $pedidosRaw = Pedido::where('codcli', $cliente->id)
+        $codcli     = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
+        $pedidosRaw = Pedido::where('codcli', $codcli)
             ->orderByDesc('reg')
             ->get();
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cliente;
+use App\Models\Cuenta;
 use App\Models\Factventas;
 use App\Models\Message;
 use App\Models\Pedido;
@@ -65,7 +66,7 @@ class AdminChatController extends Controller
                 $caption = $request->input('mensaje', '');
 
                 // Guardar localmente para mostrar en la conversación
-                $filename  = 'chat-images/' . \Str::uuid() . '.' . $file->getClientOriginalExtension();
+                $filename  = 'chat-images/' . Str::uuid() . '.' . $file->getClientOriginalExtension();
                 if (!is_dir(public_path('chat-images'))) {
                     mkdir(public_path('chat-images'), 0755, true);
                 }
@@ -112,9 +113,43 @@ class AdminChatController extends Controller
         return back();
     }
 
+    public function cuentaBuscar(Request $request)
+    {
+        $q = $request->input('q', '');
+
+        $cuentas = Cuenta::where('nom', 'like', "%{$q}%")
+            ->orWhere('cod', 'like', "%{$q}%")
+            ->orderBy('nom')
+            ->take(10)
+            ->get(['cod', 'nom', 'dom', 'loca', 'prov']);
+
+        return response()->json($cuentas);
+    }
+
+    public function setCuenta(Request $request, Cliente $cliente)
+    {
+        $request->validate(['cuenta_cod' => 'nullable|string']);
+        $cuentaCod = $request->input('cuenta_cod');
+
+        $cliente->update(['cuenta_cod' => $cuentaCod]);
+
+        // Reasignar pedidos existentes creados con el id interno del bot
+        if ($cuentaCod) {
+            $cuenta = Cuenta::find($cuentaCod);
+            if ($cuenta) {
+                Pedido::where('codcli', $cliente->id)
+                    ->update(['codcli' => $cuenta->cod, 'nomcli' => $cuenta->nom]);
+            }
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
     public function pedidosPanel(Cliente $cliente)
     {
-        $pedidosRaw = Pedido::where('codcli', $cliente->id)
+        $cliente->load('cuenta');
+        $codcli     = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
+        $pedidosRaw = Pedido::where('codcli', $codcli)
             ->orderByDesc('reg')
             ->get();
 

@@ -19,6 +19,7 @@
         <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
             <tr>
                 <th class="px-5 py-3 text-left">Nombre</th>
+                <th class="px-5 py-3 text-left">Cuenta</th>
                 <th class="px-5 py-3 text-left">Teléfono</th>
                 <th class="px-5 py-3 text-left">Estado</th>
                 <th class="px-5 py-3 text-left">Mensajes</th>
@@ -30,12 +31,28 @@
             @forelse($clientes as $c)
             <tr class="hover:bg-gray-50">
                 <td class="px-5 py-3 font-medium text-gray-800">{{ $c->name ?? '—' }}</td>
+                <td class="px-5 py-3">
+                    @if($c->cuenta)
+                        <span class="text-gray-700 font-medium">{{ $c->cuenta->nom }}</span>
+                        <span class="text-gray-400 text-xs ml-1">#{{ $c->cuenta->cod }}</span>
+                    @else
+                        <span class="text-gray-300 text-xs">Sin vincular</span>
+                    @endif
+                </td>
                 <td class="px-5 py-3 text-gray-600">{{ $c->phone }}</td>
                 <td class="px-5 py-3">
-                    <span class="px-2 py-0.5 rounded-full text-xs font-medium
-                        {{ $c->estado === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
-                        {{ $c->estado ?? '—' }}
-                    </span>
+                    <div class="flex flex-wrap items-center gap-1">
+                        <span class="px-2 py-0.5 rounded-full text-xs font-medium
+                            {{ $c->estado === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
+                            {{ $c->estado ?? '—' }}
+                        </span>
+                        @if($c->modo === 'humano')
+                        <span class="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-600">
+                            <span class="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
+                            Manual
+                        </span>
+                        @endif
+                    </div>
                 </td>
                 <td class="px-5 py-3 text-gray-600">{{ $c->messages_count }}</td>
                 <td class="px-5 py-3 text-gray-400">{{ $c->created_at->format('d/m/Y') }}</td>
@@ -44,7 +61,7 @@
                 </td>
             </tr>
             @empty
-            <tr><td colspan="6" class="px-5 py-6 text-center text-gray-400">No hay clientes.</td></tr>
+            <tr><td colspan="7" class="px-5 py-6 text-center text-gray-400">No hay clientes.</td></tr>
             @endforelse
         </tbody>
     </table>

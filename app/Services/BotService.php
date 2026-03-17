@@ -69,7 +69,8 @@ class BotService
             ->map(fn($p) => "{$p->des} \${$p->PRE}")
             ->implode("\n");
 
-        $ultimoPedido = Pedido::where('codcli', $cliente->id)->latest('reg')->first();
+        $codcli       = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
+        $ultimoPedido = Pedido::where('codcli', $codcli)->latest('reg')->first();
         $ultimoPedidoTexto = $ultimoPedido
             ? "#{$ultimoPedido->nro} ({$ultimoPedido->fecha}): {$ultimoPedido->descrip} — {$ultimoPedido->estado_texto}"
             : 'ninguno';
@@ -255,15 +256,17 @@ Reglas:
             return 'Sin artículos para registrar.';
         }
 
-        $nro   = (Pedido::max('nro') ?? 0) + 1;
-        $fecha = now()->format('Y-m-d');
+        $nro    = (Pedido::max('nro') ?? 0) + 1;
+        $fecha  = now()->format('Y-m-d');
+        $codcli = $client->cuenta ? $client->cuenta->cod : $client->id;
+        $nomcli = $client->cuenta ? $client->cuenta->nom : $client->name;
 
         foreach ($items as $item) {
             Pedido::create([
                 'fecha'   => $fecha,
                 'nro'     => $nro,
-                'nomcli'  => $client->name,
-                'codcli'  => $client->id,
+                'nomcli'  => $nomcli,
+                'codcli'  => $codcli,
                 'descrip' => $item['descrip'],
                 'kilos'   => $item['kilos'],
                 'cant'    => 1,
@@ -279,7 +282,8 @@ Reglas:
 
     private function orderStatus($client): string
     {
-        $pedidos = Pedido::where('codcli', $client->id)
+        $codcli  = $client->cuenta ? $client->cuenta->cod : $client->id;
+        $pedidos = Pedido::where('codcli', $codcli)
             ->orderByDesc('reg')
             ->take(5)
             ->get();

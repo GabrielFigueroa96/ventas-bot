@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $estado
  * @property string $modo
  * @property string $last_order_at
+ * @property string|null $cuenta_cod
+ * @property-read Cuenta|null $cuenta
  */
 class Cliente extends Model
 {
@@ -23,10 +25,16 @@ class Cliente extends Model
         'estado',
         'modo',
         'last_order_at',
+        'cuenta_cod',
     ];
 
     public function messages()
     {
         return $this->hasMany(Message::class, 'cliente_id');
+    }
+
+    public function cuenta()
+    {
+        return $this->belongsTo(Cuenta::class, 'cuenta_cod', 'cod');
     }
 }
