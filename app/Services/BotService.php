@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\Http;
 use App\Models\Producto;
 use App\Models\Message;
 
-
 class BotService
 {
     public function process($client, $message)
@@ -24,12 +23,12 @@ class BotService
             $response = $this->createOrder($client, $message);
         }
 
-        if($response == ""){
+        if ($response == "") {
             $response = $this->askChatGPT($message, $client);
         }
-       
-        return $this->sendWhatsapp($client->phone,$response);
 
+        $this->sendWhatsapp($client->phone, $response);
+        return $response;
     }
 
     private function priceList()
