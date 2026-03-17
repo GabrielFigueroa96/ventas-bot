@@ -44,6 +44,7 @@ class Pedido extends Model
         'estado',
         'fecfin',
         'obs',
+        'pedido_at',
         'suc',
         'pv',
         'venta',

@@ -9,7 +9,11 @@ class Producto extends Model
 {
     use HasFactory;
 
-    protected $table = "tablaplu";
+    protected $table      = 'tablaplu';
+    protected $primaryKey = 'cod';
+    public    $incrementing = false;
+    protected $keyType    = 'float';
+    public    $timestamps = false;
 
     protected $fillable = [
         'des',
@@ -17,6 +21,7 @@ class Producto extends Model
         'tipo',
         'grupo',
         'desgrupo',
+        'imagen',
     ];
 
 

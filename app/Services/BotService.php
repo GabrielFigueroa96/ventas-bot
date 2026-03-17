@@ -72,11 +72,17 @@ class BotService
         // Lista cacheada 5 minutos — ahorra tokens y DB queries
         $lista = Cache::remember('productos_bot_lista', 300, function () {
             return Producto::where('PRE', '>', 0)
-                ->select('des', 'PRE', 'tipo')
+                ->select('des', 'PRE', 'tipo', 'descripcion')
                 ->get()
-                ->map(fn($p) => $p->tipo === 'Unidad'
-                    ? "{$p->des} " . number_format($p->PRE, 2, ',', '.') . " \$/u (por unidad)"
-                    : "{$p->des} " . number_format($p->PRE, 2, ',', '.') . " \$/kg (por peso)")
+                ->map(function ($p) {
+                    $precio = number_format($p->PRE, 2, ',', '.');
+                    $unidad = $p->tipo === 'Unidad' ? "por unidad" : "por peso";
+                    $linea  = "{$p->des} {$precio} \$/{$unidad}";
+                    if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
+                        $linea .= " — {$p->descripcion}";
+                    }
+                    return $linea;
+                })
                 ->implode("\n");
         });
 
@@ -403,11 +409,15 @@ Cuando alguien pide sugerencia para una ocasión:
                 'cant'    => $esPeso ? 1           : (int) $cantidad,
                 'precio'  => $precio,
                 'neto'    => $neto,
-                'estado'  => Pedido::ESTADO_PENDIENTE,
-                'obs'     => $obs,
-                'venta'   => 0,
+                'estado'    => Pedido::ESTADO_PENDIENTE,
+                'obs'       => $obs,
+                'pedido_at' => now(),
+                'venta'     => 0,
             ]);
         }
+
+        // Enviar imagen de cada producto que tenga una
+        $this->enviarImagenesProductos($client, $productos, $items);
 
         $resumen = implode(', ', array_map(fn($i) => "{$i['cantidad']} {$i['descrip']}", $items));
 
@@ -494,6 +504,51 @@ Cuando alguien pide sugerencia para una ocasión:
         $pedidos->each->delete();
 
         return "Pedido #{$nro} cancelado correctamente.";
+    }
+
+    private function enviarImagenesProductos($client, $productos, array $items): void
+    {
+        foreach ($items as $item) {
+            $producto = $productos->first(
+                fn($p) => stripos($p->des, $item['descrip']) !== false ||
+                          stripos($item['descrip'], $p->des) !== false
+            );
+
+            if (!$producto || empty($producto->imagen)) {
+                continue;
+            }
+
+            $path = storage_path('app/public/' . $producto->imagen);
+
+            if (!file_exists($path)) {
+                continue;
+            }
+
+            try {
+                $mime    = mime_content_type($path) ?: 'image/jpeg';
+                $mediaId = $this->uploadMediaFromPath($path, $mime);
+                $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $producto->des);
+            } catch (\Throwable $e) {
+                Log::error("enviarImagenesProductos {$producto->des}: {$e->getMessage()}");
+            }
+        }
+    }
+
+    private function uploadMediaFromPath(string $path, string $mime = 'image/jpeg'): string
+    {
+        $response = Http::withToken(config('api.whatsapp.key'))
+            ->attach('file', file_get_contents($path), basename($path), ['Content-Type' => $mime])
+            ->attach('messaging_product', 'whatsapp')
+            ->attach('type', $mime)
+            ->post('https://graph.facebook.com/v19.0/295131097015095/media');
+
+        $mediaId = $response->json('id');
+
+        if (!$mediaId) {
+            throw new \RuntimeException('Error al subir imagen: ' . $response->body());
+        }
+
+        return $mediaId;
     }
 
     private function priceList(): string

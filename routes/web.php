@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminChatController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ProductoController;
 
 Route::get('/', fn() => view('welcome'));
 
@@ -27,4 +28,10 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::post('/clientes/{cliente}/enviar',        [AdminChatController::class, 'enviar'])->name('chat.enviar');
     Route::post('/clientes/{cliente}/cuenta',        [AdminChatController::class, 'setCuenta'])->name('chat.setCuenta');
     Route::get ('/cuentas/buscar',                   [AdminChatController::class, 'cuentaBuscar'])->name('cuentas.buscar');
+
+    // Productos
+    Route::get  ('/productos',                       [ProductoController::class, 'index'])->name('productos');
+    Route::post ('/productos/{producto}/imagen',     [ProductoController::class, 'uploadImagen'])->name('productos.imagen');
+    Route::delete('/productos/{producto}/imagen',    [ProductoController::class, 'deleteImagen'])->name('productos.imagen.delete');
+    Route::patch('/productos/{producto}/descripcion',[ProductoController::class, 'updateDescripcion'])->name('productos.descripcion');
 });

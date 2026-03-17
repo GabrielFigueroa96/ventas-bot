@@ -26,6 +26,7 @@
                     <a href="{{ route('admin.dashboard') }}" class="hover:text-red-200 {{ request()->routeIs('admin.dashboard') ? 'underline' : '' }}">Dashboard</a>
                     <a href="{{ route('admin.clientes') }}"  class="hover:text-red-200 {{ request()->routeIs('admin.clientes*') ? 'underline' : '' }}">Clientes</a>
                     <a href="{{ route('admin.pedidos') }}"   class="hover:text-red-200 {{ request()->routeIs('admin.pedidos') ? 'underline' : '' }}">Pedidos</a>
+                    <a href="{{ route('admin.productos') }}" class="hover:text-red-200 {{ request()->routeIs('admin.productos*') ? 'underline' : '' }}">Productos</a>
                     <span class="text-red-300">|</span>
                     <span class="text-red-200 text-xs">{{ auth()->user()->name }}</span>
                     <form method="POST" action="{{ route('logout') }}">
@@ -40,6 +41,7 @@
                 <a href="{{ route('admin.dashboard') }}" class="hover:text-red-200 {{ request()->routeIs('admin.dashboard') ? 'underline' : '' }}">Dashboard</a>
                 <a href="{{ route('admin.clientes') }}"  class="hover:text-red-200 {{ request()->routeIs('admin.clientes*') ? 'underline' : '' }}">Clientes</a>
                 <a href="{{ route('admin.pedidos') }}"   class="hover:text-red-200 {{ request()->routeIs('admin.pedidos') ? 'underline' : '' }}">Pedidos</a>
+                <a href="{{ route('admin.productos') }}" class="hover:text-red-200 {{ request()->routeIs('admin.productos*') ? 'underline' : '' }}">Productos</a>
                 <div class="flex items-center justify-between pt-1 border-t border-red-600">
                     <span class="text-red-200 text-xs">{{ auth()->user()->name }}</span>
                     <form method="POST" action="{{ route('logout') }}">
