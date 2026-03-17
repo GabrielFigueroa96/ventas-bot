@@ -17,7 +17,15 @@ class AdminChatController extends Controller
         $mensajes = Message::where('cliente_id', $cliente->id)
             ->where('id', '>', $desdeId)
             ->oldest('id')
-            ->get(['id', 'message', 'direction', 'type', 'created_at']);
+            ->get(['id', 'message', 'direction', 'type', 'media_path', 'created_at'])
+            ->map(fn($m) => [
+                'id'         => $m->id,
+                'message'    => $m->message,
+                'direction'  => $m->direction,
+                'type'       => $m->type,
+                'media_path' => $m->media_path ? asset('storage/' . $m->media_path) : null,
+                'created_at' => $m->fecha,
+            ]);
 
         return response()->json($mensajes);
     }

@@ -69,8 +69,10 @@ class WebhookController extends Controller
                     return response()->json(['status' => 'empty_transcription']);
                 }
             } elseif ($type === 'image') {
-                $image   = $bot->downloadWhatsappMedia($msg['image']['id']);
-                $message = $msg['image']['caption'] ?? '';
+                $image     = $bot->downloadWhatsappMedia($msg['image']['id']);
+                $message   = $msg['image']['caption'] ?? '';
+                $imgPath   = 'chat-images/' . $wamid . '.jpg';
+                \Storage::disk('public')->put($imgPath, base64_decode($image['base64']));
             } else {
                 $client = Cliente::firstOrCreate(['phone' => $phone]);
                 $bot->sendWhatsapp($phone, "Por ahora solo proceso texto, voz e imágenes. 😊");
@@ -81,10 +83,11 @@ class WebhookController extends Controller
 
             Message::create([
                 'cliente_id' => $client->id,
-                'message'    => $image ? '[Imagen recibida]' . ($message ? ": {$message}" : '') : $message,
+                'message'    => $image ? ($message ?: '') : $message,
                 'direction'  => 'incoming',
                 'type'       => $type,
                 'wamid'      => $wamid,
+                'media_path' => $imgPath ?? null,
             ]);
 
             // Si el admin tomó control, no responde el bot

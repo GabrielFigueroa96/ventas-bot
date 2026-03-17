@@ -16,12 +16,16 @@ class Message extends Model
         'direction',
         'type',
         'wamid',
+        'media_path',
     ];
 
-    protected $casts = [
-        'created_at' => 'datetime:d/m H:i',
-        'updated_at' => 'datetime:d/m H:i',
-    ];
+    // Fecha formateada con timezone de la app
+    public function getFechaAttribute(): string
+    {
+        return $this->created_at
+            ->setTimezone(config('app.timezone'))
+            ->format('d/m H:i');
+    }
 
     public function client()
     {

@@ -68,8 +68,16 @@
                         {{ $msg->direction === 'outgoing'
                             ? 'bg-red-600 text-white rounded-br-none'
                             : 'bg-gray-100 text-gray-800 rounded-bl-none' }}">
-                        <p>{{ $msg->message }}</p>
-                        <p class="text-xs mt-1 opacity-60">{{ $msg->created_at }}</p>
+                        @if($msg->media_path)
+                            <img src="{{ asset('storage/' . $msg->media_path) }}"
+                                 class="rounded-lg max-w-full mb-1 cursor-pointer"
+                                 onclick="window.open(this.src)"
+                                 alt="Imagen">
+                        @endif
+                        @if($msg->message)
+                            <p>{{ $msg->message }}</p>
+                        @endif
+                        <p class="text-xs mt-1 opacity-60">{{ $msg->fecha }}</p>
                     </div>
                 </div>
                 @empty
@@ -213,10 +221,19 @@ function bubbleHtml(msg) {
     const bubble = isOut
         ? 'bg-red-600 text-white rounded-br-none'
         : 'bg-gray-100 text-gray-800 rounded-bl-none';
+
+    let content = '';
+    if (msg.media_path) {
+        content += `<img src="${msg.media_path}" class="rounded-lg max-w-full mb-1 cursor-pointer" onclick="window.open(this.src)" alt="Imagen">`;
+    }
+    if (msg.message) {
+        content += `<p>${escHtml(msg.message)}</p>`;
+    }
+
     return `
         <div class="flex ${align}" data-id="${msg.id}">
             <div class="max-w-xs px-4 py-2 rounded-2xl text-sm ${bubble}">
-                <p>${escHtml(msg.message)}</p>
+                ${content}
                 <p class="text-xs mt-1 opacity-60">${msg.created_at}</p>
             </div>
         </div>`;
