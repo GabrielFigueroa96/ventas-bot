@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Producto;
@@ -73,7 +74,7 @@ class BotService
             return Producto::where('PRE', '>', 0)
                 ->select('des', 'PRE', 'tipo')
                 ->get()
-                ->map(fn($p) => $p->tipo === 'unidad'
+                ->map(fn($p) => $p->tipo === 'Unidad'
                     ? "{$p->des} \${$p->PRE}/u (por unidad)"
                     : "{$p->des} \${$p->PRE}/kg (por peso)")
                 ->implode("\n");
@@ -83,6 +84,15 @@ class BotService
         $ultimoPedidoTexto = $ultimoPedido
             ? "#{$ultimoPedido->nro} ({$ultimoPedido->fecha}): {$ultimoPedido->descrip} — {$ultimoPedido->estado_texto}"
             : 'ninguno';
+
+        // Top 3 productos más pedidos por este cliente (personalización)
+        $topProductos = Pedido::where('codcli', $codcli)
+            ->selectRaw('descrip, COUNT(*) as veces')
+            ->groupBy('descrip')
+            ->orderByDesc('veces')
+            ->take(3)
+            ->pluck('descrip')
+            ->implode(', ');
 
         // Contexto de cuenta comercial si está vinculada
         $cuentaTexto = $cliente->cuenta
@@ -96,6 +106,10 @@ class BotService
             ->get()
             ->reverse();
 
+        $favoritosTexto = $topProductos
+            ? "Lo que más pide: {$topProductos}."
+            : '';
+
         $messages = [];
 
         $messages[] = [
@@ -103,12 +117,16 @@ class BotService
             'content' => "Sos el asistente de una carnicería. Amable, breve y directo. Hoy es {$fecha}.
 Cliente: {$nombre}{$cuentaTexto}
 Último pedido: {$ultimoPedidoTexto}
+{$favoritosTexto}
 
 Productos disponibles:
 {$lista}
 
 Reglas:
+- Solo respondés preguntas relacionadas a la carnicería (pedidos, precios, productos). Si te preguntan otra cosa, decí amablemente que solo podés ayudar con eso.
 - Para pedir: preguntá qué y cuánto, confirmá ('¿Confirmás: 2kg asado?') y llamá a crear_pedido solo cuando confirme.
+- Si el cliente no especifica qué quiere, sugerile sus productos favoritos o los más populares.
+- Cuando alguien pide carne para asar, ofrecé también chorizos/morcillas si están disponibles (una sola vez, sin insistir).
 - ver_precios → consultas de precios o lista de productos.
 - ver_pedidos → estado e historial de pedidos.
 - cancelar_pedido → si el cliente quiere cancelar un pedido pendiente.
@@ -117,9 +135,26 @@ Reglas:
 - Respondé siempre en español argentino.
 
 Porciones estándar por persona:
-- Por peso: asado/vacío/costilla 0.35kg | pollo 0.3kg | cerdo 0.3kg
+- Por peso: asado de tira/vacío/costilla 0.500kg | entraña/colita 0.300kg | pollo 0.300kg | cerdo 0.300kg
 - Por unidad: chorizo 1u | morcilla 1u | hamburguesa 2u
-- Ejemplo 8 personas → 2.8kg asado, 8 chorizos, 8 morcillas. Ajustá según productos disponibles.
+
+IMPORTANTE — productos y precios:
+- NUNCA menciones un producto que no esté exactamente en la lista de productos disponibles.
+- NUNCA inventes ni estimes un precio. Los únicos precios válidos son los de la lista.
+- Si un producto típico de una ocasión no está en la lista, simplemente no lo mencionés.
+
+Sugerencias por ocasión (filtrá contra la lista de productos disponibles):
+- Parrillada/asado: asado de tira, vacío, costillas, entraña, chorizos, morcilla, achuras. Tip: empezá con achuras y chorizos, después las carnes.
+- Pollo al horno: pollo entero o en presas. Tip: 180°C, 45 min por kg.
+- Disco de arado: cortes para guisar (paleta, roast beef, osobuco), chorizos. Tip: dorar la carne primero.
+- Guiso/estofado: osobuco, paleta, roast beef, chorizos. Tip: fuego lento mínimo 1.5h.
+- Milanesas: nalga, peceto, bola de lomo. Tip: 1kg rinde aprox 6-8 milanesas.
+
+Cuando alguien pide sugerencia para una ocasión:
+1. Revisá la lista de productos disponibles y seleccioná SOLO los que aplican.
+2. Si ningún producto de esa ocasión está disponible, decilo claramente.
+3. Calculá cantidades con calcular_total (precios reales).
+4. Agregá un tip breve y preguntá si hace el pedido.
 - En crear_pedido y calcular_total: para artículos por peso usá kg, para artículos por unidad usá cantidad de unidades.",
         ];
 
@@ -284,7 +319,7 @@ Porciones estándar por persona:
             'ver_pedidos'    => $this->orderStatus($cliente),
             'ver_precios'    => $this->priceList(),
             'calcular_total' => $this->calcularTotal($args['items'] ?? []),
-            'cancelar_pedido'=> $this->cancelOrder($cliente, (int) ($args['nro'] ?? 0)),
+            'cancelar_pedido' => $this->cancelOrder($cliente, (int) ($args['nro'] ?? 0)),
             default          => 'Función desconocida.',
         };
 
@@ -318,7 +353,10 @@ Porciones estándar por persona:
         $nomcli   = $client->cuenta ? $client->cuenta->nom : $client->name;
 
         // Cache de productos con tipo para no hacer N queries
-        $productos = Cache::remember('productos_bot_precios', 300, fn() =>
+        $productos = Cache::remember(
+            'productos_bot_precios',
+            300,
+            fn() =>
             Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo'])
         );
 
@@ -326,9 +364,10 @@ Porciones estándar por persona:
             $cantidad = (float) ($item['cantidad'] ?? $item['kilos'] ?? 0);
 
             // Buscar tipo del producto
-            $producto = $productos->first(fn($p) =>
+            $producto = $productos->first(
+                fn($p) =>
                 stripos($p->des, $item['descrip']) !== false ||
-                stripos($item['descrip'], $p->des) !== false
+                    stripos($item['descrip'], $p->des) !== false
             );
 
             $esPeso = !$producto || $producto->tipo !== 'unidad';
@@ -374,7 +413,10 @@ Porciones estándar por persona:
             return 'No hay productos para calcular.';
         }
 
-        $productos = Cache::remember('productos_bot_precios', 300, fn() =>
+        $productos = Cache::remember(
+            'productos_bot_precios',
+            300,
+            fn() =>
             Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo'])
         );
 
@@ -385,9 +427,10 @@ Porciones estándar por persona:
             $descrip  = $item['descrip'];
             $cantidad = (float) ($item['cantidad'] ?? $item['kilos'] ?? 0);
 
-            $match = $productos->first(fn($p) =>
+            $match = $productos->first(
+                fn($p) =>
                 stripos($p->des, $descrip) !== false ||
-                stripos($descrip, $p->des) !== false
+                    stripos($descrip, $p->des) !== false
             );
 
             if ($match) {
@@ -429,15 +472,20 @@ Porciones estándar por persona:
 
     private function priceList(): string
     {
+        // Forzar refresco del cache al pedir precios
+        Cache::forget('productos_bot_lista');
+        Cache::forget('productos_bot_precios');
+
         $productos = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo']);
 
         if ($productos->isEmpty()) {
             return 'No hay productos disponibles en este momento.';
         }
 
-        return $productos->map(fn($p) => $p->tipo === 'unidad'
-            ? "{$p->des} — \${$p->PRE}/u"
-            : "{$p->des} — \${$p->PRE}/kg"
+        return $productos->map(
+            fn($p) => $p->tipo === 'unidad'
+                ? "{$p->des} — \${$p->PRE}/u"
+                : "{$p->des} — \${$p->PRE}/kg"
         )->implode("\n");
     }
 
