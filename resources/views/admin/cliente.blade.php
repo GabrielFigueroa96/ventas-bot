@@ -96,7 +96,13 @@
                                  alt="Imagen">
                         @endif
                         @if($msg->message)
-                            <p>{{ $msg->message }}</p>
+                            @php
+                                $txt = e($msg->message);
+                                $txt = preg_replace('/\*(.*?)\*/s', '<strong>$1</strong>', $txt);
+                                $txt = preg_replace('/_(.*?)_/s', '<em>$1</em>', $txt);
+                                $txt = nl2br($txt);
+                            @endphp
+                            <p class="whitespace-pre-wrap leading-snug">{!! $txt !!}</p>
                         @endif
                         <p class="text-xs mt-1 opacity-60">{{ $msg->fecha }}</p>
                     </div>
@@ -187,7 +193,7 @@ function bubbleHtml(msg) {
         content += `<img src="${msg.media_path}" class="rounded-lg max-w-full mb-1 cursor-pointer" onclick="window.open(this.src)" alt="Imagen">`;
     }
     if (msg.message) {
-        content += `<p>${escHtml(msg.message)}</p>`;
+        content += `<p class="whitespace-pre-wrap leading-snug">${formatWpp(msg.message)}</p>`;
     }
 
     return `
@@ -201,6 +207,14 @@ function bubbleHtml(msg) {
 
 function escHtml(str) {
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatWpp(str) {
+    let s = escHtml(str);
+    s = s.replace(/\*(.*?)\*/gs, '<strong>$1</strong>');
+    s = s.replace(/_(.*?)_/gs, '<em>$1</em>');
+    s = s.replace(/\n/g, '<br>');
+    return s;
 }
 
 async function pollMensajes() {
@@ -283,7 +297,7 @@ formEnviar?.addEventListener('submit', async function(e) {
         chatBox.insertAdjacentHTML('beforeend', `
             <div class="flex justify-end opacity-60" id="${tmpId}">
                 <div class="max-w-xs px-4 py-2 rounded-2xl text-sm bg-red-600 text-white rounded-br-none">
-                    <p>${escHtml(textoLocal)}</p>
+                    <p class="whitespace-pre-wrap leading-snug">${formatWpp(textoLocal)}</p>
                     <p class="text-xs mt-1 opacity-60">enviando...</p>
                 </div>
             </div>`);
