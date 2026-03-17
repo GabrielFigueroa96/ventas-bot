@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Producto;
@@ -64,20 +65,34 @@ class BotService
     private function buildMessages(string $message, $cliente, ?array $image = null): array
     {
         $nombre = $cliente->name ?? 'cliente';
+        $codcli = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
+        $fecha  = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
 
-        $lista = Producto::select('des', 'PRE')->get()
-            ->map(fn($p) => "{$p->des} \${$p->PRE}")
-            ->implode("\n");
+        // Lista cacheada 5 minutos — ahorra tokens y DB queries
+        $lista = Cache::remember('productos_bot_lista', 300, function () {
+            return Producto::where('PRE', '>', 0)
+                ->select('des', 'PRE', 'tipo')
+                ->get()
+                ->map(fn($p) => $p->tipo === 'unidad'
+                    ? "{$p->des} \${$p->PRE}/u (por unidad)"
+                    : "{$p->des} \${$p->PRE}/kg (por peso)")
+                ->implode("\n");
+        });
 
-        $codcli       = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
         $ultimoPedido = Pedido::where('codcli', $codcli)->latest('reg')->first();
         $ultimoPedidoTexto = $ultimoPedido
             ? "#{$ultimoPedido->nro} ({$ultimoPedido->fecha}): {$ultimoPedido->descrip} — {$ultimoPedido->estado_texto}"
             : 'ninguno';
 
+        // Contexto de cuenta comercial si está vinculada
+        $cuentaTexto = $cliente->cuenta
+            ? "\nCuenta: {$cliente->cuenta->nom} | {$cliente->cuenta->dom}, {$cliente->cuenta->loca}"
+            : '';
+
+        // Historial reducido a 4 mensajes (ahorra tokens)
         $history = Message::where('cliente_id', $cliente->id)
             ->latest()
-            ->take(6)
+            ->take(4)
             ->get()
             ->reverse();
 
@@ -85,47 +100,45 @@ class BotService
 
         $messages[] = [
             'role'    => 'system',
-            'content' => "Eres el asistente de una carnicería. Sos amable, breve y directo.
+            'content' => "Sos el asistente de una carnicería. Amable, breve y directo. Hoy es {$fecha}.
+Cliente: {$nombre}{$cuentaTexto}
+Último pedido: {$ultimoPedidoTexto}
 
 Productos disponibles:
 {$lista}
 
-Cliente: {$nombre}
-Último pedido: {$ultimoPedidoTexto}
-
 Reglas:
-- Si el cliente quiere hacer un pedido, preguntá qué productos y cantidades necesita.
-- Confirmá el pedido con el cliente ANTES de llamar a crear_pedido (ej: '¿Confirmás: 2kg asado y 1 pollo?').
-- Solo llamá a crear_pedido cuando el cliente confirme explícitamente (sí, dale, confirmo, etc.).
-- Usá ver_precios cuando pregunten por precios o lista de productos.
-- Usá ver_pedidos cuando pregunten por el estado o historial de sus pedidos.
-- Si recibís una imagen, describí lo que ves e intentá relacionarlo con un pedido o consulta.
-- Respondé siempre en español, de forma corta y amigable.",
+- Para pedir: preguntá qué y cuánto, confirmá ('¿Confirmás: 2kg asado?') y llamá a crear_pedido solo cuando confirme.
+- ver_precios → consultas de precios o lista de productos.
+- ver_pedidos → estado e historial de pedidos.
+- cancelar_pedido → si el cliente quiere cancelar un pedido pendiente.
+- calcular_total → SIEMPRE usalo cuando recomendés productos (asado, parrillada, etc.) para mostrar el costo estimado real.
+- Si recibís imagen, describila e intentá relacionarla con un pedido.
+- Respondé siempre en español argentino.
+
+Porciones estándar por persona:
+- Por peso: asado/vacío/costilla 0.35kg | pollo 0.3kg | cerdo 0.3kg
+- Por unidad: chorizo 1u | morcilla 1u | hamburguesa 2u
+- Ejemplo 8 personas → 2.8kg asado, 8 chorizos, 8 morcillas. Ajustá según productos disponibles.
+- En crear_pedido y calcular_total: para artículos por peso usá kg, para artículos por unidad usá cantidad de unidades.",
         ];
 
         foreach ($history as $msg) {
             $messages[] = [
                 'role'    => $msg->direction === 'incoming' ? 'user' : 'assistant',
-                'content' => $msg->message,
+                'content' => $msg->message ?: '(imagen)',
             ];
         }
 
-        // Si viene con imagen, el mensaje del usuario es multimodal (texto + imagen)
         if ($image) {
             $userContent = [];
-
             if ($message) {
                 $userContent[] = ['type' => 'text', 'text' => $message];
             }
-
             $userContent[] = [
                 'type'      => 'image_url',
-                'image_url' => [
-                    'url'    => "data:{$image['mime']};base64,{$image['base64']}",
-                    'detail' => 'auto',
-                ],
+                'image_url' => ['url' => "data:{$image['mime']};base64,{$image['base64']}", 'detail' => 'auto'],
             ];
-
             $messages[] = ['role' => 'user', 'content' => $userContent];
         } else {
             $messages[] = ['role' => 'user', 'content' => $message];
@@ -181,14 +194,14 @@ Reglas:
                                     'properties' => [
                                         'descrip' => [
                                             'type'        => 'string',
-                                            'description' => 'Nombre del producto con unidad (ej: "asado kg", "pollo unidad").',
+                                            'description' => 'Nombre del producto.',
                                         ],
-                                        'kilos' => [
+                                        'cantidad' => [
                                             'type'        => 'number',
-                                            'description' => 'Cantidad (kilos o unidades según corresponda).',
+                                            'description' => 'Kg si el producto es por peso (ej: 2.5). Unidades si es por unidad (ej: 6).',
                                         ],
                                     ],
-                                    'required' => ['descrip', 'kilos'],
+                                    'required' => ['descrip', 'cantidad'],
                                 ],
                             ],
                         ],
@@ -212,6 +225,47 @@ Reglas:
                     'parameters'  => ['type' => 'object', 'properties' => new \stdClass()],
                 ],
             ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'calcular_total',
+                    'description' => 'Calcula el precio total de una lista de productos con sus cantidades usando los precios reales del sistema. Usalo siempre al recomendar productos.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'items' => [
+                                'type'  => 'array',
+                                'items' => [
+                                    'type'       => 'object',
+                                    'properties' => [
+                                        'descrip'   => ['type' => 'string', 'description' => 'Nombre del producto'],
+                                        'cantidad'  => ['type' => 'number', 'description' => 'Kg si es por peso, unidades si es por unidad'],
+                                    ],
+                                    'required' => ['descrip', 'cantidad'],
+                                ],
+                            ],
+                        ],
+                        'required' => ['items'],
+                    ],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'cancelar_pedido',
+                    'description' => 'Cancela un pedido pendiente del cliente.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'nro' => [
+                                'type'        => 'integer',
+                                'description' => 'Número de pedido a cancelar.',
+                            ],
+                        ],
+                        'required' => ['nro'],
+                    ],
+                ],
+            ],
         ];
     }
 
@@ -226,10 +280,12 @@ Reglas:
         $args     = json_decode($toolCall['function']['arguments'], true) ?? [];
 
         $result = match ($funcName) {
-            'crear_pedido' => $this->createOrder($cliente, $args['items'] ?? []),
-            'ver_pedidos'  => $this->orderStatus($cliente),
-            'ver_precios'  => $this->priceList(),
-            default        => 'Función desconocida.',
+            'crear_pedido'   => $this->createOrder($cliente, $args['items'] ?? []),
+            'ver_pedidos'    => $this->orderStatus($cliente),
+            'ver_precios'    => $this->priceList(),
+            'calcular_total' => $this->calcularTotal($args['items'] ?? []),
+            'cancelar_pedido'=> $this->cancelOrder($cliente, (int) ($args['nro'] ?? 0)),
+            default          => 'Función desconocida.',
         };
 
         // Agregamos el mensaje del asistente (con el tool_call) y el resultado
@@ -256,20 +312,35 @@ Reglas:
             return 'Sin artículos para registrar.';
         }
 
-        $nro    = (Pedido::max('nro') ?? 0) + 1;
-        $fecha  = now()->format('Y-m-d');
-        $codcli = $client->cuenta ? $client->cuenta->cod : $client->id;
-        $nomcli = $client->cuenta ? $client->cuenta->nom : $client->name;
+        $nro      = (Pedido::max('nro') ?? 0) + 1;
+        $fecha    = now()->format('Y-m-d');
+        $codcli   = $client->cuenta ? $client->cuenta->cod : $client->id;
+        $nomcli   = $client->cuenta ? $client->cuenta->nom : $client->name;
+
+        // Cache de productos con tipo para no hacer N queries
+        $productos = Cache::remember('productos_bot_precios', 300, fn() =>
+            Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo'])
+        );
 
         foreach ($items as $item) {
+            $cantidad = (float) ($item['cantidad'] ?? $item['kilos'] ?? 0);
+
+            // Buscar tipo del producto
+            $producto = $productos->first(fn($p) =>
+                stripos($p->des, $item['descrip']) !== false ||
+                stripos($item['descrip'], $p->des) !== false
+            );
+
+            $esPeso = !$producto || $producto->tipo !== 'unidad';
+
             Pedido::create([
                 'fecha'   => $fecha,
                 'nro'     => $nro,
                 'nomcli'  => $nomcli,
                 'codcli'  => $codcli,
                 'descrip' => $item['descrip'],
-                'kilos'   => $item['kilos'],
-                'cant'    => 1,
+                'kilos'   => $esPeso ? $cantidad : 0,
+                'cant'    => $esPeso ? 1           : (int) $cantidad,
                 'estado'  => Pedido::ESTADO_PENDIENTE,
                 'venta'   => 0,
             ]);
@@ -297,15 +368,77 @@ Reglas:
         )->implode("\n");
     }
 
+    private function calcularTotal(array $items): string
+    {
+        if (empty($items)) {
+            return 'No hay productos para calcular.';
+        }
+
+        $productos = Cache::remember('productos_bot_precios', 300, fn() =>
+            Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo'])
+        );
+
+        $lineas = [];
+        $total  = 0;
+
+        foreach ($items as $item) {
+            $descrip  = $item['descrip'];
+            $cantidad = (float) ($item['cantidad'] ?? $item['kilos'] ?? 0);
+
+            $match = $productos->first(fn($p) =>
+                stripos($p->des, $descrip) !== false ||
+                stripos($descrip, $p->des) !== false
+            );
+
+            if ($match) {
+                $esPeso   = $match->tipo !== 'unidad';
+                $unidad   = $esPeso ? 'kg' : 'u';
+                $subtotal = round($match->PRE * $cantidad, 2);
+                $total   += $subtotal;
+                $lineas[] = "{$descrip} {$cantidad}{$unidad} × \${$match->PRE} = \${$subtotal}";
+            } else {
+                $lineas[] = "{$descrip} {$cantidad} × precio no disponible";
+            }
+        }
+
+        $lineas[] = "TOTAL ESTIMADO: \${$total}";
+
+        return implode("\n", $lineas);
+    }
+
+    private function cancelOrder($client, int $nro): string
+    {
+        if ($nro <= 0) {
+            return 'Número de pedido inválido.';
+        }
+
+        $codcli  = $client->cuenta ? $client->cuenta->cod : $client->id;
+        $pedidos = Pedido::where('codcli', $codcli)
+            ->where('nro', $nro)
+            ->where('estado', Pedido::ESTADO_PENDIENTE)
+            ->get();
+
+        if ($pedidos->isEmpty()) {
+            return "No encontré el pedido #{$nro} pendiente para este cliente. Puede que ya esté procesado o no exista.";
+        }
+
+        $pedidos->each->delete();
+
+        return "Pedido #{$nro} cancelado correctamente.";
+    }
+
     private function priceList(): string
     {
-        $productos = Producto::where('PRE', '>', 0)->get();
+        $productos = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo']);
 
         if ($productos->isEmpty()) {
             return 'No hay productos disponibles en este momento.';
         }
 
-        return $productos->map(fn($p) => "{$p->des} — \${$p->PRE}")->implode("\n");
+        return $productos->map(fn($p) => $p->tipo === 'unidad'
+            ? "{$p->des} — \${$p->PRE}/u"
+            : "{$p->des} — \${$p->PRE}/kg"
+        )->implode("\n");
     }
 
     // -------------------------------------------------------------------------

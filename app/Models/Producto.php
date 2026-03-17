@@ -14,8 +14,9 @@ class Producto extends Model
     protected $fillable = [
         'des',
         'pre',
+        'tipo',
         'grupo',
-        'desgrupo'
+        'desgrupo',
     ];
 
 
