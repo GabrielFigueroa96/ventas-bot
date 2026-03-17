@@ -329,17 +329,25 @@ Reglas:
 
     public function uploadMedia(\Illuminate\Http\UploadedFile $file): string
     {
+        $mime = $file->getMimeType();
+
         $response = Http::withToken(config('api.whatsapp.key'))
-            ->attach('file', file_get_contents($file->getRealPath()), $file->getClientOriginalName())
-            ->post('https://graph.facebook.com/v19.0/295131097015095/media', [
-                'messaging_product' => 'whatsapp',
-                'type'              => $file->getMimeType(),
-            ]);
+            ->attach(
+                'file',
+                file_get_contents($file->getRealPath()),
+                $file->getClientOriginalName(),
+                ['Content-Type' => $mime]          // WhatsApp necesita el MIME en el attachment
+            )
+            ->attach('messaging_product', 'whatsapp')
+            ->attach('type', $mime)
+            ->post('https://graph.facebook.com/v19.0/295131097015095/media');
 
         $mediaId = $response->json('id');
 
         if (!$mediaId) {
-            throw new \RuntimeException('Error al subir el archivo a WhatsApp.');
+            $error = $response->json('error.message') ?? $response->body();
+            Log::error("WhatsApp uploadMedia error: {$error}");
+            throw new \RuntimeException("Error al subir el archivo: {$error}");
         }
 
         return $mediaId;

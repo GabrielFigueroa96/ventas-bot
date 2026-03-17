@@ -6,6 +6,7 @@ use App\Models\Cliente;
 use App\Models\Message;
 use App\Services\BotService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class AdminChatController extends Controller
 {
@@ -42,21 +43,26 @@ class AdminChatController extends Controller
 
         $bot = app(BotService::class);
 
-        if ($request->hasFile('archivo')) {
-            $file     = $request->file('archivo');
-            $mime     = $file->getMimeType();
-            $isImage  = str_starts_with($mime, 'image/');
-            $mediaId  = $bot->uploadMedia($file);
-            $caption  = $request->input('mensaje', '');
+        try {
+            if ($request->hasFile('archivo')) {
+                $file    = $request->file('archivo');
+                $mime    = $file->getMimeType();
+                $isImage = str_starts_with($mime, 'image/');
+                $mediaId = $bot->uploadMedia($file);
+                $caption = $request->input('mensaje', '');
 
-            $bot->sendWhatsappMedia($cliente->phone, $mediaId, $isImage ? 'image' : 'document', $caption);
+                $bot->sendWhatsappMedia($cliente->phone, $mediaId, $isImage ? 'image' : 'document', $caption);
 
-            $texto = $isImage
-                ? '[Imagen enviada]' . ($caption ? ": {$caption}" : '')
-                : '[PDF enviado]'   . ($caption ? ": {$caption}" : '');
-        } else {
-            $texto = $request->input('mensaje');
-            $bot->sendWhatsapp($cliente->phone, $texto);
+                $texto = $isImage
+                    ? '[Imagen enviada]' . ($caption ? ": {$caption}" : '')
+                    : '[PDF enviado]'    . ($caption ? ": {$caption}" : '');
+            } else {
+                $texto = $request->input('mensaje');
+                $bot->sendWhatsapp($cliente->phone, $texto);
+            }
+        } catch (\Throwable $e) {
+            Log::error("AdminChat enviar error: {$e->getMessage()}");
+            return back()->withErrors(['archivo' => $e->getMessage()]);
         }
 
         Message::create([
