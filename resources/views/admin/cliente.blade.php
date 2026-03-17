@@ -69,7 +69,7 @@
                             ? 'bg-red-600 text-white rounded-br-none'
                             : 'bg-gray-100 text-gray-800 rounded-bl-none' }}">
                         @if($msg->media_path)
-                            <img src="{{ asset('storage/' . $msg->media_path) }}"
+                            <img src="{{ asset($msg->media_path) }}"
                                  class="rounded-lg max-w-full mb-1 cursor-pointer"
                                  onclick="window.open(this.src)"
                                  alt="Imagen">

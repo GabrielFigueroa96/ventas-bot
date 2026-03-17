@@ -23,7 +23,7 @@ class AdminChatController extends Controller
                 'message'    => $m->message,
                 'direction'  => $m->direction,
                 'type'       => $m->type,
-                'media_path' => $m->media_path ? asset('storage/' . $m->media_path) : null,
+                'media_path' => $m->media_path ? asset($m->media_path) : null,
                 'created_at' => $m->fecha,
             ]);
 
