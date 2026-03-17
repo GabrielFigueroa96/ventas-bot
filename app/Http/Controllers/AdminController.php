@@ -15,11 +15,33 @@ class AdminController extends Controller
     {
         $empresa = Empresa::first();
 
+        // Precios gpt-4o-mini por token (USD)
+        $precioPorMillon = ['input' => 0.150, 'output' => 0.600];
+
+        $tokensMes = \DB::table('token_usos')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->selectRaw('SUM(prompt_tokens) as input, SUM(completion_tokens) as output, SUM(total_tokens) as total')
+            ->first();
+
+        $costoMesUsd = round(
+            (($tokensMes->input  ?? 0) / 1_000_000 * $precioPorMillon['input']) +
+            (($tokensMes->output ?? 0) / 1_000_000 * $precioPorMillon['output']),
+            6
+        );
+
+        // Tipo de cambio aprox — actualizá este valor en .env como DOLAR_ARS
+        $dolarArs = (float) env('DOLAR_ARS', 1300);
+        $costoMes = $costoMesUsd;
+
         $stats = [
             'clientes'     => Cliente::count(),
             'pedidos_hoy'  => Pedido::whereDate('fecha', today())->distinct('nro')->count('nro'),
             'pedidos_pend' => Pedido::where('estado', Pedido::ESTADO_PENDIENTE)->distinct('nro')->count('nro'),
             'mensajes_hoy' => Message::whereDate('created_at', today())->count(),
+            'tokens_mes'   => number_format($tokensMes->total ?? 0),
+            'costo_mes_usd'=> $costoMes,
+            'costo_mes_ars'=> round($costoMes * $dolarArs, 2),
         ];
 
         $pedidos_recientes = Pedido::orderByDesc('reg')

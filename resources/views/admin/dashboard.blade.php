@@ -18,7 +18,7 @@
 <h1 class="text-xl sm:text-2xl font-bold text-gray-800 mb-5">Dashboard</h1>
 
 {{-- Stats --}}
-<div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
     <div class="bg-white rounded-xl shadow p-4 sm:p-5 flex items-center gap-3 sm:gap-4">
         <div class="bg-red-100 text-red-600 rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-lg sm:text-xl shrink-0">👥</div>
         <div class="min-w-0">
@@ -46,6 +46,31 @@
             <p class="text-xs text-gray-500 uppercase font-medium">Mensajes hoy</p>
             <p class="text-2xl sm:text-3xl font-bold text-green-600">{{ $stats['mensajes_hoy'] }}</p>
         </div>
+    </div>
+</div>
+
+{{-- Card tokens mes --}}
+<div class="bg-white rounded-xl shadow px-4 sm:px-6 py-4 mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="flex items-center gap-3">
+        <div class="bg-purple-100 text-purple-600 rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0">🤖</div>
+        <div>
+            <p class="text-xs text-gray-500 uppercase font-medium">Tokens usados este mes</p>
+            <p class="text-2xl font-bold text-gray-800">{{ $stats['tokens_mes'] }}</p>
+        </div>
+    </div>
+    <div class="sm:text-right">
+        <p class="text-xs text-gray-500 uppercase font-medium">Costo estimado este mes</p>
+        @php
+            $usd = $stats['costo_mes_usd'];
+            $usdFormato = $usd < 0.001
+                ? '< $0.001'
+                : '$' . rtrim(rtrim(number_format($usd, 6), '0'), '.');
+        @endphp
+        <p class="text-2xl font-bold text-purple-600">{{ $usdFormato }} <span class="text-base font-medium text-gray-400">USD</span></p>
+        <p class="text-sm text-gray-600 font-medium mt-0.5">
+            ≈ ${{ number_format($stats['costo_mes_ars'], 2, ',', '.') }} <span class="text-xs text-gray-400">ARS</span>
+        </p>
+        <p class="text-xs text-gray-400 mt-0.5">gpt-4o-mini · $0.15/1M input · $0.60/1M output</p>
     </div>
 </div>
 

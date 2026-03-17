@@ -335,6 +335,17 @@ Reglas:
             throw new \RuntimeException("Error al contactar OpenAI: {$error}");
         }
 
+        // Guardar uso de tokens
+        if (isset($response['usage'])) {
+            \DB::table('token_usos')->insert([
+                'modelo'            => $response['model'] ?? self::OPENAI_MODEL,
+                'prompt_tokens'     => $response['usage']['prompt_tokens'],
+                'completion_tokens' => $response['usage']['completion_tokens'],
+                'total_tokens'      => $response['usage']['total_tokens'],
+                'created_at'        => now(),
+            ]);
+        }
+
         return $response;
     }
 
