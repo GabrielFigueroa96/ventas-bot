@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use App\Models\Producto;
 use App\Models\Message;
 use App\Models\Pedido;
@@ -276,9 +277,17 @@ Reglas:
             $payload['tool_choice'] = 'auto';
         }
 
-        return Http::withToken(config('api.openai.key'))
+        $response = Http::withToken(config('api.openai.key'))
             ->post(self::OPENAI_URL, $payload)
             ->json();
+
+        if (!isset($response['choices'])) {
+            $error = $response['error']['message'] ?? json_encode($response);
+            Log::error("OpenAI error: {$error}");
+            throw new \RuntimeException("Error al contactar OpenAI: {$error}");
+        }
+
+        return $response;
     }
 
     public function sendWhatsapp(string $phone, string $message): void
