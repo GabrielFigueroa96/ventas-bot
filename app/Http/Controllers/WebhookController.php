@@ -40,39 +40,59 @@ class WebhookController extends Controller
     {
 
         try {
-
             $bodyContent = json_decode($request->getContent(), true);
-            $value = $bodyContent['entry'][0]['changes'][0]['value'];
+            $value       = $bodyContent['entry'][0]['changes'][0]['value'];
 
-            if (!empty($value['messages'])) {
-                if ($value['messages'][0]['type'] == 'text') {
-                    $message = $value['messages'][0]['text']['body'];
-                    $phone = $value['messages'][0]['from'];
-                }
+            if (empty($value['messages'])) {
+                return response()->json(['status' => 'ignored']);
             }
 
-            $client = Cliente::firstOrCreate(
-                ['phone' => $phone]
-            );
+            $msg   = $value['messages'][0];
+            $phone = $msg['from'];
+            $type  = $msg['type'];
+            $bot   = app(BotService::class);
+
+            // Resolver el texto según el tipo de mensaje
+            if ($type === 'text') {
+                $message = $msg['text']['body'];
+            } elseif ($type === 'audio') {
+                $mediaId = $msg['audio']['id'];
+                $message = $bot->transcribeAudio($mediaId);
+
+                if (empty($message)) {
+                    return response()->json(['status' => 'empty_transcription']);
+                }
+            } else {
+                // Tipo no soportado (imagen, video, documento, etc.)
+                $client = Cliente::firstOrCreate(['phone' => $phone]);
+                $reply  = "Por ahora solo proceso mensajes de texto y de voz. 😊";
+                $bot->sendWhatsapp($phone, $reply);
+                return response()->json(['status' => 'unsupported_type']);
+            }
+
+            $client = Cliente::firstOrCreate(['phone' => $phone]);
 
             Message::create([
                 'cliente_id' => $client->id,
-                'message' => $message,
-                'direction' => 'incoming'
+                'message'    => $message,
+                'direction'  => 'incoming',
+                'type'       => $type,
             ]);
 
-            $reply = app(BotService::class)->process($client, $message);
+            $reply = $bot->process($client, $message);
 
             Message::create([
                 'cliente_id' => $client->id,
-                'message' => $reply,
-                'direction' => 'outgoing'
+                'message'    => $reply,
+                'direction'  => 'outgoing',
             ]);
 
-            return $reply;
+            return response()->json(['status' => 'ok']);
 
         } catch (Exception $ex) {
-            return $ex->getMessage();
+            return response()->json(['error' => $ex->getMessage()], 500);
         }
+
     }
+    
 }

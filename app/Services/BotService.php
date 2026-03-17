@@ -290,6 +290,43 @@ Reglas:
         return $response;
     }
 
+    public function transcribeAudio(string $mediaId): string
+    {
+        $waToken = config('api.whatsapp.key');
+
+        // 1. Obtener la URL de descarga del audio
+        $meta = Http::withToken($waToken)
+            ->get("https://graph.facebook.com/v19.0/{$mediaId}")
+            ->json();
+
+        $audioUrl = $meta['url'] ?? null;
+
+        if (!$audioUrl) {
+            throw new \RuntimeException('No se pudo obtener la URL del audio.');
+        }
+
+        // 2. Descargar el archivo de audio
+        $audioContent = Http::withToken($waToken)
+            ->get($audioUrl)
+            ->body();
+
+        // 3. Guardar temporalmente
+        $tmpPath = sys_get_temp_dir() . '/' . $mediaId . '.ogg';
+        file_put_contents($tmpPath, $audioContent);
+
+        // 4. Enviar a Whisper para transcribir
+        $response = Http::withToken(config('api.openai.key'))
+            ->attach('file', file_get_contents($tmpPath), basename($tmpPath))
+            ->post('https://api.openai.com/v1/audio/transcriptions', [
+                'model'    => 'whisper-1',
+                'language' => 'es',
+            ]);
+
+        unlink($tmpPath);
+
+        return $response->json('text') ?? '';
+    }
+
     public function sendWhatsapp(string $phone, string $message): void
     {
         try {

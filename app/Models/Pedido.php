@@ -59,4 +59,12 @@ class Pedido extends Model
     {
         return $this->belongsTo(Cliente::class, 'codcli', 'id');
     }
+
+    // Devuelve los renglones de factventas que corresponden a este pedido (venta = nro en factventas)
+    public function factventas()
+    {
+        return Factventas::where('nro', $this->getAttribute('venta'))
+            ->where('pv', $this->getAttribute('pv'))
+            ->get();
+    }
 }
