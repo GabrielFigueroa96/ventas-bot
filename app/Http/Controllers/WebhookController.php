@@ -71,7 +71,7 @@ class WebhookController extends Controller
             } elseif ($type === 'image') {
                 $image     = $bot->downloadWhatsappMedia($msg['image']['id']);
                 $message   = $msg['image']['caption'] ?? '';
-                $imgPath   = 'chat-images/' . $wamid . '.jpg';
+                $imgPath   = 'chat-images/' . md5($wamid) . '.jpg';
                 \Storage::disk('public')->put($imgPath, base64_decode($image['base64']));
             } else {
                 $client = Cliente::firstOrCreate(['phone' => $phone]);
