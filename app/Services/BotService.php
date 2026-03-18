@@ -134,6 +134,7 @@ Reglas:
 - Si el cliente no especifica qué quiere, sugerile sus productos favoritos o los más populares.
 - Cuando alguien pide carne para asar, ofrecé también chorizos/morcillas si están disponibles (una sola vez, sin insistir).
 - ver_precios → consultas de precios o lista de productos.
+- ver_producto → cuando el cliente pregunta por un producto específico (qué es, cómo se usa, precio, etc.). Envía la imagen automáticamente.
 - ver_pedidos → estado e historial de pedidos.
 - cancelar_pedido → si el cliente quiere cancelar un pedido pendiente.
 - calcular_total → SIEMPRE usalo cuando recomendés productos (asado, parrillada, etc.) para mostrar el costo estimado real.
@@ -309,6 +310,23 @@ Cuando alguien pide sugerencia para una ocasión:
             [
                 'type'     => 'function',
                 'function' => [
+                    'name'        => 'ver_producto',
+                    'description' => 'Muestra los detalles y la imagen de un producto cuando el cliente pregunta por él específicamente.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'nombre' => [
+                                'type'        => 'string',
+                                'description' => 'Nombre del producto tal como aparece en la lista.',
+                            ],
+                        ],
+                        'required' => ['nombre'],
+                    ],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
                     'name'        => 'cancelar_pedido',
                     'description' => 'Cancela un pedido pendiente del cliente.',
                     'parameters'  => [
@@ -345,6 +363,7 @@ Cuando alguien pide sugerencia para una ocasión:
                 'ver_pedidos'     => $this->orderStatus($cliente),
                 'ver_precios'     => $this->priceList(),
                 'calcular_total'  => $this->calcularTotal($args['items'] ?? []),
+                'ver_producto'    => $this->verProducto($cliente, $args['nombre'] ?? ''),
                 'cancelar_pedido' => $this->cancelOrder($cliente, (int) ($args['nro'] ?? 0)),
                 default           => 'Función desconocida.',
             };
@@ -415,9 +434,6 @@ Cuando alguien pide sugerencia para una ocasión:
                 'venta'     => 0,
             ]);
         }
-
-        // Enviar imagen de cada producto que tenga una
-        $this->enviarImagenesProductos($client, $productos, $items);
 
         $resumen = implode(', ', array_map(fn($i) => "{$i['cantidad']} {$i['descrip']}", $items));
 
@@ -504,6 +520,42 @@ Cuando alguien pide sugerencia para una ocasión:
         $pedidos->each->delete();
 
         return "Pedido #{$nro} cancelado correctamente.";
+    }
+
+    private function verProducto($client, string $nombre): string
+    {
+        $productos = Cache::remember(
+            'productos_bot_precios',
+            300,
+            fn() => Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen'])
+        );
+
+        $producto = $productos->first(
+            fn($p) => stripos($p->des, $nombre) !== false || stripos($nombre, $p->des) !== false
+        );
+
+        if (!$producto) {
+            return "Producto '{$nombre}' no encontrado en la lista.";
+        }
+
+        // Enviar imagen si tiene
+        if (!empty($producto->imagen) && $producto->imagen !== 'sinimagen.webp') {
+            $path = public_path($producto->imagen);
+            if (file_exists($path)) {
+                try {
+                    $mime    = mime_content_type($path) ?: 'image/jpeg';
+                    $mediaId = $this->uploadMediaFromPath($path, $mime);
+                    $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $producto->des);
+                } catch (\Throwable $e) {
+                    Log::error("verProducto imagen {$producto->des}: {$e->getMessage()}");
+                }
+            }
+        }
+
+        $precio = number_format($producto->PRE, 2, ',', '.');
+        $unidad = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
+
+        return "Producto: {$producto->des} — {$precio} $ ({$unidad}).";
     }
 
     private function enviarImagenesProductos($client, $productos, array $items): void
