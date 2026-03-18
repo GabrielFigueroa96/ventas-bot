@@ -462,6 +462,40 @@ Cuando alguien pide sugerencia para una ocasión:
         })->implode("\n");
     }
 
+    // Pesos de referencia por unidad (kg) para productos que se venden por peso
+    // pero el cliente/GPT suele pedir en unidades
+    private const PESOS_POR_UNIDAD = [
+        'chorizo'     => 0.15,
+        'morcilla'    => 0.20,
+        'bife'        => 0.25,
+        'milanesa'    => 0.15,
+        'hamburguesa' => 0.12,
+        'pechuga'     => 0.35,
+        'muslo'       => 0.25,
+    ];
+
+    /**
+     * Si el producto es de tipo peso y la cantidad parece ser en unidades
+     * (entero entre 1 y 50), intenta convertir a kg usando los pesos de referencia.
+     * Devuelve [kg_convertidos, nota] o null si no aplica conversión.
+     */
+    private function convertirUnidadesAKg(string $descrip, float $cantidad): ?array
+    {
+        // Solo aplica si la cantidad parece ser unidades (número entero razonable)
+        if ($cantidad < 1 || $cantidad > 50 || floor($cantidad) !== $cantidad) {
+            return null;
+        }
+
+        foreach (self::PESOS_POR_UNIDAD as $keyword => $pesoUnitario) {
+            if (stripos($descrip, $keyword) !== false) {
+                $kg = round($cantidad * $pesoUnitario, 3);
+                return [$kg, "{$cantidad}u → {$kg}kg"];
+            }
+        }
+
+        return null;
+    }
+
     private function calcularTotal(array $items): string
     {
         if (empty($items)) {
@@ -489,12 +523,21 @@ Cuando alguien pide sugerencia para una ocasión:
             );
 
             if ($match) {
-                $esPeso   = $match->tipo !== 'Unidad';
-                $unidad   = $esPeso ? 'kg' : 'u';
-                $subtotal = round($match->PRE * $cantidad, 2);
-                $total   += $subtotal;
-                $precioFmt    = number_format($match->PRE, 2, ',', '.');
-                $subtotalFmt  = number_format($subtotal, 2, ',', '.');
+                $esPeso = $match->tipo !== 'Unidad';
+
+                // Si es producto por peso y la cantidad parece estar en unidades, convertir
+                if ($esPeso) {
+                    $conversion = $this->convertirUnidadesAKg($descrip, $cantidad);
+                    if ($conversion) {
+                        [$cantidad] = $conversion;
+                    }
+                }
+
+                $unidad      = $esPeso ? 'kg' : 'u';
+                $subtotal    = round($match->PRE * $cantidad, 2);
+                $total      += $subtotal;
+                $precioFmt   = number_format($match->PRE, 2, ',', '.');
+                $subtotalFmt = number_format($subtotal, 2, ',', '.');
                 $lineas[] = "{$descrip} {$cantidad}{$unidad} × {$precioFmt} $ = {$subtotalFmt} $";
             } else {
                 $lineas[] = "{$descrip} {$cantidad} × precio no disponible";
