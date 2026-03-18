@@ -76,10 +76,10 @@ class BotService
                 ->get()
                 ->map(function ($p) {
                     $precio = number_format($p->PRE, 2, ',', '.');
-                    $unidad = $p->tipo === 'Unidad' ? " por unidad" : " por peso";
-                    $linea  = "{$p->des} {$precio} \$/{$unidad}";
+                    $unidad = $p->tipo === 'Unidad' ? '/u' : '/kg';
+                    $linea  = "{$p->des} {$precio} \${$unidad}";
                     if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
-                        $linea .= " — {$p->descripcion}";
+                        $linea .= " ({$p->descripcion})";
                     }
                     return $linea;
                 })
@@ -510,6 +510,7 @@ Cuando alguien pide sugerencia para una ocasión:
         if (empty($items)) {
             return 'No hay productos para calcular.';
         }
+        Log::info('calcularTotal llamado', ['items' => $items]);
 
         $productos = Cache::remember(
             'productos_bot_precios',
