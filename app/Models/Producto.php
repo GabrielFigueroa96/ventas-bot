@@ -22,6 +22,7 @@ class Producto extends Model
         'grupo',
         'desgrupo',
         'imagen',
+        'descripcion',
     ];
 
 
