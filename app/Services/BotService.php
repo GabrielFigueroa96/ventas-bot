@@ -149,23 +149,25 @@ Reglas:
 Porciones estándar por persona:
 - Por peso: asado de tira/vacío/costilla 0.500kg | entraña/colita 0.300kg | pollo 0.300kg | cerdo 0.300kg
 - Por unidad: chorizo 1u | morcilla 1u | hamburguesa 2u
+  Para calcular kg: personas × unidades_por_persona × peso_aprox (indicado en la descripción del producto).
+  Ejemplo 5 personas con chorizo (aprox. 0.15kg c/u): 5 × 1 × 0.15 = 0.75 kg.
 
 IMPORTANTE — productos, precios y unidades:
 - NUNCA menciones un producto que no esté en la lista de productos disponibles.
 - NUNCA inventes ni estimes un precio. Los únicos precios válidos son los de la lista.
 - Si un producto típico de una ocasión no está en la lista, no lo mencionés.
 - Cada producto indica si es por peso (kg) o por unidad. Respetá siempre esa unidad.
+- Algunos productos vendidos por peso tienen en su descripción el peso aproximado por unidad (ej: \'aprox. 0.15kg c/u\'). Usá ese dato para conversiones.
 
 Regla para cantidad en agregar_al_carrito:
 - Producto POR PESO: pasá siempre kg. Si el cliente dice \'3 vacío\' → 3 kg. Si dice \'medio kilo\' → 0.5.
 - Producto POR UNIDAD: pasá la cantidad de unidades.
-- Productos por peso que se piden por unidad (chorizo, morcilla, etc.): el cliente DEBE aclararlo (\'quiero 4 chorizos\'). Convertí vos a kg antes de llamar a agregar_al_carrito.
-  Pesos de referencia: chorizo 0.15kg, morcilla 0.20kg, bife 0.25kg, milanesa 0.15kg, hamburguesa 0.12kg, pechuga 0.35kg, muslo 0.25kg.
-  Si no está en esa lista, preguntale el peso aproximado por unidad.
-  Ejemplo: 4 chorizos → pasá 0.6 kg e informale: Son aprox. 0.6 kg (4 unidades). El total es aproximado y puede variar según el peso final.
-- Si el cliente pide en KG un producto POR UNIDAD: convertí a unidades y aclaráselo.
-  Ejemplo: 1kg de hamburguesas → Son aprox. 8 hamburguesas, ¿confirmás?
-- El total del carrito es siempre aproximado para productos por peso. Aclaráselo al cliente.
+- Producto POR PESO pedido en unidades: solo podés convertir si la descripción del producto indica el peso por unidad (ej: \'aprox. 0.15kg c/u\'). En ese caso calculá kg = unidades × peso, informale el resultado y que es aproximado.
+  Si el producto NO tiene ese dato en la descripción, indicale al cliente que debe pedir en kg.
+  Ejemplo válido: 4 chorizos (0.15kg c/u) → pasá 0.60 kg e informale cuántas unidades son.
+  Ejemplo no válido: \'4 bifes de chorizo\' si el producto no tiene peso por unidad → decile que indique los kg.
+- Si el cliente pide en KG un producto POR UNIDAD: no hagas la conversión, indicale que ese producto se pide por unidad.
+- El total del carrito es siempre aproximado para productos por peso. Recordáselo al cliente.
 
 Sugerencias por ocasión (filtrá contra la lista de productos disponibles):
 - Parrillada/asado: asado de tira, vacío, costillas, entraña, chorizos, morcilla, achuras. Tip: empezá con achuras y chorizos, después las carnes.
@@ -668,16 +670,6 @@ Cuando alguien pide sugerencia para una ocasión:
         })->implode("\n");
     }
 
-    // Pesos de referencia por unidad (kg) — usados por GPT para convertir en el prompt
-    public const PESOS_POR_UNIDAD = [
-        'chorizo'     => 0.15,
-        'morcilla'    => 0.20,
-        'bife'        => 0.25,
-        'milanesa'    => 0.15,
-        'hamburguesa' => 0.12,
-        'pechuga'     => 0.35,
-        'muslo'       => 0.25,
-    ];
 
 
     private function cancelOrder($client, int $nro): string
