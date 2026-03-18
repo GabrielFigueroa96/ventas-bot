@@ -79,7 +79,9 @@
                     <li class="flex justify-between">
                         <span>• {{ $item->descrip }}</span>
                         <span class="text-gray-400">
-                            @if($item->kilos > 0)
+                            @if($item->cant > 0 && $item->kilos > 0)
+                                {{ $item->cant }} u ({{ number_format($item->kilos, 3, ',', '.') }} kg)
+                            @elseif($item->kilos > 0)
                                 {{ number_format($item->kilos, 3, ',', '.') }} kg
                             @else
                                 {{ $item->cant }} u
