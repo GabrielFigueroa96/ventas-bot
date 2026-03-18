@@ -154,14 +154,18 @@ IMPORTANTE — productos, precios y unidades:
 - NUNCA menciones un producto que no esté en la lista de productos disponibles.
 - NUNCA inventes ni estimes un precio. Los únicos precios válidos son los de la lista.
 - Si un producto típico de una ocasión no está en la lista, no lo mencionés.
-- Cada producto indica si es por peso o por unidad. Respetá siempre esa unidad al pedir y al calcular.
-- Si el cliente pide en UNIDADES un producto que se vende POR PESO: convertí a kg y aclaráselo.
+- Cada producto indica si es por peso (kg) o por unidad. Respetá siempre esa unidad.
+
+Regla para cantidad en agregar_al_carrito:
+- Producto POR PESO: pasá siempre kg. Si el cliente dice \'3 vacío\' → 3 kg. Si dice \'medio kilo\' → 0.5.
+- Producto POR UNIDAD: pasá la cantidad de unidades.
+- Productos por peso que se piden por unidad (chorizo, morcilla, etc.): el cliente DEBE aclararlo (\'quiero 4 chorizos\'). Convertí vos a kg antes de llamar a agregar_al_carrito.
   Pesos de referencia: chorizo 0.15kg, morcilla 0.20kg, bife 0.25kg, milanesa 0.15kg, hamburguesa 0.12kg, pechuga 0.35kg, muslo 0.25kg.
   Si no está en esa lista, preguntale el peso aproximado por unidad.
-  Ejemplo: 6 chorizos → Son aprox. 0.9kg de chorizo, ¿te parece bien?
-- Si el cliente pide en KG un producto que se vende POR UNIDAD: convertí a unidades y aclaráselo.
+  Ejemplo: 4 chorizos → pasá 0.6 kg e informale: Son aprox. 0.6 kg (4 unidades). El total es aproximado y puede variar según el peso final.
+- Si el cliente pide en KG un producto POR UNIDAD: convertí a unidades y aclaráselo.
   Ejemplo: 1kg de hamburguesas → Son aprox. 8 hamburguesas, ¿confirmás?
-- Siempre confirmá con la unidad correcta del sistema antes de llamar a crear_pedido.
+- El total del carrito es siempre aproximado para productos por peso. Aclaráselo al cliente.
 
 Sugerencias por ocasión (filtrá contra la lista de productos disponibles):
 - Parrillada/asado: asado de tira, vacío, costillas, entraña, chorizos, morcilla, achuras. Tip: empezá con achuras y chorizos, después las carnes.
@@ -430,13 +434,8 @@ Cuando alguien pide sugerencia para una ocasión:
             $kilos = 0;
 
             if ($esPeso) {
-                $conversion = $this->convertirUnidadesAKg($descrip, $cantidad);
-                if ($conversion) {
-                    $cant    = (int) $cantidad;
-                    [$kilos] = $conversion;
-                } else {
-                    $kilos = $cantidad;
-                }
+                // GPT siempre pasa kg para productos por peso (ya convirtió de unidades si fue necesario)
+                $kilos = $cantidad;
             } else {
                 $cant = (int) $cantidad;
             }
@@ -537,7 +536,7 @@ Cuando alguien pide sugerencia para una ocasión:
             $total    += $item['neto'];
         }
 
-        $lineas[] = 'TOTAL: ' . number_format($total, 2, ',', '.') . ' $';
+        $lineas[] = 'TOTAL aprox.: ' . number_format($total, 2, ',', '.') . ' $ _(puede variar según el peso final)_';
 
         return implode("\n", $lineas);
     }
@@ -669,9 +668,8 @@ Cuando alguien pide sugerencia para una ocasión:
         })->implode("\n");
     }
 
-    // Pesos de referencia por unidad (kg) para productos que se venden por peso
-    // pero el cliente/GPT suele pedir en unidades
-    private const PESOS_POR_UNIDAD = [
+    // Pesos de referencia por unidad (kg) — usados por GPT para convertir en el prompt
+    public const PESOS_POR_UNIDAD = [
         'chorizo'     => 0.15,
         'morcilla'    => 0.20,
         'bife'        => 0.25,
@@ -680,29 +678,6 @@ Cuando alguien pide sugerencia para una ocasión:
         'pechuga'     => 0.35,
         'muslo'       => 0.25,
     ];
-
-    /**
-     * Si el producto es de tipo peso y la cantidad parece ser en unidades
-     * (entero entre 1 y 50), intenta convertir a kg usando los pesos de referencia.
-     * Devuelve [kg_convertidos, nota] o null si no aplica conversión.
-     */
-    private function convertirUnidadesAKg(string $descrip, float $cantidad): ?array
-    {
-        // Solo aplica si la cantidad parece ser claramente unidades (entero >= 3)
-        // Así evitamos confundir "1 kg" o "2 kg" con "1 unidad" o "2 unidades"
-        if ($cantidad < 3 || $cantidad > 50 || floor($cantidad) !== $cantidad) {
-            return null;
-        }
-
-        foreach (self::PESOS_POR_UNIDAD as $keyword => $pesoUnitario) {
-            if (stripos($descrip, $keyword) !== false) {
-                $kg = round($cantidad * $pesoUnitario, 3);
-                return [$kg, "{$cantidad}u → {$kg}kg"];
-            }
-        }
-
-        return null;
-    }
 
 
     private function cancelOrder($client, int $nro): string
