@@ -748,7 +748,7 @@ Herramientas disponibles:
         }
 
         // Validar existencia y precios actuales
-        $alertas = $this->validarCarrito($registro->items);
+        $alertas = $this->validarCarrito($registro->items, $costoExtra);
         if (!empty($alertas)) {
             $resultado .= "\n\n" . implode("\n", $alertas);
             $resultado .= "\n\nPodés actualizar los precios o eliminar los productos con problema antes de confirmar.";
@@ -796,7 +796,7 @@ Herramientas disponibles:
         return implode("\n", $lineas);
     }
 
-    private function validarCarrito(array $carrito): array
+    private function validarCarrito(array $carrito, float $costoExtra = 0): array
     {
         if (empty($carrito)) {
             return [];
@@ -814,7 +814,7 @@ Herramientas disponibles:
                 continue;
             }
 
-            $preActual = (float) $productosActuales[$item['cod']]->PRE;
+            $preActual = (float) $productosActuales[$item['cod']]->PRE + $costoExtra;
             if (abs($preActual - $item['precio']) > 0.01) {
                 $precioViejo = $this->fmt($item['precio']);
                 $precioNuevo = $this->fmt($preActual);
