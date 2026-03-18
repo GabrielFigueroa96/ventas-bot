@@ -10,6 +10,7 @@ use App\Models\Seguimiento;
 use App\Services\BotService;
 
 use Exception;
+use Illuminate\Support\Facades\Log;
 
 class WebhookController extends Controller
 {
@@ -117,6 +118,16 @@ class WebhookController extends Controller
             return response()->json(['status' => 'ok']);
 
         } catch (Exception $ex) {
+            Log::error('Webhook error: ' . $ex->getMessage(), [
+                'exception' => $ex,
+                'phone'     => $phone ?? null,
+            ]);
+            if (!empty($phone)) {
+                app(BotService::class)->sendWhatsapp(
+                    $phone,
+                    'Ocurrió un error procesando tu mensaje. Por favor intentá de nuevo en unos minutos.'
+                );
+            }
             return response()->json(['error' => $ex->getMessage()], 500);
         }
 
