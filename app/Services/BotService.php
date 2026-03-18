@@ -260,6 +260,33 @@ class BotService
         $mediosLabel       = Empresa::MEDIOS_PAGO;
         $mediosTexto       = 'Medios de pago aceptados: ' . implode(', ', array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados)) . '.';
 
+        // Próximo día de reparto disponible para este cliente
+        $proximoRepartoTexto = '';
+        if (!empty($diasReparto)) {
+            for ($i = 1; $i <= 7; $i++) {
+                $candidato = now()->addDays($i);
+                if (in_array((int) $candidato->format('w'), $diasReparto)) {
+                    $proximoRepartoTexto = $candidato->locale('es')->isoFormat('dddd D [de] MMMM');
+                    break;
+                }
+            }
+        }
+
+        // Texto dinámico para el paso 3 del flujo de pedido
+        $entregasOpciones = array_filter([
+            $permiteEnvio  ? 'envío a domicilio' : null,
+            $permiteRetiro ? 'retiro en local'   : null,
+        ]);
+        $mediosOpciones = array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados);
+
+        $paso3Fecha = $proximoRepartoTexto
+            ? "¿Lo querés para el próximo {$proximoRepartoTexto}?" . (count($diasReparto) > 1 ? ' (o indicá otra fecha de reparto disponible)' : '')
+            : '¿Para cuándo?';
+        $paso3Entrega = count($entregasOpciones) === 1
+            ? '¿Te lo ' . (in_array('envío a domicilio', $entregasOpciones) ? 'enviamos a domicilio' : 'pasás a buscar') . '?'
+            : '¿' . implode(' o ', array_map('ucfirst', $entregasOpciones)) . '?';
+        $paso3Pago = '¿Cómo abonás? (' . implode(', ', $mediosOpciones) . ')';
+
         $configNegocio = "\n{$entregasTexto}\n{$mediosTexto}";
         if ($diasTexto)      $configNegocio .= "\n{$diasTexto}";
         if ($infoNegocio)    $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
@@ -267,7 +294,9 @@ class BotService
 
         $messages[] = [
             'role'    => 'system',
-            'content' => "Sos el asistente de una carnicería. Amable, breve y directo. Respondé siempre en español argentino. Solo respondés temas de la carnicería (pedidos, precios, productos). Para cualquier otra consulta, decí amablemente que no podés ayudar con eso.
+            'content' => "Sos el asistente de una carnicería. Amable, breve y directo. Respondé siempre en español argentino.
+Respondés consultas sobre: pedidos, precios, productos, horarios, dirección, formas de pago, días de reparto y cualquier información del negocio que tengas disponible.
+Para cualquier otra consulta ajena al negocio, decí amablemente que no podés ayudar con eso.
 Formato de precios: NUNCA uses separador de miles. Usá coma para decimales solo si hay centavos. Ejemplos correctos: \$1500 | \$36000 | \$2800,50. Nunca: \$1.500,00 ni \$36,000 ni \$21000,00.
 Hoy es {$fecha}.
 Cliente: {$nombre}{$cuentaTexto}
@@ -307,7 +336,7 @@ Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
 1. Agregá cada producto con agregar_al_carrito (el sistema calcula kg, precio y neto). Para quitar un ítem, pasá cantidad 0.
 2. Mostrá el resumen con ver_carrito. Si hay alertas de precio (⚠️) o producto no disponible (❌), ofrecé actualizar o eliminar el ítem antes de continuar.
-3. Preguntá en un solo mensaje: ¿Para cuándo? | ¿Envío a domicilio o retiro? | ¿Cómo abonás? (efectivo, transferencia, cuenta corriente).
+3. Preguntá en un solo mensaje: {$paso3Fecha} | {$paso3Entrega} | {$paso3Pago}
 4. Si eligió ENVÍO:
    - Si hay última dirección registrada, ofrecésela para confirmar o cambiar.
    - Si no hay, pedí calle, número y localidad (dato extra como piso/depto es opcional).
