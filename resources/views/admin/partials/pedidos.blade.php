@@ -64,6 +64,9 @@
                 </span>
             @endif
             @php $obs = $sia?->obs ?: $first->obs; @endphp
+            @if($sia?->direccion)
+                <span class="text-gray-600">📍 {{ $sia->direccion }}</span>
+            @endif
             @if($obs)
                 <span class="text-gray-500 italic">📝 {{ $obs }}</span>
             @endif

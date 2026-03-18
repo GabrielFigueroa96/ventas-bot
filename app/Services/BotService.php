@@ -108,6 +108,19 @@ class BotService
             ? "\nCuenta: {$cliente->cuenta->nom} | {$cliente->cuenta->dom}, {$cliente->cuenta->loca}"
             : '';
 
+        // Última dirección de envío usada por este cliente
+        $ultimaDir = Pedidosia::where('idcliente', $cliente->id)
+            ->where('tipo_entrega', 'envio')
+            ->whereNotNull('calle')
+            ->latest()
+            ->first();
+
+        $ultimaDirTexto = $ultimaDir
+            ? "Última dirección de envío: {$ultimaDir->calle} {$ultimaDir->numero}" .
+              ($ultimaDir->localidad  ? ", {$ultimaDir->localidad}"  : '') .
+              ($ultimaDir->dato_extra ? " ({$ultimaDir->dato_extra})" : '')
+            : '';
+
         // Historial de últimos 10 mensajes para mantener contexto del pedido
         $history = Message::where('cliente_id', $cliente->id)
             ->latest()
@@ -127,13 +140,14 @@ class BotService
 Cliente: {$nombre}{$cuentaTexto}
 Último pedido: {$ultimoPedidoTexto}
 {$favoritosTexto}
+{$ultimaDirTexto}
 
 Productos disponibles:
 {$lista}
 
 Reglas:
 - Solo respondés preguntas relacionadas a la carnicería (pedidos, precios, productos). Si te preguntan otra cosa, decí amablemente que solo podés ayudar con eso.
-- Para pedir: 1) Agregá los productos al carrito con agregar_al_carrito. 2) Mostrá el resumen del carrito. 3) Preguntá ¿Para cuándo?, ¿Lo recibís en tu domicilio o pasás a buscar?, ¿Cómo abonás? (efectivo, transferencia, cuenta corriente). 4) Cuando el cliente confirma y ya tenés fecha, tipo_entrega y forma_pago, llamá DIRECTAMENTE a crear_pedido sin mandar ningún mensaje de texto previo. Si el cliente indica un horario o turno, ponelo en obs, no en fecha_entrega.
+- Para pedir: 1) Agregá los productos al carrito. 2) Mostrá el resumen. 3) Preguntá ¿Para cuándo?, ¿Lo recibís en tu domicilio o pasás a buscar?, ¿Cómo abonás? (efectivo, transferencia, cuenta corriente). 4) Si eligió envío: si hay una última dirección de envío registrada, ofrecésela para confirmar o cambiar. Si no hay, pedile calle, número y localidad (dato extra como piso/depto es opcional). Siempre confirmá la dirección antes de crear el pedido. 5) Cuando tenés todos los datos confirmados, llamá DIRECTAMENTE a crear_pedido sin mandar ningún mensaje de texto previo. Si el cliente indica un horario o turno, ponelo en obs, no en fecha_entrega.
 - Si el cliente no especifica qué quiere, sugerile sus productos favoritos o los más populares.
 - Cuando alguien pide carne para asar, ofrecé también achuras si están disponibles (una sola vez, sin insistir).
 - ver_precios → consultas de precios o lista de productos.
@@ -302,6 +316,22 @@ Cuando alguien pide sugerencia para una ocasión:
                                 'enum'        => ['efectivo', 'transferencia', 'cuenta_corriente', 'otro'],
                                 'description' => 'Cómo abona el cliente.',
                             ],
+                            'calle' => [
+                                'type'        => 'string',
+                                'description' => 'Calle del domicilio de entrega. Solo si tipo_entrega es envio.',
+                            ],
+                            'numero' => [
+                                'type'        => 'string',
+                                'description' => 'Número de la calle del domicilio. Solo si tipo_entrega es envio.',
+                            ],
+                            'localidad' => [
+                                'type'        => 'string',
+                                'description' => 'Localidad del domicilio de entrega. Solo si tipo_entrega es envio.',
+                            ],
+                            'dato_extra' => [
+                                'type'        => 'string',
+                                'description' => 'Dato adicional del domicilio: piso, depto, referencia, etc. Opcional.',
+                            ],
                             'obs' => [
                                 'type'        => 'string',
                                 'description' => 'Observaciones adicionales: horario, turno, corte especial, etc.',
@@ -376,7 +406,7 @@ Cuando alguien pide sugerencia para una ocasión:
                 'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
                 'ver_carrito'        => $this->verCarrito($cliente),
                 'vaciar_carrito'     => $this->vaciarCarrito($cliente),
-                'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['obs'] ?? ''),
+                'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['calle'] ?? '', $args['numero'] ?? '', $args['localidad'] ?? '', $args['dato_extra'] ?? '', $args['obs'] ?? ''),
                 'ver_pedidos'        => $this->orderStatus($cliente),
                 'ver_precios'        => $this->priceList(),
                 'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? ''),
@@ -599,7 +629,7 @@ Cuando alguien pide sugerencia para una ocasión:
         return null;
     }
 
-    private function createOrder($client, string $fechaEntrega = '', string $tipoEntrega = 'retiro', string $formaPago = 'efectivo', string $obs = ''): string
+    private function createOrder($client, string $fechaEntrega = '', string $tipoEntrega = 'retiro', string $formaPago = 'efectivo', string $calle = '', string $numero = '', string $localidad = '', string $datoExtra = '', string $obs = ''): string
     {
         $registro = $this->getCarrito($client);
         $carrito  = $registro ? $registro->items : [];
@@ -678,9 +708,13 @@ Cuando alguien pide sugerencia para una ocasión:
             'nomcli'       => $nomcli,
             'fecha'        => $fecha,
             'tipo_entrega' => $tipoEntrega,
+            'calle'        => $calle ?: null,
+            'numero'       => $numero ?: null,
+            'localidad'    => $localidad ?: null,
+            'dato_extra'   => $datoExtra ?: null,
             'forma_pago'   => $formaPago,
             'total'        => $total,
-            'obs'          => $obs,
+            'obs'          => $obs ?: null,
             'estado'       => Pedidosia::ESTADO_PENDIENTE,
             'pedido_at'    => now(),
         ]);
