@@ -23,7 +23,8 @@
 <div class="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
     @foreach($productos as $producto)
     @php
-        $imgUrl = $producto->imagen ? asset('storage/' . $producto->imagen) : null;
+        $tieneImagen = $producto->imagen && $producto->imagen !== 'sinimagen.webp' && file_exists(public_path($producto->imagen));
+        $imgUrl = $tieneImagen ? asset($producto->imagen) : null;
     @endphp
     <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col">
 

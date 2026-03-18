@@ -27,18 +27,27 @@ class ProductoController extends Controller
     {
         $request->validate(['imagen' => 'required|image|max:3072']);
 
-        // Borrar imagen anterior si existe
-        if ($producto->imagen && file_exists(storage_path('app/public/' . $producto->imagen))) {
-            unlink(storage_path('app/public/' . $producto->imagen));
+        $dir = public_path('producto-images');
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
         }
 
-        $ext  = $request->file('imagen')->getClientOriginalExtension();
-        $name = 'productos/' . Str::slug($producto->des) . '-' . $producto->cod . '.' . $ext;
+        // Borrar imagen anterior si existe
+        if ($producto->imagen && $producto->imagen !== 'sinimagen.webp') {
+            $anterior = public_path($producto->imagen);
+            if (file_exists($anterior)) {
+                unlink($anterior);
+            }
+        }
 
-        $request->file('imagen')->storeAs('public/' . dirname($name), basename($name));
+        $file = $request->file('imagen');
+        $ext  = $file->getClientOriginalExtension();
+        $name = 'producto-images/' . Str::slug($producto->des) . '-' . $producto->cod . '.' . $ext;
+
+        copy($file->getRealPath(), public_path($name));
+
         $producto->update(['imagen' => $name]);
 
-        // Invalidar cache del bot
         Cache::forget('productos_bot_lista');
         Cache::forget('productos_bot_precios');
 

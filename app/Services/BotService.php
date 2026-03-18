@@ -514,11 +514,11 @@ Cuando alguien pide sugerencia para una ocasión:
                           stripos($item['descrip'], $p->des) !== false
             );
 
-            if (!$producto || empty($producto->imagen)) {
+            if (!$producto || empty($producto->imagen) || $producto->imagen === 'sinimagen.webp') {
                 continue;
             }
 
-            $path = storage_path('app/public/' . $producto->imagen);
+            $path = public_path($producto->imagen);
 
             if (!file_exists($path)) {
                 continue;
