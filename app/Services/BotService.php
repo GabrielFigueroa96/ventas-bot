@@ -139,7 +139,7 @@ Reglas:
 - ver_pedidos → estado e historial de pedidos.
 - cancelar_pedido → si el cliente quiere cancelar un pedido pendiente.
 - agregar_al_carrito → SIEMPRE que sugerís productos o el cliente quiere agregar algo. El sistema calcula kg, precio y neto. Para quitar un ítem pasá cantidad 0.
-- ver_carrito → para mostrar resumen con totales antes de confirmar.
+- ver_carrito → para mostrar resumen con totales antes de confirmar. Incluye el tiempo de vida restante del carrito y alertas si algún producto no está disponible (❌) o cambió de precio (⚠️). Si hay alertas, ofrecé al cliente: actualizar precio (agregar_al_carrito con la misma cantidad, el sistema recalcula) o eliminar el item (agregar_al_carrito con cantidad 0).
 - vaciar_carrito → si el cliente quiere empezar de cero.
 - crear_pedido → solo cuando el cliente confirmó el carrito. No lleva ítems, lee del carrito.
 - Si recibís imagen, describila e intentá relacionarla con un pedido.
@@ -406,6 +406,9 @@ Cuando alguien pide sugerencia para una ocasión:
         $carrito   = Cache::get($this->carritoKey($client), []);
         $productos = $this->productosCache();
 
+        // Preservar o inicializar metadatos (timestamp de creación)
+        $meta = $carrito['_meta'] ?? ['created_at' => now()->timestamp];
+
         foreach ($items as $item) {
             $descrip  = trim($item['descrip'] ?? '');
             $cantidad = (float) ($item['cantidad'] ?? 0);
@@ -456,6 +459,7 @@ Cuando alguien pide sugerencia para una ocasión:
             }
         }
 
+        $carrito['_meta'] = $meta;
         Cache::put($this->carritoKey($client), $carrito, now()->addHour());
 
         return $this->formatCarrito($carrito);
@@ -463,7 +467,36 @@ Cuando alguien pide sugerencia para una ocasión:
 
     private function verCarrito($client): string
     {
-        return $this->formatCarrito(Cache::get($this->carritoKey($client), []));
+        $carrito = Cache::get($this->carritoKey($client), []);
+
+        $resultado = $this->formatCarrito($carrito);
+
+        if (empty(array_filter($carrito, fn($k) => $k !== '_meta', ARRAY_FILTER_USE_KEY))) {
+            return $resultado;
+        }
+
+        // Tiempo restante basado en created_at (carrito dura 1 hora)
+        $meta = $carrito['_meta'] ?? null;
+        if ($meta && isset($meta['created_at'])) {
+            $restante = ($meta['created_at'] + 3600) - now()->timestamp;
+            $minutos  = max(0, (int) floor($restante / 60));
+            if ($minutos <= 0) {
+                $resultado .= "\n\n⏱ El carrito está por vencer. Confirmá tu pedido ahora.";
+            } elseif ($minutos <= 15) {
+                $resultado .= "\n\n⏱ El carrito vence en {$minutos} min. Confirmá pronto.";
+            } else {
+                $resultado .= "\n\n⏱ El carrito vence en {$minutos} min.";
+            }
+        }
+
+        // Validar existencia y precios actuales
+        $alertas = $this->validarCarrito($carrito);
+        if (!empty($alertas)) {
+            $resultado .= "\n\n" . implode("\n", $alertas);
+            $resultado .= "\n\nPodés actualizar los precios o eliminar los productos con problema antes de confirmar.";
+        }
+
+        return $resultado;
     }
 
     private function vaciarCarrito($client): string
@@ -474,14 +507,16 @@ Cuando alguien pide sugerencia para una ocasión:
 
     private function formatCarrito(array $carrito): string
     {
-        if (empty($carrito)) {
+        $items = array_filter($carrito, fn($k) => $k !== '_meta', ARRAY_FILTER_USE_KEY);
+
+        if (empty($items)) {
             return 'El carrito está vacío.';
         }
 
         $lineas = [];
         $total  = 0;
 
-        foreach ($carrito as $item) {
+        foreach ($items as $item) {
             $esPeso = $item['tipo'] !== 'Unidad';
             if ($esPeso) {
                 $cant = $item['cant'] > 0
@@ -501,6 +536,37 @@ Cuando alguien pide sugerencia para una ocasión:
         return implode("\n", $lineas);
     }
 
+    private function validarCarrito(array $carrito): array
+    {
+        $items = array_filter($carrito, fn($k) => $k !== '_meta', ARRAY_FILTER_USE_KEY);
+
+        if (empty($items)) {
+            return [];
+        }
+
+        $codsEnCarrito = array_filter(array_column($items, 'cod'));
+        $productosActuales = Producto::whereIn('cod', $codsEnCarrito)
+            ->get(['cod', 'des', 'PRE'])
+            ->keyBy('cod');
+
+        $alertas = [];
+        foreach ($items as $item) {
+            if (!isset($item['cod']) || !$productosActuales->has($item['cod'])) {
+                $alertas[] = "❌ {$item['descrip']}: producto no disponible actualmente";
+                continue;
+            }
+
+            $preActual = (float) $productosActuales[$item['cod']]->PRE;
+            if (abs($preActual - $item['precio']) > 0.01) {
+                $precioViejo = number_format($item['precio'], 2, ',', '.');
+                $precioNuevo = number_format($preActual, 2, ',', '.');
+                $alertas[] = "⚠️ {$item['descrip']}: precio cambió de \${$precioViejo} a \${$precioNuevo}/u";
+            }
+        }
+
+        return $alertas;
+    }
+
     private function createOrder($client, string $fechaEntrega = '', string $obs = ''): string
     {
         $carrito = Cache::get($this->carritoKey($client), []);
@@ -518,21 +584,28 @@ Cuando alguien pide sugerencia para una ocasión:
             ->get(['cod', 'PRE'])
             ->keyBy('cod');
 
-        $alertas = [];
+        $alertas    = [];
+        $omitidos   = [];
 
-        foreach ($carrito as $item) {
+        foreach ($carrito as $key => $item) {
+            if ($key === '_meta') continue;
+
             $precio = $item['precio'];
             $neto   = $item['neto'];
 
+            // Producto no encontrado en BD → omitir del pedido
+            if (!isset($item['cod']) || !$precioActual->has($item['cod'])) {
+                $omitidos[] = $item['descrip'];
+                continue;
+            }
+
             // Verificar si el precio cambió desde que se armó el carrito
-            if (isset($item['cod']) && $precioActual->has($item['cod'])) {
-                $preActual = (float) $precioActual[$item['cod']]->PRE;
-                if ($preActual !== $precio) {
-                    $base   = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
-                    $neto   = round($preActual * $base, 2);
-                    $precio = $preActual;
-                    $alertas[] = "{$item['descrip']} (precio actualizado a " . number_format($preActual, 2, ',', '.') . ' $)';
-                }
+            $preActual = (float) $precioActual[$item['cod']]->PRE;
+            if (abs($preActual - $precio) > 0.01) {
+                $base   = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
+                $neto   = round($preActual * $base, 2);
+                $precio = $preActual;
+                $alertas[] = "{$item['descrip']} (precio actualizado a " . number_format($preActual, 2, ',', '.') . ' $)';
             }
 
             Pedido::create([
@@ -552,19 +625,29 @@ Cuando alguien pide sugerencia para una ocasión:
             ]);
         }
 
+        $extras = [];
+        if (!empty($omitidos)) {
+            $extras[] = '❌ No disponibles (no se incluyeron): ' . implode(', ', $omitidos);
+        }
         if (!empty($alertas)) {
-            return "Pedido #{$nro} registrado. ⚠️ Precios actualizados al momento del pedido: " . implode(', ', $alertas) . '.';
+            $extras[] = '⚠️ Precios actualizados: ' . implode(', ', $alertas);
         }
 
+        $items   = array_filter($carrito, fn($k) => $k !== '_meta', ARRAY_FILTER_USE_KEY);
         $resumen = implode(', ', array_map(function ($item) {
             return $item['cant'] > 0
                 ? "{$item['cant']}u {$item['descrip']}"
                 : "{$item['kilos']}kg {$item['descrip']}";
-        }, $carrito));
+        }, $items));
 
         Cache::forget($this->carritoKey($client));
 
-        return "Pedido #{$nro} registrado: {$resumen}.";
+        $msg = "Pedido #{$nro} registrado: {$resumen}.";
+        if (!empty($extras)) {
+            $msg .= "\n" . implode("\n", $extras);
+        }
+
+        return $msg;
     }
 
     private function orderStatus($client): string
