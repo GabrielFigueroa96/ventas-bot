@@ -597,13 +597,13 @@ Herramientas disponibles:
             } else {
                 $cant = "{$item['cant']}u";
             }
-            $precioFmt = number_format($item['precio'], 2, ',', '.');
-            $netoFmt   = number_format($item['neto'],   2, ',', '.');
+            $precioFmt = number_format($item['precio'], 2, ',', '');
+            $netoFmt   = number_format($item['neto'],   2, ',', '');
             $lineas[]  = "{$item['des']} {$cant} × {$precioFmt} \$ = {$netoFmt} \$";
             $total    += $item['neto'];
         }
 
-        $lineas[] = 'TOTAL aprox.: ' . number_format($total, 2, ',', '.') . ' $ _(puede variar según el peso final)_';
+        $lineas[] = 'TOTAL aprox.: ' . number_format($total, 2, ',', '') . ' $ _(puede variar según el peso final)_';
 
         return implode("\n", $lineas);
     }
@@ -628,8 +628,8 @@ Herramientas disponibles:
 
             $preActual = (float) $productosActuales[$item['cod']]->PRE;
             if (abs($preActual - $item['precio']) > 0.01) {
-                $precioViejo = number_format($item['precio'], 2, ',', '.');
-                $precioNuevo = number_format($preActual, 2, ',', '.');
+                $precioViejo = number_format($item['precio'], 2, ',', '');
+                $precioNuevo = number_format($preActual, 2, ',', '');
                 $alertas[] = "⚠️ {$item['des']}: precio cambió de \${$precioViejo} a \${$precioNuevo}/u";
             }
         }
@@ -706,7 +706,7 @@ Herramientas disponibles:
                 $base   = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
                 $neto   = round($preActual * $base, 2);
                 $precio = $preActual;
-                $alertas[] = "{$item['des']} (precio actualizado a " . number_format($preActual, 2, ',', '.') . ' $)';
+                $alertas[] = "{$item['des']} (precio actualizado a " . number_format($preActual, 2, ',', '') . ' $)';
             }
 
             Pedido::create([
@@ -840,7 +840,7 @@ Herramientas disponibles:
             }
         }
 
-        $precio = number_format($producto->PRE, 2, ',', '.');
+        $precio = number_format($producto->PRE, 2, ',', '');
         $unidad = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
 
         return "Producto: {$producto->des} — {$precio} $ ({$unidad}).";
@@ -876,8 +876,8 @@ Herramientas disponibles:
 
         return $productos->map(
             fn($p) => $p->tipo === 'Unidad'
-                ? "{$p->des} — " . number_format($p->PRE, 2, ',', '.') . " \$/u"
-                : "{$p->des} — " . number_format($p->PRE, 2, ',', '.') . " \$/kg"
+                ? "{$p->des} — " . number_format($p->PRE, 2, ',', '') . " \$/u"
+                : "{$p->des} — " . number_format($p->PRE, 2, ',', '') . " \$/kg"
         )->implode("\n");
     }
 
