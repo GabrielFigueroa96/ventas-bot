@@ -190,6 +190,7 @@ Reglas de cantidad para agregar_al_carrito:
 - Producto POR PESO pedido en unidades: convertí solo si la descripción del producto indica el peso unitario (ej: \'aprox. 0.15kg c/u\'). Calculá kg = unidades × peso e informale. Si no tiene ese dato, pedile que indique en kg.
 - Producto POR UNIDAD pedido en kg: no convertís, indicale que se pide por unidad.
 - El total es siempre aproximado para productos por peso. Recordáselo.
+- Formato numérico argentino: el cliente puede escribir con punto para miles y coma para decimales. Interpretá correctamente: \'1.500\' = 1500 | \'2,5\' = 2.5 | \'0,750\' = 0.75 | \'1.200,50\' = 1200.5
 
 NUNCA menciones un producto fuera de la lista. NUNCA inventes ni estimes precios.
 
@@ -426,7 +427,7 @@ Herramientas disponibles:
                 'ver_pedidos'        => $this->orderStatus($cliente),
                 'ver_precios'        => $this->priceList(),
                 'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? ''),
-                'cancelar_pedido'    => $this->cancelOrder($cliente, (int) ($args['nro'] ?? 0)),
+                'cancelar_pedido'    => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
                 default              => 'Función desconocida.',
             };
 
@@ -476,7 +477,7 @@ Herramientas disponibles:
 
         foreach ($items as $item) {
             $descrip  = trim($item['descrip'] ?? '');
-            $cantidad = (float) ($item['cantidad'] ?? 0);
+            $cantidad = $this->parsearNumero($item['cantidad'] ?? 0);
 
             if ($descrip === '') continue;
 
@@ -634,6 +635,29 @@ Herramientas disponibles:
         }
 
         return $alertas;
+    }
+
+    // Convierte número en formato argentino a float (ej: "1.500,75" → 1500.75, "2,5" → 2.5)
+    private function parsearNumero($valor): float
+    {
+        if (is_numeric($valor)) {
+            return (float) $valor;
+        }
+        $str = trim((string) $valor);
+        // Si tiene punto Y coma: el punto es miles, la coma es decimal → "1.500,75"
+        if (str_contains($str, '.') && str_contains($str, ',')) {
+            $str = str_replace('.', '', $str);
+            $str = str_replace(',', '.', $str);
+        // Si solo tiene coma: puede ser decimal argentino → "2,5" = 2.5 o "1.500" (solo punto = miles)
+        } elseif (str_contains($str, ',')) {
+            $str = str_replace(',', '.', $str);
+        }
+        // Si solo tiene punto: puede ser miles ("1.500") o decimal inglés ("1.5")
+        // Si hay exactamente 3 dígitos después del punto, es miles
+        elseif (preg_match('/^\d+\.(\d{3})$/', $str)) {
+            $str = str_replace('.', '', $str);
+        }
+        return (float) $str;
     }
 
     // Extrae el peso por unidad de la descripción del producto (ej: "aprox. 0.15kg c/u" → 0.15)
