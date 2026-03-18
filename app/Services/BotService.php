@@ -382,7 +382,7 @@ Cuando alguien pide sugerencia para una ocasión:
             'productos_bot_precios',
             300,
             fn() =>
-            Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo'])
+            Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen'])
         );
 
         foreach ($items as $item) {
@@ -451,7 +451,7 @@ Cuando alguien pide sugerencia para una ocasión:
             'productos_bot_precios',
             300,
             fn() =>
-            Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo'])
+            Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen'])
         );
 
         $lineas = [];
@@ -556,7 +556,7 @@ Cuando alguien pide sugerencia para una ocasión:
         Cache::forget('productos_bot_lista');
         Cache::forget('productos_bot_precios');
 
-        $productos = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo']);
+        $productos = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen']);
 
         if ($productos->isEmpty()) {
             return 'No hay productos disponibles en este momento.';
