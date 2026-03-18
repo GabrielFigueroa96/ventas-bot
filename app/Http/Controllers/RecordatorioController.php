@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Cuenta;
+use App\Models\Localidad;
 use App\Models\Recordatorio;
 use Illuminate\Http\Request;
 
@@ -11,8 +11,8 @@ class RecordatorioController extends Controller
     public function index()
     {
         $recordatorios = Recordatorio::orderByDesc('id')->get();
-        $localidades   = Cuenta::select('loca')->distinct()->orderBy('loca')->pluck('loca')->filter()->values();
-        $provincias    = Cuenta::select('prov')->distinct()->orderBy('prov')->pluck('prov')->filter()->values();
+        $localidades   = Localidad::where('activo', true)->orderBy('nombre')->get();
+        $provincias    = Localidad::where('activo', true)->whereNotNull('provincia')->distinct()->orderBy('provincia')->pluck('provincia');
 
         return view('admin.recordatorios', compact('recordatorios', 'localidades', 'provincias'));
     }

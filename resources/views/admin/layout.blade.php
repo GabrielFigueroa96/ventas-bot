@@ -28,8 +28,7 @@
                     <a href="{{ route('admin.pedidos') }}"   class="hover:text-red-200 {{ request()->routeIs('admin.pedidos') ? 'underline' : '' }}">Pedidos</a>
                     <a href="{{ route('admin.productos') }}" class="hover:text-red-200 {{ request()->routeIs('admin.productos*') ? 'underline' : '' }}">Productos</a>
                     <a href="{{ route('admin.localidades') }}" class="hover:text-red-200 {{ request()->routeIs('admin.localidades*') ? 'underline' : '' }}">Localidades</a>
-                    <a href="{{ route('admin.localidades') }}" class="hover:text-red-200 {{ request()->routeIs('admin.localidades*') ? 'underline' : '' }}">Localidades</a>
-                <a href="{{ route('admin.recordatorios') }}" class="hover:text-red-200 {{ request()->routeIs('admin.recordatorios*') ? 'underline' : '' }}">Recordatorios</a>
+                    <a href="{{ route('admin.recordatorios') }}" class="hover:text-red-200 {{ request()->routeIs('admin.recordatorios*') ? 'underline' : '' }}">Recordatorios</a>
                     <a href="{{ route('admin.configuracion') }}" class="hover:text-red-200 {{ request()->routeIs('admin.configuracion*') ? 'underline' : '' }}">Bot</a>
                     <span class="text-red-300">|</span>
                     <span class="text-red-200 text-xs">{{ auth()->user()->name }}</span>

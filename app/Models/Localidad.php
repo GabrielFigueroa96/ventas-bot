@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Localidad extends Model
 {
     protected $table    = 'localidades';
-    protected $fillable = ['nombre', 'dias_reparto', 'costo_extra', 'activo'];
+    protected $fillable = ['nombre', 'provincia', 'dias_reparto', 'costo_extra', 'activo'];
 
     protected $casts = [
         'dias_reparto' => 'array',

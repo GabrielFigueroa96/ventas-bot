@@ -62,23 +62,29 @@
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Filtrar por localidad</label>
-                    <input type="text" name="filtro_localidad" list="lista-localidades"
-                        value="{{ old('filtro_localidad', $editando?->filtro_localidad) }}"
-                        placeholder="Todas"
+                    <select name="filtro_localidad"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none">
-                    <datalist id="lista-localidades">
-                        @foreach($localidades as $loc)<option value="{{ $loc }}">@endforeach
-                    </datalist>
+                        <option value="">Todas las localidades</option>
+                        @foreach($localidades as $loc)
+                            <option value="{{ $loc->nombre }}"
+                                {{ old('filtro_localidad', $editando?->filtro_localidad) === $loc->nombre ? 'selected' : '' }}>
+                                {{ $loc->nombre }}{{ $loc->provincia ? " ({$loc->provincia})" : '' }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Filtrar por provincia</label>
-                    <input type="text" name="filtro_provincia" list="lista-provincias"
-                        value="{{ old('filtro_provincia', $editando?->filtro_provincia) }}"
-                        placeholder="Todas"
+                    <select name="filtro_provincia"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none">
-                    <datalist id="lista-provincias">
-                        @foreach($provincias as $prov)<option value="{{ $prov }}">@endforeach
-                    </datalist>
+                        <option value="">Todas las provincias</option>
+                        @foreach($provincias as $prov)
+                            <option value="{{ $prov }}"
+                                {{ old('filtro_provincia', $editando?->filtro_provincia) === $prov ? 'selected' : '' }}>
+                                {{ $prov }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
             </div>
 

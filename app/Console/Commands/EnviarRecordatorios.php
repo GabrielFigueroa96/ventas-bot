@@ -43,15 +43,15 @@ class EnviarRecordatorios extends Command
 
         if ($rec->filtro_localidad || $rec->filtro_provincia) {
             $query->where(function ($q) use ($rec) {
-                // Coincide en cuenta vinculada
-                $q->whereHas('cuenta', function ($q2) use ($rec) {
+                // Clientes con localidad_id vinculada a la tabla localidades
+                $q->whereHas('localidadObj', function ($q2) use ($rec) {
+                    if ($rec->filtro_localidad) $q2->where('nombre', $rec->filtro_localidad);
+                    if ($rec->filtro_provincia) $q2->where('provincia', $rec->filtro_provincia);
+                });
+                // O coincide por cuenta vinculada
+                $q->orWhereHas('cuenta', function ($q2) use ($rec) {
                     if ($rec->filtro_localidad) $q2->where('loca', 'like', "%{$rec->filtro_localidad}%");
                     if ($rec->filtro_provincia) $q2->where('prov', 'like', "%{$rec->filtro_provincia}%");
-                });
-                // O coincide en el propio cliente (sin cuenta)
-                $q->orWhere(function ($q2) use ($rec) {
-                    if ($rec->filtro_localidad) $q2->where('localidad', 'like', "%{$rec->filtro_localidad}%");
-                    if ($rec->filtro_provincia) $q2->where('provincia', 'like', "%{$rec->filtro_provincia}%");
                 });
             });
         }

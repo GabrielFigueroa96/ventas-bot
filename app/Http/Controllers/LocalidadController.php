@@ -18,6 +18,7 @@ class LocalidadController extends Controller
     {
         $data = $request->validate([
             'nombre'         => 'required|string|max:100|unique:localidades,nombre',
+            'provincia'      => 'nullable|string|max:100',
             'dias_reparto'   => 'nullable|array',
             'dias_reparto.*' => 'integer|between:0,6',
             'costo_extra'    => 'nullable|numeric|min:0',
@@ -35,6 +36,7 @@ class LocalidadController extends Controller
     {
         $data = $request->validate([
             'nombre'         => 'required|string|max:100|unique:localidades,nombre,' . $localidad->id,
+            'provincia'      => 'nullable|string|max:100',
             'dias_reparto'   => 'nullable|array',
             'dias_reparto.*' => 'integer|between:0,6',
             'costo_extra'    => 'nullable|numeric|min:0',
