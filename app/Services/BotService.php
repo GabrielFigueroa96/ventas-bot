@@ -73,20 +73,38 @@ class BotService
 
         // Lista cacheada 5 minutos — ahorra tokens y DB queries
         $lista = Cache::remember('productos_bot_lista', 300, function () {
-            return Producto::where('PRE', '>', 0)
-                ->select('des', 'PRE', 'tipo', 'descripcion')
-                ->get()
-                ->map(function ($p) {
-                    // Precio sin formato de miles para que GPT pueda calcular sin confusión
-                    $precio = (int) $p->PRE;
-                    $unidad = $p->tipo === 'Unidad' ? '/u' : '/kg';
-                    $linea  = "{$p->des} \${$precio}{$unidad}";
-                    if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
-                        $linea .= " ({$p->descripcion})";
-                    }
-                    return $linea;
-                })
-                ->implode("\n");
+            $productos = Producto::where('PRE', '>', 0)
+                ->select('des', 'PRE', 'tipo', 'grupo', 'desgrupo', 'descripcion')
+                ->get();
+
+            $formatear = function ($p) {
+                $precio = (int) $p->PRE;
+                $unidad = $p->tipo === 'Unidad' ? '/u' : '/kg';
+                $linea  = "{$p->des} \${$precio}{$unidad}";
+                if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
+                    $linea .= " ({$p->descripcion})";
+                }
+                return $linea;
+            };
+
+            $bloques = [];
+
+            foreach (['Unidad', 'Peso'] as $tipo) {
+                $tipoLabel = $tipo === 'Unidad' ? 'POR UNIDAD' : 'POR KILO';
+                $grupo = $productos->where('tipo', $tipo)
+                    ->groupBy(fn($p) => $p->desgrupo ?: 'Sin grupo');
+
+                if ($grupo->isEmpty()) continue;
+
+                $bloque = "[{$tipoLabel}]";
+                foreach ($grupo as $nombreGrupo => $items) {
+                    $bloque .= "\n  [{$nombreGrupo}]\n";
+                    $bloque .= $items->map(fn($p) => "  " . $formatear($p))->implode("\n");
+                }
+                $bloques[] = $bloque;
+            }
+
+            return implode("\n\n", $bloques);
         });
 
         $ultimoPedido = Pedido::where('codcli', $codcli)->latest('reg')->first();
