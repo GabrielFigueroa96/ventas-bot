@@ -98,8 +98,8 @@
                         @if($msg->message)
                             @php
                                 $txt = e($msg->message);
-                                $txt = preg_replace('/\*([^*]+)\*/', '<strong>$1</strong>', $txt);
-                                $txt = preg_replace('/_([^_]+)_/', '<em>$1</em>', $txt);
+                                $txt = preg_replace('/\*([^*]+)\*/', '<strong class="font-bold">$1</strong>', $txt);
+                                $txt = preg_replace('/_([^_]+)_/', '<em class="italic">$1</em>', $txt);
                                 $txt = nl2br($txt);
                             @endphp
                             <p class="leading-snug">{!! $txt !!}</p>
@@ -211,8 +211,8 @@ function escHtml(str) {
 
 function formatWpp(str) {
     let s = escHtml(str);
-    s = s.replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
-    s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
+    s = s.replace(/\*([^*]+)\*/g, '<strong class="font-bold">$1</strong>');
+    s = s.replace(/_([^_]+)_/g, '<em class="italic">$1</em>');
     s = s.replace(/\n/g, '<br>');
     return s;
 }

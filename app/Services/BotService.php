@@ -76,7 +76,7 @@ class BotService
                 ->get()
                 ->map(function ($p) {
                     $precio = number_format($p->PRE, 2, ',', '.');
-                    $unidad = $p->tipo === 'Unidad' ? "por unidad" : "por peso";
+                    $unidad = $p->tipo === 'Unidad' ? " por unidad" : " por peso";
                     $linea  = "{$p->des} {$precio} \$/{$unidad}";
                     if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
                         $linea .= " — {$p->descripcion}";
@@ -134,7 +134,7 @@ Reglas:
 - Si el cliente no especifica qué quiere, sugerile sus productos favoritos o los más populares.
 - Cuando alguien pide carne para asar, ofrecé también chorizos/morcillas si están disponibles (una sola vez, sin insistir).
 - ver_precios → consultas de precios o lista de productos.
-- ver_producto → cuando el cliente pregunta por un producto específico (qué es, cómo se usa, precio, etc.). Envía la imagen automáticamente.
+- ver_producto → cuando el cliente pregunta por un producto específico (qué es, cómo se usa, precio, etc.). Envía la imagen automáticamente. Al responder, usá formato limpio sin listas, ejemplo: 🥩 *Asado de tira* — \$1.500/kg. Corte ideal para parrilla.
 - ver_pedidos → estado e historial de pedidos.
 - cancelar_pedido → si el cliente quiere cancelar un pedido pendiente.
 - calcular_total → SIEMPRE usalo cuando recomendés productos (asado, parrillada, etc.) para mostrar el costo estimado real.
@@ -556,34 +556,6 @@ Cuando alguien pide sugerencia para una ocasión:
         $unidad = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
 
         return "Producto: {$producto->des} — {$precio} $ ({$unidad}).";
-    }
-
-    private function enviarImagenesProductos($client, $productos, array $items): void
-    {
-        foreach ($items as $item) {
-            $producto = $productos->first(
-                fn($p) => stripos($p->des, $item['descrip']) !== false ||
-                          stripos($item['descrip'], $p->des) !== false
-            );
-
-            if (!$producto || empty($producto->imagen) || $producto->imagen === 'sinimagen.webp') {
-                continue;
-            }
-
-            $path = public_path($producto->imagen);
-
-            if (!file_exists($path)) {
-                continue;
-            }
-
-            try {
-                $mime    = mime_content_type($path) ?: 'image/jpeg';
-                $mediaId = $this->uploadMediaFromPath($path, $mime);
-                $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $producto->des);
-            } catch (\Throwable $e) {
-                Log::error("enviarImagenesProductos {$producto->des}: {$e->getMessage()}");
-            }
-        }
     }
 
     private function uploadMediaFromPath(string $path, string $mime = 'image/jpeg'): string
