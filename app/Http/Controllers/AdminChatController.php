@@ -7,6 +7,7 @@ use App\Models\Cuenta;
 use App\Models\Factventas;
 use App\Models\Message;
 use App\Models\Pedido;
+use App\Models\Pedidosia;
 use App\Services\BotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -155,9 +156,10 @@ class AdminChatController extends Controller
 
         $pedidos    = $pedidosRaw->groupBy('nro');
         $factventas = $this->loadFactventas($pedidosRaw);
+        $pedidosia  = Pedidosia::whereIn('nro', $pedidosRaw->pluck('nro')->unique())->get()->keyBy('nro');
         $lastReg    = (int) ($pedidosRaw->max('reg') ?? 0);
 
-        $html = view('admin.partials.pedidos', compact('pedidos', 'factventas'))->render();
+        $html = view('admin.partials.pedidos', compact('pedidos', 'factventas', 'pedidosia'))->render();
 
         return response()->json(['html' => $html, 'lastReg' => $lastReg]);
     }

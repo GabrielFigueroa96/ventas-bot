@@ -7,6 +7,7 @@ use App\Models\Empresa;
 use App\Models\Factventas;
 use App\Models\Message;
 use App\Models\Pedido;
+use App\Models\Pedidosia;
 use App\Models\Seguimiento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -148,9 +149,10 @@ class AdminController extends Controller
 
         $pedidos       = $pedidosRaw->groupBy('nro');
         $factventas    = $this->loadFactventas($pedidosRaw);
+        $pedidosia     = $this->loadPedidosia($pedidosRaw);
         $lastPedidoReg = (int) ($pedidosRaw->max('reg') ?? 0);
 
-        return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas', 'lastPedidoReg'));
+        return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas', 'pedidosia', 'lastPedidoReg'));
     }
 
     public function pedidos(Request $request)
@@ -176,8 +178,20 @@ class AdminController extends Controller
         $pedidosRaw = $query->get();
         $pedidos    = $pedidosRaw->groupBy('nro');
         $factventas = $this->loadFactventas($pedidosRaw);
+        $pedidosia  = $this->loadPedidosia($pedidosRaw);
 
-        return view('admin.pedidos', compact('pedidos', 'factventas'));
+        return view('admin.pedidos', compact('pedidos', 'factventas', 'pedidosia'));
+    }
+
+    private function loadPedidosia($pedidos): \Illuminate\Support\Collection
+    {
+        $nros = $pedidos->pluck('nro')->unique()->filter()->values();
+
+        if ($nros->isEmpty()) {
+            return collect();
+        }
+
+        return Pedidosia::whereIn('nro', $nros)->get()->keyBy('nro');
     }
 
     // Carga los renglones de factventas para pedidos finalizados.
