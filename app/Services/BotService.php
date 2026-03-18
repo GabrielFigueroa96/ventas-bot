@@ -416,7 +416,16 @@ Cuando alguien pide sugerencia para una ocasión:
 
             $esPeso = !$producto || $producto->tipo !== 'Unidad';
             $precio = $producto ? (float) $producto->PRE : 0;
-            $neto   = round($precio * $cantidad, 2);
+
+            // Si es producto por peso y la cantidad parece ser en unidades, convertir a kg
+            if ($esPeso) {
+                $conversion = $this->convertirUnidadesAKg($item['descrip'], $cantidad);
+                if ($conversion) {
+                    [$cantidad] = $conversion;
+                }
+            }
+
+            $neto = round($precio * $cantidad, 2);
 
             Pedido::create([
                 'fecha'   => $fecha,
