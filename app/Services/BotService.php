@@ -435,7 +435,11 @@ Cuando alguien pide sugerencia para una ocasión:
             ]);
         }
 
-        $resumen = implode(', ', array_map(fn($i) => "{$i['cantidad']} {$i['descrip']}", $items));
+        $resumen = implode(', ', array_map(function ($i) use ($productos) {
+            $match  = $productos->first(fn($p) => stripos($p->des, $i['descrip']) !== false || stripos($i['descrip'], $p->des) !== false);
+            $unidad = ($match && $match->tipo === 'Unidad') ? 'u' : 'kg';
+            return "{$i['cantidad']}{$unidad} {$i['descrip']}";
+        }, $items));
 
         return "Pedido #{$nro} registrado: {$resumen}.";
     }
@@ -452,9 +456,10 @@ Cuando alguien pide sugerencia para una ocasión:
             return 'El cliente no tiene pedidos registrados.';
         }
 
-        return $pedidos->map(
-            fn($p) => "#{$p->nro} ({$p->fecha}): {$p->descrip} {$p->kilos}kg — {$p->estado_texto}"
-        )->implode("\n");
+        return $pedidos->map(function ($p) {
+            $cantidad = $p->cant > 1 ? "{$p->cant}u" : "{$p->kilos}kg";
+            return "#{$p->nro} ({$p->fecha}): {$p->descrip} {$cantidad} — {$p->estado_texto}";
+        })->implode("\n");
     }
 
     private function calcularTotal(array $items): string
