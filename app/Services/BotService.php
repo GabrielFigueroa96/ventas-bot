@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Carrito;
+use App\Models\Pedidosia;
 use App\Models\Producto;
 use App\Models\Message;
 use App\Models\Pedido;
@@ -132,7 +133,7 @@ Productos disponibles:
 
 Reglas:
 - Solo respondés preguntas relacionadas a la carnicería (pedidos, precios, productos). Si te preguntan otra cosa, decí amablemente que solo podés ayudar con eso.
-- Para pedir: 1) Agregá los productos al carrito con agregar_al_carrito. 2) Mostrá el resumen del carrito. 3) Preguntá ¿Para cuándo? y ¿Alguna observación? 4) Confirmá y llamá a crear_pedido. Si el cliente indica un horario o turno, ponelo en obs, no en fecha_entrega.
+- Para pedir: 1) Agregá los productos al carrito con agregar_al_carrito. 2) Mostrá el resumen del carrito. 3) Preguntá ¿Para cuándo?, ¿Lo recibís en tu domicilio o pasás a buscar?, ¿Cómo abonás? (efectivo, transferencia, cuenta corriente). 4) Confirmá y llamá a crear_pedido con todos esos datos. Si el cliente indica un horario o turno, ponelo en obs, no en fecha_entrega.
 - Si el cliente no especifica qué quiere, sugerile sus productos favoritos o los más populares.
 - Cuando alguien pide carne para asar, ofrecé también achuras si están disponibles (una sola vez, sin insistir).
 - ver_precios → consultas de precios o lista de productos.
@@ -283,7 +284,7 @@ Cuando alguien pide sugerencia para una ocasión:
                 'type'     => 'function',
                 'function' => [
                     'name'        => 'crear_pedido',
-                    'description' => 'Guarda en el sistema el pedido con los productos que están en el carrito. Llamalo solo cuando el cliente confirmó el carrito.',
+                    'description' => 'Guarda en el sistema el pedido con los productos que están en el carrito. Llamalo solo cuando el cliente confirmó el carrito y respondió cómo recibe el pedido y cómo abona.',
                     'parameters'  => [
                         'type'       => 'object',
                         'properties' => [
@@ -291,12 +292,22 @@ Cuando alguien pide sugerencia para una ocasión:
                                 'type'        => 'string',
                                 'description' => 'Fecha de entrega en formato Y-m-d (ej: 2026-03-20). Solo la fecha, sin hora.',
                             ],
+                            'tipo_entrega' => [
+                                'type'        => 'string',
+                                'enum'        => ['envio', 'retiro'],
+                                'description' => 'envio: el cliente recibe en su domicilio. retiro: el cliente pasa a buscar.',
+                            ],
+                            'forma_pago' => [
+                                'type'        => 'string',
+                                'enum'        => ['efectivo', 'transferencia', 'cuenta_corriente', 'otro'],
+                                'description' => 'Cómo abona el cliente.',
+                            ],
                             'obs' => [
                                 'type'        => 'string',
-                                'description' => 'Observaciones: horario, turno (mañana/tarde), corte especial, etc.',
+                                'description' => 'Observaciones adicionales: horario, turno, corte especial, etc.',
                             ],
                         ],
-                        'required' => ['fecha_entrega'],
+                        'required' => ['fecha_entrega', 'tipo_entrega', 'forma_pago'],
                     ],
                 ],
             ],
@@ -365,7 +376,7 @@ Cuando alguien pide sugerencia para una ocasión:
                 'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
                 'ver_carrito'        => $this->verCarrito($cliente),
                 'vaciar_carrito'     => $this->vaciarCarrito($cliente),
-                'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['obs'] ?? ''),
+                'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['obs'] ?? ''),
                 'ver_pedidos'        => $this->orderStatus($cliente),
                 'ver_precios'        => $this->priceList(),
                 'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? ''),
@@ -588,7 +599,7 @@ Cuando alguien pide sugerencia para una ocasión:
         return null;
     }
 
-    private function createOrder($client, string $fechaEntrega = '', string $obs = ''): string
+    private function createOrder($client, string $fechaEntrega = '', string $tipoEntrega = 'retiro', string $formaPago = 'efectivo', string $obs = ''): string
     {
         $registro = $this->getCarrito($client);
         $carrito  = $registro ? $registro->items : [];
@@ -657,6 +668,22 @@ Cuando alguien pide sugerencia para una ocasión:
             fn($item) => $item['cant'] > 0 ? "{$item['cant']}u {$item['des']}" : "{$item['kilos']}kg {$item['des']}",
             $carrito
         ));
+
+        $total = array_sum(array_column($carrito, 'neto'));
+
+        Pedidosia::create([
+            'nro'          => $nro,
+            'codcli'       => $codcli,
+            'idcliente'    => $client->id,
+            'nomcli'       => $nomcli,
+            'fecha'        => $fecha,
+            'tipo_entrega' => $tipoEntrega,
+            'forma_pago'   => $formaPago,
+            'total'        => $total,
+            'obs'          => $obs,
+            'estado'       => Pedidosia::ESTADO_PENDIENTE,
+            'pedido_at'    => now(),
+        ]);
 
         $registro?->delete();
 
