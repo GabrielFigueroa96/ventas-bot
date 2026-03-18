@@ -75,9 +75,10 @@ class BotService
                 ->select('des', 'PRE', 'tipo', 'descripcion')
                 ->get()
                 ->map(function ($p) {
-                    $precio = number_format($p->PRE, 2, ',', '.');
+                    // Precio sin formato de miles para que GPT pueda calcular sin confusión
+                    $precio = (int) $p->PRE;
                     $unidad = $p->tipo === 'Unidad' ? '/u' : '/kg';
-                    $linea  = "{$p->des} {$precio} \${$unidad}";
+                    $linea  = "{$p->des} \${$precio}{$unidad}";
                     if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
                         $linea .= " ({$p->descripcion})";
                     }
