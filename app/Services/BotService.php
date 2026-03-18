@@ -484,7 +484,7 @@ Cuando alguien pide sugerencia para una ocasión:
             );
 
             if ($match) {
-                $esPeso   = $match->tipo !== 'unidad';
+                $esPeso   = $match->tipo !== 'Unidad';
                 $unidad   = $esPeso ? 'kg' : 'u';
                 $subtotal = round($match->PRE * $cantidad, 2);
                 $total   += $subtotal;
