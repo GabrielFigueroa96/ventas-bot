@@ -72,11 +72,14 @@ class ProductoController extends Controller
 
     public function deleteImagen(Producto $producto)
     {
-        if ($producto->imagen && file_exists(storage_path('app/public/' . $producto->imagen))) {
-            unlink(storage_path('app/public/' . $producto->imagen));
+        if ($producto->imagen && $producto->imagen !== 'sinimagen.webp') {
+            $path = public_path($producto->imagen);
+            if (file_exists($path)) {
+                unlink($path);
+            }
         }
 
-        $producto->update(['imagen' => null]);
+        $producto->update(['imagen' => 'sinimagen.webp']);
 
         Cache::forget('productos_bot_lista');
         Cache::forget('productos_bot_precios');
