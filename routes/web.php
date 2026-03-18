@@ -5,6 +5,7 @@ use App\Http\Controllers\AdminChatController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\LocalidadController;
 use App\Http\Controllers\RecordatorioController;
 
 Route::get('/', fn() => view('welcome'));
@@ -29,6 +30,13 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::post('/clientes/{cliente}/enviar',        [AdminChatController::class, 'enviar'])->name('chat.enviar');
     Route::post('/clientes/{cliente}/cuenta',        [AdminChatController::class, 'setCuenta'])->name('chat.setCuenta');
     Route::get ('/cuentas/buscar',                   [AdminChatController::class, 'cuentaBuscar'])->name('cuentas.buscar');
+
+    // Localidades
+    Route::get   ('/localidades',                    [LocalidadController::class, 'index'])->name('localidades');
+    Route::post  ('/localidades',                    [LocalidadController::class, 'store'])->name('localidades.store');
+    Route::put   ('/localidades/{localidad}',        [LocalidadController::class, 'update'])->name('localidades.update');
+    Route::delete('/localidades/{localidad}',        [LocalidadController::class, 'destroy'])->name('localidades.destroy');
+    Route::patch ('/localidades/{localidad}/toggle', [LocalidadController::class, 'toggle'])->name('localidades.toggle');
 
     // Recordatorios
     Route::get   ('/recordatorios',          [RecordatorioController::class, 'index'])->name('recordatorios');

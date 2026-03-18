@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Carrito;
 use App\Models\Empresa;
+use App\Models\Localidad;
 use App\Models\Pedidosia;
 use App\Models\Producto;
 use App\Models\Message;
@@ -24,16 +25,78 @@ class BotService
 
     public function process($client, $message, ?array $image = null): string
     {
-        // Registro de nombre (flujo multi-turno simple)
-        if (empty($client->name)) {
+        // Registro inicial: nombre → localidad → provincia
+        if (empty($client->name) || $client->estado === 'esperando_nombre') {
             if ($client->estado !== 'esperando_nombre') {
                 $client->update(['estado' => 'esperando_nombre']);
                 $response = "¡Hola! Soy el asistente de la carnicería. ¿Cuál es tu nombre?";
             } else {
                 $nombre = ucfirst(strtolower(trim($message)));
-                $client->update(['name' => $nombre, 'estado' => 'activo']);
-                $response = "¡Gracias, {$nombre}! ¿En qué puedo ayudarte hoy?";
+                $client->update(['name' => $nombre, 'estado' => 'esperando_localidad']);
+                $localidades = Localidad::where('activo', true)->pluck('nombre')->implode(', ');
+                $response = "¡Hola, {$nombre}! ¿En qué localidad estás?"
+                    . ($localidades ? " (Repartimos en: {$localidades})" : '');
             }
+            $this->sendWhatsapp($client->phone, $response);
+            return $response;
+        }
+
+        if ($client->estado === 'esperando_localidad') {
+            $input       = trim($message);
+            $localidades = Localidad::where('activo', true)->get();
+
+            $match = $localidades->first(
+                fn($l) => stripos($l->nombre, $input) !== false || stripos($input, $l->nombre) !== false
+            );
+
+            if ($match) {
+                $client->update([
+                    'localidad'    => $match->nombre,
+                    'localidad_id' => $match->id,
+                    'estado'       => 'esperando_calle',
+                ]);
+                $diasLabel = Empresa::DIAS_LABEL;
+                $dias      = $match->dias_reparto ?? [];
+                $diasTexto = !empty($dias)
+                    ? 'Repartimos en tu zona los: ' . implode(', ', array_map(fn($d) => $diasLabel[$d], $dias)) . '. '
+                    : '';
+                $response = "{$diasTexto}¿Cuál es tu calle y número de entrega? (ej: Italia 1234)";
+            } else {
+                $client->update([
+                    'localidad'    => ucwords(strtolower($input)),
+                    'localidad_id' => null,
+                    'estado'       => 'activo',
+                ]);
+                $lista    = $localidades->pluck('nombre')->implode(', ');
+                $response = "Anotado, {$client->name}. Por el momento no tenemos reparto a tu zona."
+                    . ($lista ? " Repartimos en: {$lista}." : '')
+                    . " Podés pasar a retirar al local. ¿En qué puedo ayudarte?";
+            }
+
+            $this->sendWhatsapp($client->phone, $response);
+            return $response;
+        }
+
+        if ($client->estado === 'esperando_calle') {
+            // Intenta separar "Calle 1234" → calle=Calle, numero=1234
+            $input = trim($message);
+            if (preg_match('/^(.+?)\s+(\d[\w-]*)$/', $input, $m)) {
+                $client->update(['calle' => trim($m[1]), 'numero' => $m[2], 'estado' => 'esperando_dato_extra']);
+            } else {
+                $client->update(['calle' => $input, 'numero' => null, 'estado' => 'esperando_dato_extra']);
+            }
+            $response = "¿Tenés algún dato extra? (piso, depto, referencia) — respondé *no* para omitir.";
+            $this->sendWhatsapp($client->phone, $response);
+            return $response;
+        }
+
+        if ($client->estado === 'esperando_dato_extra') {
+            $input = trim($message);
+            $datoExtra = preg_match('/^no$/i', $input) ? null : $input;
+            $client->update(['dato_extra' => $datoExtra, 'estado' => 'activo']);
+            $dir      = trim("{$client->calle} {$client->numero}");
+            $response = "¡Todo listo, {$client->name}! Dirección guardada: {$dir}"
+                . ($datoExtra ? " ({$datoExtra})" : '') . ". ¿En qué puedo ayudarte?";
             $this->sendWhatsapp($client->phone, $response);
             return $response;
         }
@@ -50,9 +113,10 @@ class BotService
     public function askChatGPT(string $message, $cliente, ?array $image = null): string
     {
         $messages = $this->buildMessages($message, $cliente, $image);
+        $empresa  = Cache::remember('bot_empresa_config', 300, fn() => Empresa::first());
 
         // Primera llamada: ChatGPT decide si responde o llama una función
-        $response = $this->callOpenAI($messages, $this->tools());
+        $response = $this->callOpenAI($messages, $this->tools($empresa));
         $choice   = $response['choices'][0];
 
         if ($choice['finish_reason'] === 'tool_calls') {
@@ -124,22 +188,29 @@ class BotService
             ->implode(', ');
 
         // Contexto de cuenta comercial si está vinculada
+        $localidad   = $cliente->cuenta?->loca ?? $cliente->localidad ?? null;
+        $provincia   = $cliente->cuenta?->prov ?? $cliente->provincia ?? null;
         $cuentaTexto = $cliente->cuenta
             ? "\nCuenta: {$cliente->cuenta->nom} | {$cliente->cuenta->dom}, {$cliente->cuenta->loca}"
-            : '';
+            : ($localidad ? "\nLocalidad: {$localidad}" . ($provincia ? ", {$provincia}" : '') : '');
 
-        // Última dirección de envío usada por este cliente
-        $ultimaDir = Pedidosia::where('idcliente', $cliente->id)
-            ->where('tipo_entrega', 'envio')
-            ->whereNotNull('calle')
-            ->latest()
-            ->first();
-
-        $ultimaDirTexto = $ultimaDir
-            ? "Última dirección de envío: {$ultimaDir->calle} {$ultimaDir->numero}" .
-              ($ultimaDir->localidad  ? ", {$ultimaDir->localidad}"  : '') .
-              ($ultimaDir->dato_extra ? " ({$ultimaDir->dato_extra})" : '')
-            : '';
+        // Dirección preferida: primero la del perfil del cliente, si no la última usada en pedido
+        if ($cliente->calle) {
+            $ultimaDirTexto = "Dirección guardada del cliente: {$cliente->calle} {$cliente->numero}"
+                . ($cliente->dato_extra ? " ({$cliente->dato_extra})" : '')
+                . ($cliente->localidad  ? ", {$cliente->localidad}"   : '');
+        } else {
+            $ultimaDir = Pedidosia::where('idcliente', $cliente->id)
+                ->where('tipo_entrega', 'envio')
+                ->whereNotNull('calle')
+                ->latest()
+                ->first();
+            $ultimaDirTexto = $ultimaDir
+                ? "Última dirección de envío usada: {$ultimaDir->calle} {$ultimaDir->numero}"
+                  . ($ultimaDir->localidad  ? ", {$ultimaDir->localidad}"  : '')
+                  . ($ultimaDir->dato_extra ? " ({$ultimaDir->dato_extra})" : '')
+                : '';
+        }
 
         // Historial de últimos 10 mensajes para mantener contexto del pedido
         $history = Message::where('cliente_id', $cliente->id)
@@ -154,11 +225,45 @@ class BotService
 
         $messages = [];
 
-        $infoNegocio     = trim($empresa?->bot_info ?? '');
-        $instrucciones   = trim($empresa?->bot_instrucciones ?? '');
-        $configNegocio   = '';
-        if ($infoNegocio)   $configNegocio .= "\nInformación del negocio:\n{$infoNegocio}";
-        if ($instrucciones) $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
+        // --- Configuración operativa del negocio ---
+        $infoNegocio   = trim($empresa?->bot_info ?? '');
+        $instrucciones = trim($empresa?->bot_instrucciones ?? '');
+
+        // Días de reparto: usa la localidad del cliente si tiene una configurada, si no la global
+        $diasLabel     = Empresa::DIAS_LABEL;
+        $localidadObj  = $cliente->localidad_id ? Localidad::find($cliente->localidad_id) : null;
+        $diasReparto   = $localidadObj?->dias_reparto ?? $empresa?->bot_dias_reparto ?? [];
+        if (!empty($diasReparto)) {
+            $diasNombres = implode(', ', array_map(fn($d) => $diasLabel[$d] ?? $d, $diasReparto));
+            $diasTexto   = $localidad
+                ? "Días de reparto para {$localidad}: {$diasNombres}."
+                : "Días de reparto: {$diasNombres}.";
+        } else {
+            $diasTexto = $localidadObj === null && $cliente->localidad
+                ? "No hay reparto configurado para {$cliente->localidad}. Solo retiro en local."
+                : '';
+        }
+
+        // Tipos de entrega habilitados
+        $permiteEnvio  = $empresa?->bot_permite_envio  ?? true;
+        $permiteRetiro = $empresa?->bot_permite_retiro ?? true;
+        $entregasTexto = 'Tipos de entrega disponibles: ' . implode(' y ', array_filter([
+            $permiteEnvio  ? 'envío a domicilio' : null,
+            $permiteRetiro ? 'retiro en local'   : null,
+        ])) . '.';
+        if (!$permiteEnvio && !$permiteRetiro) {
+            $entregasTexto = 'Por el momento no se aceptan pedidos (entrega deshabilitada).';
+        }
+
+        // Medios de pago habilitados
+        $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(Empresa::MEDIOS_PAGO);
+        $mediosLabel       = Empresa::MEDIOS_PAGO;
+        $mediosTexto       = 'Medios de pago aceptados: ' . implode(', ', array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados)) . '.';
+
+        $configNegocio = "\n{$entregasTexto}\n{$mediosTexto}";
+        if ($diasTexto)      $configNegocio .= "\n{$diasTexto}";
+        if ($infoNegocio)    $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
+        if ($instrucciones)  $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
 
         $messages[] = [
             'role'    => 'system',
@@ -295,8 +400,17 @@ Herramientas disponibles:
     // Definición de herramientas (functions)
     // -------------------------------------------------------------------------
 
-    private function tools(): array
+    private function tools($empresa = null): array
     {
+        // Enums dinámicos según configuración
+        $tiposEntrega = array_values(array_filter([
+            ($empresa?->bot_permite_envio  ?? true) ? 'envio'  : null,
+            ($empresa?->bot_permite_retiro ?? true) ? 'retiro' : null,
+        ]));
+        if (empty($tiposEntrega)) $tiposEntrega = ['retiro'];
+
+        $mediosPago = $empresa?->bot_medios_pago ?? ['efectivo', 'transferencia', 'cuenta_corriente', 'otro'];
+
         return [
             [
                 'type'     => 'function',
@@ -352,12 +466,12 @@ Herramientas disponibles:
                             ],
                             'tipo_entrega' => [
                                 'type'        => 'string',
-                                'enum'        => ['envio', 'retiro'],
+                                'enum'        => $tiposEntrega,
                                 'description' => 'envio: el cliente recibe en su domicilio. retiro: el cliente pasa a buscar.',
                             ],
                             'forma_pago' => [
                                 'type'        => 'string',
-                                'enum'        => ['efectivo', 'transferencia', 'cuenta_corriente', 'otro'],
+                                'enum'        => $mediosPago,
                                 'description' => 'Cómo abona el cliente.',
                             ],
                             'calle' => [

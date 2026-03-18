@@ -20,12 +20,10 @@ class Cliente extends Model
     use HasFactory;
 
     protected $fillable = [
-        'phone',
-        'name',
-        'estado',
-        'modo',
-        'last_order_at',
-        'cuenta_cod',
+        'phone', 'name',
+        'localidad', 'provincia', 'localidad_id',
+        'calle', 'numero', 'dato_extra',
+        'estado', 'modo', 'last_order_at', 'cuenta_cod',
     ];
 
     public function messages()
@@ -36,6 +34,11 @@ class Cliente extends Model
     public function cuenta()
     {
         return $this->belongsTo(Cuenta::class, 'cuenta_cod', 'cod');
+    }
+
+    public function localidadObj()
+    {
+        return $this->belongsTo(Localidad::class, 'localidad_id');
     }
 
     public function seguimientos()
