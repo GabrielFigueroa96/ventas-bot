@@ -130,7 +130,7 @@ Productos disponibles:
 
 Reglas:
 - Solo respondés preguntas relacionadas a la carnicería (pedidos, precios, productos). Si te preguntan otra cosa, decí amablemente que solo podés ayudar con eso.
-- Para pedir: preguntá qué y cuánto. Antes de llamar a crear_pedido, preguntá siempre: 1) ¿Para cuándo lo necesitás? 2) ¿Alguna observación? (si responde que no, dejá obs vacío). Convertí la fecha a Y-m-d (hoy es {$fecha}). Luego confirmá el resumen completo y llamá a crear_pedido.
+- Para pedir: preguntá qué y cuánto. Antes de llamar a crear_pedido, preguntá siempre: 1) ¿Para cuándo lo necesitás? 2) ¿Alguna observación? (si responde que no, dejá obs vacío). Convertí la fecha a d-m-Y (hoy es {$fecha}). Si el cliente indica un horario o turno (ej: mañana a las 10, por la tarde), ponelo en obs, no en fecha_entrega. Luego confirmá el resumen completo y llamá a crear_pedido.
 - Si el cliente no especifica qué quiere, sugerile sus productos favoritos o los más populares.
 - Cuando alguien pide carne para asar, ofrecé también chorizos/morcillas si están disponibles (una sola vez, sin insistir).
 - ver_precios → consultas de precios o lista de productos.
@@ -256,11 +256,11 @@ Cuando alguien pide sugerencia para una ocasión:
                             ],
                             'fecha_entrega' => [
                                 'type'        => 'string',
-                                'description' => 'Fecha en que el cliente necesita el pedido, formato Y-m-d (ej: 2026-03-20).',
+                                'description' => 'Fecha de entrega en formato Y-m-d (ej: 2026-03-20). Solo la fecha, sin hora.',
                             ],
                             'obs' => [
                                 'type'        => 'string',
-                                'description' => 'Observaciones opcionales del cliente (instrucciones de entrega, corte especial, etc.).',
+                                'description' => 'Observaciones del cliente: horario de entrega, turno (mañana/tarde), corte especial, o cualquier aclaración. Si el cliente menciona un horario o turno junto con la fecha, incluilo acá.',
                             ],
                         ],
                         'required' => ['items', 'fecha_entrega'],
