@@ -137,7 +137,7 @@ class BotService
         $messages[] = [
             'role'    => 'system',
             'content' => "Sos el asistente de una carnicería. Amable, breve y directo. Respondé siempre en español argentino. Solo respondés temas de la carnicería (pedidos, precios, productos). Para cualquier otra consulta, decí amablemente que no podés ayudar con eso.
-Formato de precios: NUNCA uses separador de miles. Usá coma para decimales. Ejemplos correctos: $1500,00 | $36000,00 | $2800,50. Nunca: $1.500,00 ni $36,000.
+Formato de precios: NUNCA uses separador de miles. Usá coma para decimales solo si hay centavos. Ejemplos correctos: $1500 | $36000 | $2800,50. Nunca: $1.500,00 ni $36,000 ni $21000,00.
 Hoy es {$fecha}.
 Cliente: {$nombre}{$cuentaTexto}
 Último pedido: {$ultimoPedidoTexto}
@@ -598,13 +598,13 @@ Herramientas disponibles:
             } else {
                 $cant = "{$item['cant']}u";
             }
-            $precioFmt = number_format($item['precio'], 2, ',', '');
-            $netoFmt   = number_format($item['neto'],   2, ',', '');
+            $precioFmt = $this->fmt($item['precio']);
+            $netoFmt   = $this->fmt($item['neto']);
             $lineas[]  = "{$item['des']} {$cant} × {$precioFmt} \$ = {$netoFmt} \$";
             $total    += $item['neto'];
         }
 
-        $lineas[] = 'TOTAL aprox.: ' . number_format($total, 2, ',', '') . ' $ _(puede variar según el peso final)_';
+        $lineas[] = 'TOTAL aprox.: $' . $this->fmt($total) . ' _(puede variar según el peso final)_';
 
         return implode("\n", $lineas);
     }
@@ -629,13 +629,21 @@ Herramientas disponibles:
 
             $preActual = (float) $productosActuales[$item['cod']]->PRE;
             if (abs($preActual - $item['precio']) > 0.01) {
-                $precioViejo = number_format($item['precio'], 2, ',', '');
-                $precioNuevo = number_format($preActual, 2, ',', '');
+                $precioViejo = $this->fmt($item['precio']);
+                $precioNuevo = $this->fmt($preActual);
                 $alertas[] = "⚠️ {$item['des']}: precio cambió de \${$precioViejo} a \${$precioNuevo}/u";
             }
         }
 
         return $alertas;
+    }
+
+    // Formatea precio sin separador de miles; omite decimales si son ,00
+    private function fmt(float $val): string
+    {
+        return $val == (int) $val
+            ? number_format($val, 0, ',', '')
+            : number_format($val, 2, ',', '');
     }
 
     // Convierte número en formato argentino a float (ej: "1.500,75" → 1500.75, "2,5" → 2.5)
@@ -707,7 +715,7 @@ Herramientas disponibles:
                 $base   = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
                 $neto   = round($preActual * $base, 2);
                 $precio = $preActual;
-                $alertas[] = "{$item['des']} (precio actualizado a " . number_format($preActual, 2, ',', '') . ' $)';
+                $alertas[] = "{$item['des']} (precio actualizado a $" . $this->fmt($preActual) . ')';
             }
 
             Pedido::create([
@@ -841,7 +849,7 @@ Herramientas disponibles:
             }
         }
 
-        $precio = number_format($producto->PRE, 2, ',', '');
+        $precio = $this->fmt((float) $producto->PRE);
         $unidad = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
 
         return "Producto: {$producto->des} — {$precio} $ ({$unidad}).";
@@ -877,8 +885,8 @@ Herramientas disponibles:
 
         return $productos->map(
             fn($p) => $p->tipo === 'Unidad'
-                ? "{$p->des} — " . number_format($p->PRE, 2, ',', '') . " \$/u"
-                : "{$p->des} — " . number_format($p->PRE, 2, ',', '') . " \$/kg"
+                ? "{$p->des} — $" . $this->fmt((float) $p->PRE) . "/u"
+                : "{$p->des} — $" . $this->fmt((float) $p->PRE) . "/kg"
         )->implode("\n");
     }
 
