@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Cliente;
 use App\Models\Pedido;
 use App\Models\PedidoNotificacion;
+use App\Models\Pedidosia;
 use App\Services\BotService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -14,20 +15,15 @@ class NotificarPedidos extends Command
     protected $signature   = 'pedidos:notificar';
     protected $description = 'Envía WhatsApp a clientes cuando su pedido cambia de estado en VB.NET';
 
-    // Estado → mensaje a enviar
-    // Podés agregar más estados acá según los que uses en VB.NET
-    private const NOTIFICACIONES = [
-        Pedido::ESTADO_FINALIZADO => "¡Hola {nombre}! 🎉 Tu pedido #{nro} ya está listo y pronto será enviado. ¡Gracias!",
-    ];
+    private const MSG_ENVIO  = "¡Hola {nombre}! 🎉 Tu pedido #{nro} ya está listo y en camino a tu domicilio. ¡Gracias!";
+    private const MSG_RETIRO = "¡Hola {nombre}! 🎉 Tu pedido #{nro} ya está listo. Podés pasar a retirarlo cuando quieras. ¡Gracias!";
 
     public function handle(BotService $bot): void
     {
-        foreach (self::NOTIFICACIONES as $estado => $plantilla) {
-            $this->procesarEstado($bot, $estado, $plantilla);
-        }
+        $this->procesarEstado($bot, Pedido::ESTADO_FINALIZADO);
     }
 
-    private function procesarEstado(BotService $bot, int $estado, string $plantilla): void
+    private function procesarEstado(BotService $bot, int $estado): void
     {
         // Todos los nro+pv finalizados (un row por grupo)
         $pedidos = Pedido::where('estado', $estado)
@@ -54,6 +50,9 @@ class NotificarPedidos extends Command
                 Log::warning("NotificarPedidos: sin cliente para codcli={$pedido->codcli}, nro={$pedido->nro}");
                 continue;
             }
+
+            $sia      = Pedidosia::where('nro', $pedido->nro)->first();
+            $plantilla = ($sia?->tipo_entrega === 'envio') ? self::MSG_ENVIO : self::MSG_RETIRO;
 
             $mensaje = str_replace(
                 ['{nombre}', '{nro}'],
