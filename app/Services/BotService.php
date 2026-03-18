@@ -131,14 +131,17 @@ Productos disponibles:
 
 Reglas:
 - Solo respondés preguntas relacionadas a la carnicería (pedidos, precios, productos). Si te preguntan otra cosa, decí amablemente que solo podés ayudar con eso.
-- Para pedir: preguntá qué y cuánto. Antes de llamar a crear_pedido, preguntá siempre: 1) ¿Para cuándo lo necesitás? 2) ¿Alguna observación? (si responde que no, dejá obs vacío). Convertí la fecha a d-m-Y (hoy es {$fecha}). Si el cliente indica un horario o turno (ej: mañana a las 10, por la tarde), ponelo en obs, no en fecha_entrega. Luego confirmá el resumen completo y llamá a crear_pedido.
+- Para pedir: 1) Agregá los productos al carrito con agregar_al_carrito. 2) Mostrá el resumen del carrito. 3) Preguntá ¿Para cuándo? y ¿Alguna observación? 4) Confirmá y llamá a crear_pedido. Si el cliente indica un horario o turno, ponelo en obs, no en fecha_entrega.
 - Si el cliente no especifica qué quiere, sugerile sus productos favoritos o los más populares.
 - Cuando alguien pide carne para asar, ofrecé también achuras si están disponibles (una sola vez, sin insistir).
 - ver_precios → consultas de precios o lista de productos.
-- ver_producto → cuando el cliente pregunta por un producto específico (qué es, cómo se usa, precio, etc.). Envía la imagen automáticamente. Al responder, usá formato limpio sin listas, ejemplo: 🥩 *Asado de tira* — \$1.500/kg. Corte ideal para parrilla.
+- ver_producto → cuando el cliente pregunta por un producto específico. Envía la imagen automáticamente. Formato: 🥩 *Nombre* — \$precio/kg. Descripción breve.
 - ver_pedidos → estado e historial de pedidos.
 - cancelar_pedido → si el cliente quiere cancelar un pedido pendiente.
-- calcular_total → SIEMPRE usalo cuando recomendés productos. Incluí TODOS los ítems de la sugerencia en una sola llamada. Nunca calcules precios manualmente ni omitas productos.
+- agregar_al_carrito → SIEMPRE que sugerís productos o el cliente quiere agregar algo. El sistema calcula kg, precio y neto. Para quitar un ítem pasá cantidad 0.
+- ver_carrito → para mostrar resumen con totales antes de confirmar.
+- vaciar_carrito → si el cliente quiere empezar de cero.
+- crear_pedido → solo cuando el cliente confirmó el carrito. No lleva ítems, lee del carrito.
 - Si recibís imagen, describila e intentá relacionarla con un pedido.
 - Respondé siempre en español argentino.
 
@@ -232,39 +235,61 @@ Cuando alguien pide sugerencia para una ocasión:
             [
                 'type'     => 'function',
                 'function' => [
-                    'name'        => 'crear_pedido',
-                    'description' => 'Guarda el pedido en el sistema cuando el cliente ya confirmó qué quiere.',
+                    'name'        => 'agregar_al_carrito',
+                    'description' => 'Agrega o actualiza productos en el carrito del cliente. El sistema calcula automáticamente kg, precio y neto. Usalo siempre que el cliente quiera productos o cuando sugerís una recomendación. Para quitar un producto, pasá cantidad 0.',
                     'parameters'  => [
                         'type'       => 'object',
                         'properties' => [
                             'items' => [
-                                'type'        => 'array',
-                                'description' => 'Lista de artículos del pedido.',
-                                'items'       => [
+                                'type'  => 'array',
+                                'items' => [
                                     'type'       => 'object',
                                     'properties' => [
-                                        'descrip' => [
-                                            'type'        => 'string',
-                                            'description' => 'Nombre del producto.',
-                                        ],
-                                        'cantidad' => [
-                                            'type'        => 'number',
-                                            'description' => 'Kg si el producto es por peso (ej: 2.5). Unidades si es por unidad (ej: 6).',
-                                        ],
+                                        'descrip'  => ['type' => 'string',  'description' => 'Nombre del producto tal como aparece en la lista.'],
+                                        'cantidad' => ['type' => 'number',  'description' => 'Unidades si es por unidad (ej: 6). Kg si es por peso (ej: 2.5). Para peso vendido en unidades (chorizo, morcilla) pasá las unidades y el sistema convierte.'],
                                     ],
                                     'required' => ['descrip', 'cantidad'],
                                 ],
                             ],
+                        ],
+                        'required' => ['items'],
+                    ],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'ver_carrito',
+                    'description' => 'Muestra el contenido actual del carrito con precios y total calculados por el sistema.',
+                    'parameters'  => ['type' => 'object', 'properties' => new \stdClass()],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'vaciar_carrito',
+                    'description' => 'Vacía completamente el carrito del cliente.',
+                    'parameters'  => ['type' => 'object', 'properties' => new \stdClass()],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'crear_pedido',
+                    'description' => 'Guarda en el sistema el pedido con los productos que están en el carrito. Llamalo solo cuando el cliente confirmó el carrito.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
                             'fecha_entrega' => [
                                 'type'        => 'string',
                                 'description' => 'Fecha de entrega en formato Y-m-d (ej: 2026-03-20). Solo la fecha, sin hora.',
                             ],
                             'obs' => [
                                 'type'        => 'string',
-                                'description' => 'Observaciones del cliente: horario de entrega, turno (mañana/tarde), corte especial, o cualquier aclaración. Si el cliente menciona un horario o turno junto con la fecha, incluilo acá.',
+                                'description' => 'Observaciones: horario, turno (mañana/tarde), corte especial, etc.',
                             ],
                         ],
-                        'required' => ['items', 'fecha_entrega'],
+                        'required' => ['fecha_entrega'],
                     ],
                 ],
             ],
@@ -287,39 +312,12 @@ Cuando alguien pide sugerencia para una ocasión:
             [
                 'type'     => 'function',
                 'function' => [
-                    'name'        => 'calcular_total',
-                    'description' => 'Calcula el precio total de una lista de productos con sus cantidades usando los precios reales del sistema. Usalo siempre al recomendar productos.',
-                    'parameters'  => [
-                        'type'       => 'object',
-                        'properties' => [
-                            'items' => [
-                                'type'  => 'array',
-                                'items' => [
-                                    'type'       => 'object',
-                                    'properties' => [
-                                        'descrip'   => ['type' => 'string', 'description' => 'Nombre del producto'],
-                                        'cantidad'  => ['type' => 'number', 'description' => 'Kg si es por peso, unidades si es por unidad'],
-                                    ],
-                                    'required' => ['descrip', 'cantidad'],
-                                ],
-                            ],
-                        ],
-                        'required' => ['items'],
-                    ],
-                ],
-            ],
-            [
-                'type'     => 'function',
-                'function' => [
                     'name'        => 'ver_producto',
                     'description' => 'Muestra los detalles y la imagen de un producto cuando el cliente pregunta por él específicamente.',
                     'parameters'  => [
                         'type'       => 'object',
                         'properties' => [
-                            'nombre' => [
-                                'type'        => 'string',
-                                'description' => 'Nombre del producto tal como aparece en la lista.',
-                            ],
+                            'nombre' => ['type' => 'string', 'description' => 'Nombre del producto tal como aparece en la lista.'],
                         ],
                         'required' => ['nombre'],
                     ],
@@ -333,10 +331,7 @@ Cuando alguien pide sugerencia para una ocasión:
                     'parameters'  => [
                         'type'       => 'object',
                         'properties' => [
-                            'nro' => [
-                                'type'        => 'integer',
-                                'description' => 'Número de pedido a cancelar.',
-                            ],
+                            'nro' => ['type' => 'integer', 'description' => 'Número de pedido a cancelar.'],
                         ],
                         'required' => ['nro'],
                     ],
@@ -360,13 +355,15 @@ Cuando alguien pide sugerencia para una ocasión:
             $args     = json_decode($toolCall['function']['arguments'], true) ?? [];
 
             $result = match ($funcName) {
-                'crear_pedido'    => $this->createOrder($cliente, $args['items'] ?? [], $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['obs'] ?? ''),
-                'ver_pedidos'     => $this->orderStatus($cliente),
-                'ver_precios'     => $this->priceList(),
-                'calcular_total'  => $this->calcularTotal($args['items'] ?? []),
-                'ver_producto'    => $this->verProducto($cliente, $args['nombre'] ?? ''),
-                'cancelar_pedido' => $this->cancelOrder($cliente, (int) ($args['nro'] ?? 0)),
-                default           => 'Función desconocida.',
+                'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
+                'ver_carrito'        => $this->verCarrito($cliente),
+                'vaciar_carrito'     => $this->vaciarCarrito($cliente),
+                'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['obs'] ?? ''),
+                'ver_pedidos'        => $this->orderStatus($cliente),
+                'ver_precios'        => $this->priceList(),
+                'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? ''),
+                'cancelar_pedido'    => $this->cancelOrder($cliente, (int) ($args['nro'] ?? 0)),
+                default              => 'Función desconocida.',
             };
 
             $messages[] = [
@@ -386,60 +383,168 @@ Cuando alguien pide sugerencia para una ocasión:
     // Acciones del negocio
     // -------------------------------------------------------------------------
 
-    private function createOrder($client, array $items, string $fechaEntrega = '', string $obs = ''): string
+    // -------------------------------------------------------------------------
+    // Carrito
+    // -------------------------------------------------------------------------
+
+    private function carritoKey($client): string
     {
-        if (empty($items)) {
-            return 'Sin artículos para registrar.';
-        }
+        return "carrito_{$client->id}";
+    }
 
-        $nro      = (Pedido::max('nro') ?? 0) + 1;
-        $fecha    = $fechaEntrega ?: now()->format('Y-m-d');
-        $codcli   = $client->cuenta ? $client->cuenta->cod : $client->id;
-        $nomcli   = $client->cuenta ? $client->cuenta->nom : $client->name;
-
-        // Cache de productos con tipo para no hacer N queries
-        $productos = Cache::remember(
+    private function productosCache()
+    {
+        return Cache::remember(
             'productos_bot_precios',
             300,
-            fn() =>
-            Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen'])
+            fn() => Producto::where('PRE', '>', 0)->get(['cod', 'des', 'PRE', 'tipo', 'imagen'])
         );
+    }
+
+    private function agregarAlCarrito($client, array $items): string
+    {
+        $carrito   = Cache::get($this->carritoKey($client), []);
+        $productos = $this->productosCache();
 
         foreach ($items as $item) {
-            $cantidad = (float) ($item['cantidad'] ?? $item['kilos'] ?? 0);
+            $descrip  = trim($item['descrip'] ?? '');
+            $cantidad = (float) ($item['cantidad'] ?? 0);
 
-            // Buscar tipo del producto
-            $producto = $productos->first(
-                fn($p) =>
-                stripos($p->des, $item['descrip']) !== false ||
-                    stripos($item['descrip'], $p->des) !== false
+            if ($descrip === '') continue;
+
+            $match = $productos->first(
+                fn($p) => stripos($p->des, $descrip) !== false || stripos($descrip, $p->des) !== false
             );
 
-            $esPeso = !$producto || $producto->tipo !== 'Unidad';
-            $precio = $producto ? (float) $producto->PRE : 0;
+            if (!$match) continue;
 
-            // Si es producto por peso y la cantidad parece ser en unidades, convertir a kg
-            $cantUnidades = 0; // unidades pedidas originalmente (cuando aplica conversión)
+            $esPeso = $match->tipo !== 'Unidad';
+            $precio = (float) $match->PRE;
+
+            $cant  = 0;
+            $kilos = 0;
+
             if ($esPeso) {
-                $conversion = $this->convertirUnidadesAKg($item['descrip'], $cantidad);
+                $conversion = $this->convertirUnidadesAKg($descrip, $cantidad);
                 if ($conversion) {
-                    $cantUnidades = (int) $cantidad;  // guardar las unidades originales
-                    [$cantidad] = $conversion;         // $cantidad ahora es kg
+                    $cant  = (int) $cantidad;
+                    [$kilos] = $conversion;
+                } else {
+                    $kilos = $cantidad;
+                }
+            } else {
+                $cant = (int) $cantidad;
+            }
+
+            $base = $esPeso ? $kilos : $cant;
+            $neto = round($precio * $base, 2);
+
+            $key = mb_strtolower($match->des);
+
+            if ($cantidad <= 0) {
+                unset($carrito[$key]);
+            } else {
+                $carrito[$key] = [
+                    'cod'     => $match->cod,
+                    'descrip' => $match->des,
+                    'cant'    => $cant,
+                    'kilos'   => $kilos,
+                    'precio'  => $precio,
+                    'neto'    => $neto,
+                    'tipo'    => $match->tipo,
+                ];
+            }
+        }
+
+        Cache::put($this->carritoKey($client), $carrito, now()->addHour());
+
+        return $this->formatCarrito($carrito);
+    }
+
+    private function verCarrito($client): string
+    {
+        return $this->formatCarrito(Cache::get($this->carritoKey($client), []));
+    }
+
+    private function vaciarCarrito($client): string
+    {
+        Cache::forget($this->carritoKey($client));
+        return 'Carrito vaciado.';
+    }
+
+    private function formatCarrito(array $carrito): string
+    {
+        if (empty($carrito)) {
+            return 'El carrito está vacío.';
+        }
+
+        $lineas = [];
+        $total  = 0;
+
+        foreach ($carrito as $item) {
+            $esPeso = $item['tipo'] !== 'Unidad';
+            if ($esPeso) {
+                $cant = $item['cant'] > 0
+                    ? "{$item['cant']}u ({$item['kilos']}kg)"
+                    : "{$item['kilos']}kg";
+            } else {
+                $cant = "{$item['cant']}u";
+            }
+            $precioFmt = number_format($item['precio'], 2, ',', '.');
+            $netoFmt   = number_format($item['neto'],   2, ',', '.');
+            $lineas[]  = "{$item['descrip']} {$cant} × {$precioFmt} \$ = {$netoFmt} \$";
+            $total    += $item['neto'];
+        }
+
+        $lineas[] = 'TOTAL: ' . number_format($total, 2, ',', '.') . ' $';
+
+        return implode("\n", $lineas);
+    }
+
+    private function createOrder($client, string $fechaEntrega = '', string $obs = ''): string
+    {
+        $carrito = Cache::get($this->carritoKey($client), []);
+
+        if (empty($carrito)) {
+            return 'El carrito está vacío. Agregá productos antes de confirmar el pedido.';
+        }
+
+        $nro    = (Pedido::max('nro') ?? 0) + 1;
+        $fecha  = $fechaEntrega ?: now()->format('Y-m-d');
+        $codcli = $client->cuenta ? $client->cuenta->cod : $client->id;
+        $nomcli = $client->cuenta ? $client->cuenta->nom : $client->name;
+
+        $precioActual = Producto::whereIn('cod', array_column($carrito, 'cod'))
+            ->get(['cod', 'PRE'])
+            ->keyBy('cod');
+
+        $alertas = [];
+
+        foreach ($carrito as $item) {
+            $precio = $item['precio'];
+            $neto   = $item['neto'];
+
+            // Verificar si el precio cambió desde que se armó el carrito
+            if (isset($item['cod']) && $precioActual->has($item['cod'])) {
+                $preActual = (float) $precioActual[$item['cod']]->PRE;
+                if ($preActual !== $precio) {
+                    $base   = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
+                    $neto   = round($preActual * $base, 2);
+                    $precio = $preActual;
+                    $alertas[] = "{$item['descrip']} (precio actualizado a " . number_format($preActual, 2, ',', '.') . ' $)';
                 }
             }
 
-            $neto = round($precio * $cantidad, 2);
-
             Pedido::create([
-                'fecha'   => $fecha,
-                'nro'     => $nro,
-                'nomcli'  => $nomcli,
-                'codcli'  => $codcli,
-                'descrip' => $item['descrip'],
-                'kilos'   => $esPeso ? $cantidad : 0,
-                'cant'    => $esPeso ? $cantUnidades : (int) $cantidad,
-                'precio'  => $precio,
-                'neto'    => $neto,
+                'fecha'     => $fecha,
+                'nro'       => $nro,
+                'nomcli'    => $nomcli,
+                'codcli'    => $codcli,
+                'descrip'   => $item['descrip'],
+                'kilos'     => $item['kilos'],
+                'cant'      => $item['cant'],
+                'precio'    => $precio,
+                'neto'      => $neto,
                 'estado'    => Pedido::ESTADO_PENDIENTE,
                 'obs'       => $obs,
                 'pedido_at' => now(),
@@ -447,11 +552,17 @@ Cuando alguien pide sugerencia para una ocasión:
             ]);
         }
 
-        $resumen = implode(', ', array_map(function ($i) use ($productos) {
-            $match  = $productos->first(fn($p) => stripos($p->des, $i['descrip']) !== false || stripos($i['descrip'], $p->des) !== false);
-            $unidad = ($match && $match->tipo === 'Unidad') ? 'u' : 'kg';
-            return "{$i['cantidad']}{$unidad} {$i['descrip']}";
-        }, $items));
+        if (!empty($alertas)) {
+            return "Pedido #{$nro} registrado. ⚠️ Precios actualizados al momento del pedido: " . implode(', ', $alertas) . '.';
+        }
+
+        $resumen = implode(', ', array_map(function ($item) {
+            return $item['cant'] > 0
+                ? "{$item['cant']}u {$item['descrip']}"
+                : "{$item['kilos']}kg {$item['descrip']}";
+        }, $carrito));
+
+        Cache::forget($this->carritoKey($client));
 
         return "Pedido #{$nro} registrado: {$resumen}.";
     }
@@ -509,60 +620,6 @@ Cuando alguien pide sugerencia para una ocasión:
         return null;
     }
 
-    private function calcularTotal(array $items): string
-    {
-        if (empty($items)) {
-            return 'No hay productos para calcular.';
-        }
-        Log::info('calcularTotal llamado', ['items' => $items]);
-
-        $productos = Cache::remember(
-            'productos_bot_precios',
-            300,
-            fn() =>
-            Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen'])
-        );
-
-        $lineas = [];
-        $total  = 0;
-
-        foreach ($items as $item) {
-            $descrip  = $item['descrip'];
-            $cantidad = (float) ($item['cantidad'] ?? $item['kilos'] ?? 0);
-
-            $match = $productos->first(
-                fn($p) =>
-                stripos($p->des, $descrip) !== false ||
-                    stripos($descrip, $p->des) !== false
-            );
-
-            if ($match) {
-                $esPeso = $match->tipo !== 'Unidad';
-
-                // Si es producto por peso y la cantidad parece ser en unidades (entero >= 3),
-                // convertir a kg para evitar que GPT pase "6 chorizos" en lugar de "0.9 kg"
-                if ($esPeso) {
-                    $conversion = $this->convertirUnidadesAKg($descrip, $cantidad);
-                    if ($conversion) {
-                        [$cantidad] = $conversion;
-                    }
-                }
-
-                $unidad = $esPeso ? 'kg' : 'u';
-                $subtotal    = round($match->PRE * $cantidad, 2);
-                $total      += $subtotal;
-                $precioFmt   = number_format($match->PRE, 2, ',', '.');
-                $subtotalFmt = number_format($subtotal, 2, ',', '.');
-                $lineas[] = "{$descrip} {$cantidad}{$unidad} × {$precioFmt} $ = {$subtotalFmt} $";
-            } else {
-                $lineas[] = "{$descrip} {$cantidad} × precio no disponible";
-            }
-        }
-
-        $lineas[] = "TOTAL ESTIMADO: " . number_format($total, 2, ',', '.') . " $";
-
-        return implode("\n", $lineas);
-    }
 
     private function cancelOrder($client, int $nro): string
     {
