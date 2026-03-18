@@ -418,10 +418,12 @@ Cuando alguien pide sugerencia para una ocasión:
             $precio = $producto ? (float) $producto->PRE : 0;
 
             // Si es producto por peso y la cantidad parece ser en unidades, convertir a kg
+            $cantUnidades = 0; // unidades pedidas originalmente (cuando aplica conversión)
             if ($esPeso) {
                 $conversion = $this->convertirUnidadesAKg($item['descrip'], $cantidad);
                 if ($conversion) {
-                    [$cantidad] = $conversion;
+                    $cantUnidades = (int) $cantidad;  // guardar las unidades originales
+                    [$cantidad] = $conversion;         // $cantidad ahora es kg
                 }
             }
 
@@ -434,7 +436,7 @@ Cuando alguien pide sugerencia para una ocasión:
                 'codcli'  => $codcli,
                 'descrip' => $item['descrip'],
                 'kilos'   => $esPeso ? $cantidad : 0,
-                'cant'    => $esPeso ? 1           : (int) $cantidad,
+                'cant'    => $esPeso ? $cantUnidades : (int) $cantidad,
                 'precio'  => $precio,
                 'neto'    => $neto,
                 'estado'    => Pedido::ESTADO_PENDIENTE,
