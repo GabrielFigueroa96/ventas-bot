@@ -12,22 +12,6 @@
     <form method="POST" action="{{ route('admin.configuracion.save') }}" class="space-y-5">
         @csrf
 
-        {{-- Días de reparto --}}
-        <div class="bg-white rounded-xl shadow p-5 space-y-3">
-            <label class="block text-sm font-semibold text-gray-700">Días de reparto</label>
-            <p class="text-xs text-gray-400">El bot informa al cliente cuándo puede recibir su pedido. Vacío = todos los días.</p>
-            <div class="flex flex-wrap gap-3">
-                @foreach(\App\Models\Empresa::DIAS_LABEL as $num => $label)
-                    <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-                        <input type="checkbox" name="bot_dias_reparto[]" value="{{ $num }}"
-                            {{ in_array($num, old('bot_dias_reparto', $empresa?->bot_dias_reparto ?? [])) ? 'checked' : '' }}
-                            class="accent-red-600">
-                        {{ $label }}
-                    </label>
-                @endforeach
-            </div>
-        </div>
-
         {{-- Tipo de entrega --}}
         <div class="bg-white rounded-xl shadow p-5 space-y-3">
             <label class="block text-sm font-semibold text-gray-700">Tipos de entrega habilitados</label>

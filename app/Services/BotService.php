@@ -248,7 +248,7 @@ class BotService
         $permiteEnvio  = $empresa?->bot_permite_envio  ?? true;
         $permiteRetiro = $empresa?->bot_permite_retiro ?? true;
         $entregasTexto = 'Tipos de entrega disponibles: ' . implode(' y ', array_filter([
-            $permiteEnvio  ? 'envío a domicilio' : null,
+            $permiteEnvio  ? 'envío' : null,
             $permiteRetiro ? 'retiro en local'   : null,
         ])) . '.';
         if (!$permiteEnvio && !$permiteRetiro) {
@@ -274,7 +274,7 @@ class BotService
 
         // Texto dinámico para el paso 3 del flujo de pedido
         $entregasOpciones = array_filter([
-            $permiteEnvio  ? 'envío a domicilio' : null,
+            $permiteEnvio  ? 'envío' : null,
             $permiteRetiro ? 'retiro en local'   : null,
         ]);
         $mediosOpciones = array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados);
@@ -283,7 +283,7 @@ class BotService
             ? "¿Lo querés para el próximo {$proximoRepartoTexto}?" . (count($diasReparto) > 1 ? ' (o indicá otra fecha de reparto disponible)' : '')
             : '¿Para cuándo?';
         $paso3Entrega = count($entregasOpciones) === 1
-            ? '¿Te lo ' . (in_array('envío a domicilio', $entregasOpciones) ? 'enviamos a domicilio' : 'pasás a buscar') . '?'
+            ? '¿Te lo ' . (in_array('envío', $entregasOpciones) ? 'enviamos' : 'pasás a buscar') . '?'
             : '¿' . implode(' o ', array_map('ucfirst', $entregasOpciones)) . '?';
         $paso3Pago = '¿Cómo abonás? (' . implode(', ', $mediosOpciones) . ')';
 
@@ -496,7 +496,7 @@ Herramientas disponibles:
                             'tipo_entrega' => [
                                 'type'        => 'string',
                                 'enum'        => $tiposEntrega,
-                                'description' => 'envio: el cliente recibe en su domicilio. retiro: el cliente pasa a buscar.',
+                                'description' => 'envio: se lleva al cliente (domicilio, local comercial, etc.). retiro: el cliente pasa a buscar.',
                             ],
                             'forma_pago' => [
                                 'type'        => 'string',
@@ -641,9 +641,15 @@ Herramientas disponibles:
 
     private function agregarAlCarrito($client, array $items): string
     {
-        $registro  = $this->getCarrito($client);
-        $carrito   = $registro ? $registro->items : [];
-        $productos = $this->productosCache();
+        $registro   = $this->getCarrito($client);
+        $carrito    = $registro ? $registro->items : [];
+        $productos  = $this->productosCache();
+        $costoExtra = 0.0;
+
+        if ($client->localidad_id) {
+            $loc        = Localidad::find($client->localidad_id);
+            $costoExtra = (float) ($loc?->costo_extra ?? 0);
+        }
 
         foreach ($items as $item) {
             $descrip  = trim($item['descrip'] ?? '');
@@ -658,7 +664,7 @@ Herramientas disponibles:
             if (!$match) continue;
 
             $esPeso = $match->tipo !== 'Unidad';
-            $precio = (float) $match->PRE;
+            $precio = (float) $match->PRE + $costoExtra;
 
             $cant  = 0;
             $kilos = 0;
@@ -721,7 +727,13 @@ Herramientas disponibles:
             return 'El carrito está vacío.';
         }
 
-        $resultado = $this->formatCarrito($registro->items);
+        $costoExtra = 0.0;
+        if ($client->localidad_id) {
+            $loc        = Localidad::find($client->localidad_id);
+            $costoExtra = (float) ($loc?->costo_extra ?? 0);
+        }
+
+        $resultado = $this->formatCarrito($registro->items, $costoExtra);
 
         // Tiempo restante
         $minutos = max(0, (int) now()->diffInMinutes($registro->expires_at, false));
@@ -749,7 +761,7 @@ Herramientas disponibles:
         return 'Carrito vaciado.';
     }
 
-    private function formatCarrito(array $carrito): string
+    private function formatCarrito(array $carrito, float $costoExtra = 0): string
     {
         if (empty($carrito)) {
             return 'El carrito está vacío.';
@@ -774,6 +786,10 @@ Herramientas disponibles:
         }
 
         $lineas[] = 'TOTAL aprox.: $' . $this->fmt($total) . ' _(puede variar según el peso final)_';
+
+        if ($costoExtra > 0) {
+            $lineas[] = "_(Incluye recargo por zona: \${$this->fmt($costoExtra)}/u·kg)_";
+        }
 
         return implode("\n", $lineas);
     }

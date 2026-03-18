@@ -195,7 +195,6 @@ class AdminController extends Controller
         $empresa->update([
             'bot_info'           => $request->bot_info,
             'bot_instrucciones'  => $request->bot_instrucciones,
-            'bot_dias_reparto'   => $request->has('bot_dias_reparto') ? $request->bot_dias_reparto : null,
             'bot_permite_retiro' => $request->boolean('bot_permite_retiro'),
             'bot_permite_envio'  => $request->boolean('bot_permite_envio'),
             'bot_medios_pago'    => $request->has('bot_medios_pago') ? $request->bot_medios_pago : null,
