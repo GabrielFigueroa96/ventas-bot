@@ -1039,10 +1039,16 @@ Herramientas disponibles:
             }
         }
 
-        $precio = $this->fmt((float) $producto->PRE);
+        $costoExtra = 0.0;
+        if ($client->localidad_id) {
+            $loc        = Localidad::find($client->localidad_id);
+            $costoExtra = (float) ($loc?->costo_extra ?? 0);
+        }
+
+        $precio = $this->fmt((float) $producto->PRE + $costoExtra);
         $unidad = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
 
-        return "Producto: {$producto->des} — {$precio} $ ({$unidad}).";
+        return "Producto: {$producto->des} — \${$precio} ({$unidad}).";
     }
 
     private function uploadMediaFromPath(string $path, string $mime = 'image/jpeg'): string
