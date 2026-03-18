@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Models\Carrito;
 use App\Models\Producto;
 use App\Models\Message;
 use App\Models\Pedido;
@@ -387,11 +388,6 @@ Cuando alguien pide sugerencia para una ocasión:
     // Carrito
     // -------------------------------------------------------------------------
 
-    private function carritoKey($client): string
-    {
-        return "carrito_{$client->id}";
-    }
-
     private function productosCache()
     {
         return Cache::remember(
@@ -401,13 +397,19 @@ Cuando alguien pide sugerencia para una ocasión:
         );
     }
 
+    private function getCarrito($client): ?Carrito
+    {
+        return Carrito::where('cliente_id', $client->id)
+            ->where('expires_at', '>', now())
+            ->latest()
+            ->first();
+    }
+
     private function agregarAlCarrito($client, array $items): string
     {
-        $carrito   = Cache::get($this->carritoKey($client), []);
+        $registro  = $this->getCarrito($client);
+        $carrito   = $registro ? $registro->items : [];
         $productos = $this->productosCache();
-
-        // Preservar o inicializar metadatos (timestamp de creación)
-        $meta = $carrito['_meta'] ?? ['created_at' => now()->timestamp];
 
         foreach ($items as $item) {
             $descrip  = trim($item['descrip'] ?? '');
@@ -430,7 +432,7 @@ Cuando alguien pide sugerencia para una ocasión:
             if ($esPeso) {
                 $conversion = $this->convertirUnidadesAKg($descrip, $cantidad);
                 if ($conversion) {
-                    $cant  = (int) $cantidad;
+                    $cant    = (int) $cantidad;
                     [$kilos] = $conversion;
                 } else {
                     $kilos = $cantidad;
@@ -448,49 +450,55 @@ Cuando alguien pide sugerencia para una ocasión:
                 unset($carrito[$key]);
             } else {
                 $carrito[$key] = [
-                    'cod'     => $match->cod,
-                    'descrip' => $match->des,
-                    'cant'    => $cant,
-                    'kilos'   => $kilos,
-                    'precio'  => $precio,
-                    'neto'    => $neto,
-                    'tipo'    => $match->tipo,
+                    'cod'    => $match->cod,
+                    'des'    => $match->des,
+                    'cant'   => $cant,
+                    'kilos'  => $kilos,
+                    'precio' => $precio,
+                    'neto'   => $neto,
+                    'tipo'   => $match->tipo,
                 ];
             }
         }
 
-        $carrito['_meta'] = $meta;
-        Cache::put($this->carritoKey($client), $carrito, now()->addHour());
+        if ($registro) {
+            $registro->update([
+                'items'      => $carrito,
+                'expires_at' => now()->addMinutes(15),
+            ]);
+        } else {
+            $registro = Carrito::create([
+                'cliente_id' => $client->id,
+                'items'      => $carrito,
+                'expires_at' => now()->addMinutes(15),
+            ]);
+        }
 
         return $this->formatCarrito($carrito);
     }
 
     private function verCarrito($client): string
     {
-        $carrito = Cache::get($this->carritoKey($client), []);
+        $registro = $this->getCarrito($client);
 
-        $resultado = $this->formatCarrito($carrito);
-
-        if (empty(array_filter($carrito, fn($k) => $k !== '_meta', ARRAY_FILTER_USE_KEY))) {
-            return $resultado;
+        if (!$registro || empty($registro->items)) {
+            return 'El carrito está vacío.';
         }
 
-        // Tiempo restante basado en created_at (carrito dura 1 hora)
-        $meta = $carrito['_meta'] ?? null;
-        if ($meta && isset($meta['created_at'])) {
-            $restante = ($meta['created_at'] + 3600) - now()->timestamp;
-            $minutos  = max(0, (int) floor($restante / 60));
-            if ($minutos <= 0) {
-                $resultado .= "\n\n⏱ El carrito está por vencer. Confirmá tu pedido ahora.";
-            } elseif ($minutos <= 15) {
-                $resultado .= "\n\n⏱ El carrito vence en {$minutos} min. Confirmá pronto.";
-            } else {
-                $resultado .= "\n\n⏱ El carrito vence en {$minutos} min.";
-            }
+        $resultado = $this->formatCarrito($registro->items);
+
+        // Tiempo restante
+        $minutos = max(0, (int) now()->diffInMinutes($registro->expires_at, false));
+        if ($minutos <= 0) {
+            $resultado .= "\n\n⏱ El carrito está por vencer. Confirmá tu pedido ahora.";
+        } elseif ($minutos <= 5) {
+            $resultado .= "\n\n⏱ El carrito vence en {$minutos} min. Confirmá pronto.";
+        } else {
+            $resultado .= "\n\n⏱ El carrito vence en {$minutos} min.";
         }
 
         // Validar existencia y precios actuales
-        $alertas = $this->validarCarrito($carrito);
+        $alertas = $this->validarCarrito($registro->items);
         if (!empty($alertas)) {
             $resultado .= "\n\n" . implode("\n", $alertas);
             $resultado .= "\n\nPodés actualizar los precios o eliminar los productos con problema antes de confirmar.";
@@ -501,22 +509,20 @@ Cuando alguien pide sugerencia para una ocasión:
 
     private function vaciarCarrito($client): string
     {
-        Cache::forget($this->carritoKey($client));
+        Carrito::where('cliente_id', $client->id)->delete();
         return 'Carrito vaciado.';
     }
 
     private function formatCarrito(array $carrito): string
     {
-        $items = array_filter($carrito, fn($k) => $k !== '_meta', ARRAY_FILTER_USE_KEY);
-
-        if (empty($items)) {
+        if (empty($carrito)) {
             return 'El carrito está vacío.';
         }
 
         $lineas = [];
         $total  = 0;
 
-        foreach ($items as $item) {
+        foreach ($carrito as $item) {
             $esPeso = $item['tipo'] !== 'Unidad';
             if ($esPeso) {
                 $cant = $item['cant'] > 0
@@ -527,7 +533,7 @@ Cuando alguien pide sugerencia para una ocasión:
             }
             $precioFmt = number_format($item['precio'], 2, ',', '.');
             $netoFmt   = number_format($item['neto'],   2, ',', '.');
-            $lineas[]  = "{$item['descrip']} {$cant} × {$precioFmt} \$ = {$netoFmt} \$";
+            $lineas[]  = "{$item['des']} {$cant} × {$precioFmt} \$ = {$netoFmt} \$";
             $total    += $item['neto'];
         }
 
@@ -538,21 +544,19 @@ Cuando alguien pide sugerencia para una ocasión:
 
     private function validarCarrito(array $carrito): array
     {
-        $items = array_filter($carrito, fn($k) => $k !== '_meta', ARRAY_FILTER_USE_KEY);
-
-        if (empty($items)) {
+        if (empty($carrito)) {
             return [];
         }
 
-        $codsEnCarrito = array_filter(array_column($items, 'cod'));
+        $codsEnCarrito = array_filter(array_column($carrito, 'cod'));
         $productosActuales = Producto::whereIn('cod', $codsEnCarrito)
             ->get(['cod', 'des', 'PRE'])
             ->keyBy('cod');
 
         $alertas = [];
-        foreach ($items as $item) {
+        foreach ($carrito as $item) {
             if (!isset($item['cod']) || !$productosActuales->has($item['cod'])) {
-                $alertas[] = "❌ {$item['descrip']}: producto no disponible actualmente";
+                $alertas[] = "❌ {$item['des']}: producto no disponible actualmente";
                 continue;
             }
 
@@ -560,7 +564,7 @@ Cuando alguien pide sugerencia para una ocasión:
             if (abs($preActual - $item['precio']) > 0.01) {
                 $precioViejo = number_format($item['precio'], 2, ',', '.');
                 $precioNuevo = number_format($preActual, 2, ',', '.');
-                $alertas[] = "⚠️ {$item['descrip']}: precio cambió de \${$precioViejo} a \${$precioNuevo}/u";
+                $alertas[] = "⚠️ {$item['des']}: precio cambió de \${$precioViejo} a \${$precioNuevo}/u";
             }
         }
 
@@ -569,7 +573,8 @@ Cuando alguien pide sugerencia para una ocasión:
 
     private function createOrder($client, string $fechaEntrega = '', string $obs = ''): string
     {
-        $carrito = Cache::get($this->carritoKey($client), []);
+        $registro = $this->getCarrito($client);
+        $carrito  = $registro ? $registro->items : [];
 
         if (empty($carrito)) {
             return 'El carrito está vacío. Agregá productos antes de confirmar el pedido.';
@@ -584,18 +589,16 @@ Cuando alguien pide sugerencia para una ocasión:
             ->get(['cod', 'PRE'])
             ->keyBy('cod');
 
-        $alertas    = [];
-        $omitidos   = [];
+        $alertas  = [];
+        $omitidos = [];
 
-        foreach ($carrito as $key => $item) {
-            if ($key === '_meta') continue;
-
+        foreach ($carrito as $item) {
             $precio = $item['precio'];
             $neto   = $item['neto'];
 
             // Producto no encontrado en BD → omitir del pedido
             if (!isset($item['cod']) || !$precioActual->has($item['cod'])) {
-                $omitidos[] = $item['descrip'];
+                $omitidos[] = $item['des'];
                 continue;
             }
 
@@ -605,7 +608,7 @@ Cuando alguien pide sugerencia para una ocasión:
                 $base   = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
                 $neto   = round($preActual * $base, 2);
                 $precio = $preActual;
-                $alertas[] = "{$item['descrip']} (precio actualizado a " . number_format($preActual, 2, ',', '.') . ' $)';
+                $alertas[] = "{$item['des']} (precio actualizado a " . number_format($preActual, 2, ',', '.') . ' $)';
             }
 
             Pedido::create([
@@ -613,7 +616,7 @@ Cuando alguien pide sugerencia para una ocasión:
                 'nro'       => $nro,
                 'nomcli'    => $nomcli,
                 'codcli'    => $codcli,
-                'descrip'   => $item['descrip'],
+                'descrip'   => $item['des'],
                 'kilos'     => $item['kilos'],
                 'cant'      => $item['cant'],
                 'precio'    => $precio,
@@ -633,14 +636,12 @@ Cuando alguien pide sugerencia para una ocasión:
             $extras[] = '⚠️ Precios actualizados: ' . implode(', ', $alertas);
         }
 
-        $items   = array_filter($carrito, fn($k) => $k !== '_meta', ARRAY_FILTER_USE_KEY);
-        $resumen = implode(', ', array_map(function ($item) {
-            return $item['cant'] > 0
-                ? "{$item['cant']}u {$item['descrip']}"
-                : "{$item['kilos']}kg {$item['descrip']}";
-        }, $items));
+        $resumen = implode(', ', array_map(
+            fn($item) => $item['cant'] > 0 ? "{$item['cant']}u {$item['des']}" : "{$item['kilos']}kg {$item['des']}",
+            $carrito
+        ));
 
-        Cache::forget($this->carritoKey($client));
+        $registro?->delete();
 
         $msg = "Pedido #{$nro} registrado: {$resumen}.";
         if (!empty($extras)) {
