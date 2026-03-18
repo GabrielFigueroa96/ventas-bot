@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Carrito;
+use App\Models\Empresa;
 use App\Models\Pedidosia;
 use App\Models\Producto;
 use App\Models\Message;
@@ -67,9 +68,10 @@ class BotService
 
     private function buildMessages(string $message, $cliente, ?array $image = null): array
     {
-        $nombre = $cliente->name ?? 'cliente';
-        $codcli = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
-        $fecha  = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
+        $nombre  = $cliente->name ?? 'cliente';
+        $codcli  = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
+        $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
+        $empresa = Cache::remember('bot_empresa_config', 300, fn() => Empresa::first());
 
         // Lista cacheada 5 minutos — ahorra tokens y DB queries
         $lista = Cache::remember('productos_bot_lista', 300, function () {
@@ -152,15 +154,21 @@ class BotService
 
         $messages = [];
 
+        $infoNegocio     = trim($empresa?->bot_info ?? '');
+        $instrucciones   = trim($empresa?->bot_instrucciones ?? '');
+        $configNegocio   = '';
+        if ($infoNegocio)   $configNegocio .= "\nInformación del negocio:\n{$infoNegocio}";
+        if ($instrucciones) $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
+
         $messages[] = [
             'role'    => 'system',
             'content' => "Sos el asistente de una carnicería. Amable, breve y directo. Respondé siempre en español argentino. Solo respondés temas de la carnicería (pedidos, precios, productos). Para cualquier otra consulta, decí amablemente que no podés ayudar con eso.
-Formato de precios: NUNCA uses separador de miles. Usá coma para decimales solo si hay centavos. Ejemplos correctos: $1500 | $36000 | $2800,50. Nunca: $1.500,00 ni $36,000 ni $21000,00.
+Formato de precios: NUNCA uses separador de miles. Usá coma para decimales solo si hay centavos. Ejemplos correctos: \$1500 | \$36000 | \$2800,50. Nunca: \$1.500,00 ni \$36,000 ni \$21000,00.
 Hoy es {$fecha}.
 Cliente: {$nombre}{$cuentaTexto}
 Último pedido: {$ultimoPedidoTexto}
 {$favoritosTexto}
-{$ultimaDirTexto}
+{$ultimaDirTexto}{$configNegocio}
 
 Productos disponibles:
 {$lista}

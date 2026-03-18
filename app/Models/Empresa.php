@@ -13,4 +13,6 @@ class Empresa extends Model
 {
     protected $table = 'empresa';
     public $timestamps = false;
+
+    protected $fillable = ['bot_info', 'bot_instrucciones'];
 }

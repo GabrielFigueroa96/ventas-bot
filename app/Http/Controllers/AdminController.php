@@ -183,6 +183,24 @@ class AdminController extends Controller
         return view('admin.pedidos', compact('pedidos', 'factventas', 'pedidosia'));
     }
 
+    public function configuracion()
+    {
+        $empresa = Empresa::first();
+        return view('admin.configuracion', compact('empresa'));
+    }
+
+    public function guardarConfiguracion(Request $request)
+    {
+        $empresa = Empresa::first();
+        $empresa->update($request->only(['bot_info', 'bot_instrucciones']));
+
+        // Limpiar cache para que el bot tome los cambios de inmediato
+        \Illuminate\Support\Facades\Cache::forget('productos_bot_lista');
+        \Illuminate\Support\Facades\Cache::forget('bot_empresa_config');
+
+        return back()->with('ok', 'Configuración guardada.');
+    }
+
     private function loadPedidosia($pedidos): \Illuminate\Support\Collection
     {
         $nros = $pedidos->pluck('nro')->unique()->filter()->values();

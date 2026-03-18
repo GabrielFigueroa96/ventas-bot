@@ -5,6 +5,7 @@ use App\Http\Controllers\AdminChatController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\RecordatorioController;
 
 Route::get('/', fn() => view('welcome'));
 
@@ -28,6 +29,18 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::post('/clientes/{cliente}/enviar',        [AdminChatController::class, 'enviar'])->name('chat.enviar');
     Route::post('/clientes/{cliente}/cuenta',        [AdminChatController::class, 'setCuenta'])->name('chat.setCuenta');
     Route::get ('/cuentas/buscar',                   [AdminChatController::class, 'cuentaBuscar'])->name('cuentas.buscar');
+
+    // Recordatorios
+    Route::get   ('/recordatorios',          [RecordatorioController::class, 'index'])->name('recordatorios');
+    Route::post  ('/recordatorios',          [RecordatorioController::class, 'store'])->name('recordatorios.store');
+    Route::get   ('/recordatorios/{rec}/edit',[RecordatorioController::class, 'edit'])->name('recordatorios.edit');
+    Route::put   ('/recordatorios/{rec}',    [RecordatorioController::class, 'update'])->name('recordatorios.update');
+    Route::delete('/recordatorios/{rec}',    [RecordatorioController::class, 'destroy'])->name('recordatorios.destroy');
+    Route::patch ('/recordatorios/{rec}/toggle',[RecordatorioController::class, 'toggle'])->name('recordatorios.toggle');
+
+    // Configuración del bot
+    Route::get ('/configuracion',  [AdminController::class, 'configuracion'])->name('configuracion');
+    Route::post('/configuracion',  [AdminController::class, 'guardarConfiguracion'])->name('configuracion.save');
 
     // Productos
     Route::get  ('/productos',                       [ProductoController::class, 'index'])->name('productos');
