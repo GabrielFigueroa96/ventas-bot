@@ -399,7 +399,7 @@ Cuando alguien pide sugerencia para una ocasión:
         return Cache::remember(
             'productos_bot_precios',
             300,
-            fn() => Producto::where('PRE', '>', 0)->get(['cod', 'des', 'PRE', 'tipo', 'imagen'])
+            fn() => Producto::where('PRE', '>', 0)->get(['cod', 'des', 'PRE', 'tipo', 'imagen', 'descripcion'])
         );
     }
 
@@ -436,8 +436,15 @@ Cuando alguien pide sugerencia para una ocasión:
             $kilos = 0;
 
             if ($esPeso) {
-                // GPT siempre pasa kg para productos por peso (ya convirtió de unidades si fue necesario)
-                $kilos = $cantidad;
+                // Si la descripción tiene peso por unidad (ej: "aprox. 0.15kg c/u")
+                // y la cantidad es un entero, PHP convierte unidades → kg
+                $pesoUnitario = $this->parsePesoUnitario($match->descripcion ?? '');
+                if ($pesoUnitario && $cantidad >= 1 && floor($cantidad) === $cantidad) {
+                    $cant  = (int) $cantidad;
+                    $kilos = round($cantidad * $pesoUnitario, 3);
+                } else {
+                    $kilos = $cantidad;
+                }
             } else {
                 $cant = (int) $cantidad;
             }
@@ -570,6 +577,15 @@ Cuando alguien pide sugerencia para una ocasión:
         }
 
         return $alertas;
+    }
+
+    // Extrae el peso por unidad de la descripción del producto (ej: "aprox. 0.15kg c/u" → 0.15)
+    private function parsePesoUnitario(string $descripcion): ?float
+    {
+        if (preg_match('/aprox[.\s]*(\d+(?:[.,]\d+)?)\s*kg\s*c\//i', $descripcion, $m)) {
+            return (float) str_replace(',', '.', $m[1]);
+        }
+        return null;
     }
 
     private function createOrder($client, string $fechaEntrega = '', string $obs = ''): string
