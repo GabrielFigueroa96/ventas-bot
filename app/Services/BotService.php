@@ -372,7 +372,7 @@ Herramientas disponibles:
 - crear_pedido → confirmar y registrar el pedido
 - ver_pedidos → historial y estado de pedidos
 - cancelar_pedido → cancelar un pedido pendiente
-- ver_precios → lista de precios actualizada
+- ver_precios → lista de precios actualizada (mostrala tal cual, sin reformatear)
 - ver_producto → detalle e imagen de un producto específico
 - Si recibís una imagen, describila e intentá relacionarla con un pedido.",
         ];
@@ -968,16 +968,21 @@ Herramientas disponibles:
         $codcli  = $client->cuenta ? $client->cuenta->cod : $client->id;
         $pedidos = Pedido::where('codcli', $codcli)
             ->orderByDesc('reg')
-            ->take(5)
-            ->get();
+            ->get()
+            ->groupBy('nro')
+            ->take(5);
 
         if ($pedidos->isEmpty()) {
             return 'El cliente no tiene pedidos registrados.';
         }
 
-        return $pedidos->map(function ($p) {
-            $cantidad = $p->cant > 1 ? "{$p->cant}u" : "{$p->kilos}kg";
-            return "#{$p->nro} ({$p->fecha}): {$p->descrip} {$cantidad} — {$p->estado_texto}";
+        return $pedidos->map(function ($items, $nro) {
+            $fecha  = $items->first()->fecha;
+            $estado = $items->first()->estado_texto;
+            $detalle = $items->map(function ($p) {
+                return $p->cant > 1 ? "{$p->cant}u {$p->descrip}" : "{$p->kilos}kg {$p->descrip}";
+            })->implode(', ');
+            return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}";
         })->implode("\n");
     }
 
@@ -1059,20 +1064,36 @@ Herramientas disponibles:
 
     private function priceList(): string
     {
-        Cache::forget('productos_bot_lista');
-        Cache::forget('productos_bot_precios');
-
-        $productos = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen']);
+        $productos = Producto::where('PRE', '>', 0)
+            ->select('des', 'PRE', 'tipo', 'desgrupo')
+            ->get();
 
         if ($productos->isEmpty()) {
             return 'No hay productos disponibles en este momento.';
         }
 
-        return $productos->map(
-            fn($p) => $p->tipo === 'Unidad'
-                ? "{$p->des} — $" . $this->fmt((float) $p->PRE) . "/u"
-                : "{$p->des} — $" . $this->fmt((float) $p->PRE) . "/kg"
-        )->implode("\n");
+        $bloques = [];
+
+        foreach (['Unidad', 'Peso'] as $tipo) {
+            $tipoLabel = $tipo === 'Unidad' ? '*Por unidad:*' : '*Por kilo:*';
+            $grupos    = $productos->where('tipo', $tipo)
+                ->groupBy(fn($p) => $p->desgrupo ?: 'General');
+
+            if ($grupos->isEmpty()) continue;
+
+            $lineas = [$tipoLabel];
+            foreach ($grupos as $nombreGrupo => $items) {
+                $lineas[] = "_{$nombreGrupo}_";
+                foreach ($items as $p) {
+                    $precio    = $this->fmt((float) $p->PRE);
+                    $unidad    = $tipo === 'Unidad' ? '/u' : '/kg';
+                    $lineas[] = "• {$p->des}: \${$precio}{$unidad}";
+                }
+            }
+            $bloques[] = implode("\n", $lineas);
+        }
+
+        return implode("\n\n", $bloques);
     }
 
     // -------------------------------------------------------------------------
