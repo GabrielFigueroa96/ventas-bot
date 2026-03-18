@@ -20,7 +20,7 @@
                     <input type="checkbox" name="bot_permite_envio" value="1"
                         {{ old('bot_permite_envio', $empresa?->bot_permite_envio ?? true) ? 'checked' : '' }}
                         class="accent-red-600">
-                    🚚 Envío a domicilio
+                    🚚 Envío
                 </label>
                 <label class="flex items-center gap-2 text-sm cursor-pointer">
                     <input type="checkbox" name="bot_permite_retiro" value="1"

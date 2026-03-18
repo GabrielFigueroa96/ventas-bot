@@ -40,6 +40,9 @@
     <div class="flex items-center justify-between px-5 py-3 border-b">
         <div class="flex items-center gap-3 flex-wrap">
             <span class="font-bold text-gray-800">#{{ $nro }}</span>
+            @if($sia?->nomcli ?: $first->nomcli)
+                <span class="text-sm font-semibold text-gray-700">{{ $sia?->nomcli ?: $first->nomcli }}</span>
+            @endif
             @if($pedidoAt)
                 <span class="text-xs text-gray-400">Pedido el {{ $pedidoAt }}</span>
             @endif
