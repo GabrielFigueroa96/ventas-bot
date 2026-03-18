@@ -137,7 +137,7 @@ Reglas:
 - ver_producto → cuando el cliente pregunta por un producto específico (qué es, cómo se usa, precio, etc.). Envía la imagen automáticamente. Al responder, usá formato limpio sin listas, ejemplo: 🥩 *Asado de tira* — \$1.500/kg. Corte ideal para parrilla.
 - ver_pedidos → estado e historial de pedidos.
 - cancelar_pedido → si el cliente quiere cancelar un pedido pendiente.
-- calcular_total → SIEMPRE usalo cuando recomendés productos (asado, parrillada, etc.) para mostrar el costo estimado real.
+- calcular_total → SIEMPRE usalo cuando recomendés productos. Incluí TODOS los ítems de la sugerencia en una sola llamada. Nunca calcules precios manualmente ni omitas productos.
 - Si recibís imagen, describila e intentá relacionarla con un pedido.
 - Respondé siempre en español argentino.
 
@@ -536,8 +536,18 @@ Cuando alguien pide sugerencia para una ocasión:
             );
 
             if ($match) {
-                $esPeso      = $match->tipo !== 'Unidad';
-                $unidad      = $esPeso ? 'kg' : 'u';
+                $esPeso = $match->tipo !== 'Unidad';
+
+                // Si es producto por peso y la cantidad parece ser en unidades (entero >= 3),
+                // convertir a kg para evitar que GPT pase "6 chorizos" en lugar de "0.9 kg"
+                if ($esPeso) {
+                    $conversion = $this->convertirUnidadesAKg($descrip, $cantidad);
+                    if ($conversion) {
+                        [$cantidad] = $conversion;
+                    }
+                }
+
+                $unidad = $esPeso ? 'kg' : 'u';
                 $subtotal    = round($match->PRE * $cantidad, 2);
                 $total      += $subtotal;
                 $precioFmt   = number_format($match->PRE, 2, ',', '.');
