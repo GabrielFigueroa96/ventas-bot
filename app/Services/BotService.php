@@ -492,8 +492,9 @@ Cuando alguien pide sugerencia para una ocasión:
      */
     private function convertirUnidadesAKg(string $descrip, float $cantidad): ?array
     {
-        // Solo aplica si la cantidad parece ser unidades (número entero razonable)
-        if ($cantidad < 1 || $cantidad > 50 || floor($cantidad) !== $cantidad) {
+        // Solo aplica si la cantidad parece ser claramente unidades (entero >= 3)
+        // Así evitamos confundir "1 kg" o "2 kg" con "1 unidad" o "2 unidades"
+        if ($cantidad < 3 || $cantidad > 50 || floor($cantidad) !== $cantidad) {
             return null;
         }
 
@@ -535,16 +536,7 @@ Cuando alguien pide sugerencia para una ocasión:
             );
 
             if ($match) {
-                $esPeso = $match->tipo !== 'Unidad';
-
-                // Si es producto por peso y la cantidad parece estar en unidades, convertir
-                if ($esPeso) {
-                    $conversion = $this->convertirUnidadesAKg($descrip, $cantidad);
-                    if ($conversion) {
-                        [$cantidad] = $conversion;
-                    }
-                }
-
+                $esPeso      = $match->tipo !== 'Unidad';
                 $unidad      = $esPeso ? 'kg' : 'u';
                 $subtotal    = round($match->PRE * $cantidad, 2);
                 $total      += $subtotal;
