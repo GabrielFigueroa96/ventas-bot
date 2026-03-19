@@ -425,9 +425,15 @@ Herramientas disponibles:
         ];
 
         foreach ($history as $msg) {
+            $content = $msg->message ?: '(imagen)';
+            // En mensajes del bot, borrar precios de productos (pueden estar desactualizados)
+            // pero NO en resúmenes de pedidos (Pedido #, Total:, Estado:) que son históricos y correctos
+            if ($msg->direction === 'outgoing' && !preg_match('/Pedido\s*#|Total:|Estado:|Subtotal:/i', $content)) {
+                $content = preg_replace('/\$[\d\.,]+\s*(?:\/\s*(?:kg|u|unidad))?/i', '$[actualizado]', $content);
+            }
             $messages[] = [
                 'role'    => $msg->direction === 'incoming' ? 'user' : 'assistant',
-                'content' => $msg->message ?: '(imagen)',
+                'content' => $content,
             ];
         }
 
