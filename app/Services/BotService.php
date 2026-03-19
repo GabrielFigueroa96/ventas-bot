@@ -727,7 +727,7 @@ Herramientas disponibles:
 
             if ($candidatos->count() > 1) {
                 $opciones = $candidatos->pluck('des')->map(fn($d) => "• {$d}")->implode("\n");
-                $ambiguos[] = "Para '{$descrip}' encontré varias opciones:\n{$opciones}\nEspecificá cuál querés.";
+                $ambiguos[] = "Para '{$descrip}' encontré varias opciones. Cada una puede tener precio diferente — NO menciones precios:\n{$opciones}\nPreguntale al cliente cuál quiere y usá el nombre exacto al volver a llamar agregar_al_carrito.";
                 continue;
             }
 
@@ -1109,7 +1109,7 @@ Herramientas disponibles:
 
         if ($candidatos->count() > 1) {
             $opciones = $candidatos->pluck('des')->map(fn($d) => "• {$d}")->implode("\n");
-            return "Encontré varias opciones para '{$nombre}':\n{$opciones}\n¿Cuál de estos querés?";
+            return "Encontré varias opciones para '{$nombre}'. Cada una puede tener precio diferente — NO menciones precios hasta que el cliente elija una y se llame ver_producto para esa específica:\n{$opciones}\nPreguntale al cliente cuál quiere.";
         }
 
         $producto = $candidatos->first();
