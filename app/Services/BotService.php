@@ -235,7 +235,18 @@ class BotService
 
         // Días de reparto: usa la localidad del cliente si tiene una configurada, si no la global
         $diasLabel     = Empresa::DIAS_LABEL;
-        $localidadObj  = $cliente->localidad_id ? Localidad::find($cliente->localidad_id) : null;
+        $localidadObj = $cliente->localidad_id
+            ? Localidad::find($cliente->localidad_id)
+            : ($cliente->localidad
+                ? Localidad::where('activo', true)
+                    ->whereRaw('LOWER(nombre) = ?', [strtolower($cliente->localidad)])
+                    ->first()
+                : null);
+
+        // Si encontró la localidad por nombre pero el cliente no tiene localidad_id, lo actualiza
+        if ($localidadObj && !$cliente->localidad_id) {
+            $cliente->update(['localidad_id' => $localidadObj->id]);
+        }
         $diasReparto   = $localidadObj?->dias_reparto ?? $empresa?->bot_dias_reparto ?? [];
         if (!empty($diasReparto)) {
             $diasNombres = implode(', ', array_map(fn($d) => $diasLabel[$d] ?? $d, $diasReparto));
