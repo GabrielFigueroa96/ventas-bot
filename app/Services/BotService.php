@@ -259,6 +259,29 @@ class BotService
                 : '';
         }
 
+        // Top 5 productos más vendidos globalmente
+        $masVendidosGlobal = Cache::remember('bot_mas_vendidos', 3600, fn() =>
+            Pedido::selectRaw('descrip, COUNT(*) as veces')
+                ->groupBy('descrip')
+                ->orderByDesc('veces')
+                ->take(5)
+                ->pluck('descrip')
+                ->implode(', ')
+        );
+
+        // Todas las zonas de entrega activas con sus días
+        $todasLasZonas = Cache::remember('bot_zonas_entrega', 3600, function () use ($diasLabel) {
+            return Localidad::where('activo', true)
+                ->get()
+                ->map(function ($l) use ($diasLabel) {
+                    $dias = !empty($l->dias_reparto)
+                        ? implode(', ', array_map(fn($d) => $diasLabel[$d] ?? $d, $l->dias_reparto))
+                        : 'días a confirmar';
+                    return "{$l->nombre} (reparto los: {$dias})";
+                })
+                ->implode(' | ');
+        });
+
         // Tipos de entrega habilitados
         $permiteEnvio  = $empresa?->bot_permite_envio  ?? true;
         $permiteRetiro = $empresa?->bot_permite_retiro ?? true;
@@ -303,9 +326,11 @@ class BotService
         $paso3Pago = '¿Cómo abonás? (' . implode(', ', $mediosOpciones) . ')';
 
         $configNegocio = "\n{$entregasTexto}\n{$mediosTexto}";
-        if ($diasTexto)      $configNegocio .= "\n{$diasTexto}";
-        if ($infoNegocio)    $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
-        if ($instrucciones)  $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
+        if ($diasTexto)          $configNegocio .= "\n{$diasTexto}";
+        if ($todasLasZonas)      $configNegocio .= "\nZonas de entrega disponibles: {$todasLasZonas}";
+        if ($masVendidosGlobal)  $configNegocio .= "\nProductos más vendidos del negocio: {$masVendidosGlobal}";
+        if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
+        if ($instrucciones)      $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
 
         $messages[] = [
             'role'    => 'system',
