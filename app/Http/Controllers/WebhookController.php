@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Cliente;
 use App\Models\Message;
+use App\Models\MessageLog;
 use App\Models\Seguimiento;
 use App\Services\BotService;
 use App\Services\TenantManager;
@@ -67,10 +68,12 @@ class WebhookController extends Controller
             $phoneNumberId = data_get($value, 'metadata.phone_number_id');
 
             // Activar el tenant según el número de WhatsApp que recibió el mensaje
-            if (!$phoneNumberId || !app(TenantManager::class)->loadByPhoneNumberId($phoneNumberId)) {
+            $manager = app(TenantManager::class);
+            if (!$phoneNumberId || !$manager->loadByPhoneNumberId($phoneNumberId)) {
                 Log::warning("Webhook: tenant no encontrado para phone_number_id [{$phoneNumberId}]");
                 return response()->json(['status' => 'ignored']);
             }
+            $tenantId = $manager->get()->id;
 
             if (empty($value['messages'])) {
                 return response()->json(['status' => 'ignored']);
@@ -135,6 +138,15 @@ class WebhookController extends Controller
                 'cliente_id' => $client->id,
                 'message'    => $reply,
                 'direction'  => 'outgoing',
+            ]);
+
+            MessageLog::on('mysql')->create([
+                'tenant_id'     => $tenantId,
+                'phone'         => $phone,
+                'type'          => $type,
+                'message'       => $message,
+                'reply'         => $reply,
+                'enviado'       => true,
             ]);
 
             return response()->json(['status' => 'ok']);
