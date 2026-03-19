@@ -420,7 +420,7 @@ Herramientas disponibles:
 - ver_pedidos → historial y estado de pedidos
 - cancelar_pedido → cancelar un pedido pendiente
 - ver_precios → lista de precios actualizada (mostrala tal cual, sin reformatear)
-- ver_producto → detalle e imagen de un producto específico. SIEMPRE usá esta herramienta cuando el cliente menciona o pregunta por cualquier producto (disponibilidad, precio, si hay X, cómo es el X, tenés X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta.
+- ver_producto → detalle e imagen de un producto específico. SIEMPRE usá esta herramienta cuando el cliente menciona o pregunta por cualquier producto (disponibilidad, precio, si hay X, cómo es el X, tenés X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial de conversación pueden estar desactualizados — ignoralos siempre y llamá a ver_producto para obtener el precio real.
 - Si recibís una imagen, describila e intentá relacionarla con un pedido.",
         ];
 
