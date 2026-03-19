@@ -883,6 +883,12 @@ Herramientas disponibles:
             ->get(['cod', 'PRE'])
             ->keyBy('cod');
 
+        $costoExtra = 0.0;
+        if ($client->localidad_id) {
+            $loc        = Localidad::find($client->localidad_id);
+            $costoExtra = (float) ($loc?->costo_extra ?? 0);
+        }
+
         $alertas  = [];
         $omitidos = [];
 
@@ -896,13 +902,14 @@ Herramientas disponibles:
                 continue;
             }
 
-            // Verificar si el precio cambió desde que se armó el carrito
-            $preActual = (float) $precioActual[$item['cod']]->PRE;
-            if (abs($preActual - $precio) > 0.01) {
+            // Verificar si el precio base cambió desde que se armó el carrito
+            $preActual     = (float) $precioActual[$item['cod']]->PRE;
+            $preConExtra   = $preActual + $costoExtra;
+            if (abs($preConExtra - $precio) > 0.01) {
                 $base   = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
-                $neto   = round($preActual * $base, 2);
-                $precio = $preActual;
-                $alertas[] = "{$item['des']} (precio actualizado a $" . $this->fmt($preActual) . ')';
+                $neto   = round($preConExtra * $base, 2);
+                $precio = $preConExtra;
+                $alertas[] = "{$item['des']} (precio actualizado a $" . $this->fmt($preConExtra) . ')';
             }
 
             Pedido::create([
