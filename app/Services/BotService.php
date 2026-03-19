@@ -141,16 +141,15 @@ class BotService
         $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
         $empresa = Cache::remember('bot_empresa_config', 300, fn() => Empresa::first());
 
-        // Lista cacheada 5 minutos — ahorra tokens y DB queries
+        // Lista cacheada 5 minutos — solo nombres, sin precios
+        // Los precios se obtienen siempre frescos via tool ver_producto
         $lista = Cache::remember('productos_bot_lista', 300, function () {
             $productos = Producto::where('PRE', '>', 0)
-                ->select('des', 'PRE', 'tipo', 'grupo', 'desgrupo', 'descripcion')
+                ->select('des', 'tipo', 'grupo', 'desgrupo', 'descripcion')
                 ->get();
 
             $formatear = function ($p) {
-                $precio = (int) $p->PRE;
-                $unidad = $p->tipo === 'Unidad' ? '/u' : '/kg';
-                $linea  = "{$p->des} \${$precio}{$unidad}";
+                $linea = $p->des;
                 if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
                     $linea .= " ({$p->descripcion})";
                 }
@@ -350,7 +349,7 @@ Cliente: {$nombre}{$cuentaTexto}
 {$favoritosTexto}
 {$ultimaDirTexto}{$configNegocio}
 
-Productos disponibles:
+Productos disponibles (solo nombres — para precios usá siempre ver_producto):
 {$lista}
 
 ════════════════════════════════
