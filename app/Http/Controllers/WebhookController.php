@@ -10,6 +10,7 @@ use App\Services\BotService;
 use App\Services\TenantManager;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class WebhookController extends Controller
@@ -145,13 +146,23 @@ class WebhookController extends Controller
 
             $reply = $bot->process($client, $message, $image);
 
-            Message::create([
-                'cliente_id' => $client->id,
-                'message'    => $reply,
-                'direction'  => 'outgoing',
-                'wamid'      => $bot->lastOutgoingWamid,
-                'status'     => $bot->lastOutgoingWamid ? 'sent' : null,
-            ]);
+            try {
+                Message::create([
+                    'cliente_id' => $client->id,
+                    'message'    => $reply,
+                    'direction'  => 'outgoing',
+                    'wamid'      => $bot->lastOutgoingWamid,
+                    'status'     => $bot->lastOutgoingWamid ? 'sent' : null,
+                ]);
+            } catch (\Throwable $msgEx) {
+                // Fallback: si las columnas wamid/status aún no existen (migración pendiente)
+                Message::create([
+                    'cliente_id' => $client->id,
+                    'message'    => $reply,
+                    'direction'  => 'outgoing',
+                ]);
+                Log::warning('Message::create fallback (migración pendiente?): ' . $msgEx->getMessage());
+            }
 
             MessageLog::on('mysql')->create([
                 'tenant_id'     => $tenantId,
@@ -161,6 +172,23 @@ class WebhookController extends Controller
                 'reply'         => $reply,
                 'enviado'       => true,
             ]);
+
+            // Registrar el mensaje saliente en el gateway (fire & forget)
+            $gatewayLogUrl = config('api.webhook.log_url');
+            if ($gatewayLogUrl && $bot->lastOutgoingWamid) {
+                try {
+                    Http::withToken(config('api.webhook.secret'))
+                        ->timeout(3)
+                        ->post($gatewayLogUrl, [
+                            'phone_number_id' => config('api.whatsapp.phone_number_id'),
+                            'to'              => $phone,
+                            'wamid'           => $bot->lastOutgoingWamid,
+                            'message'         => $reply,
+                        ]);
+                } catch (\Throwable $e) {
+                    Log::debug('Gateway log-outgoing falló: ' . $e->getMessage());
+                }
+            }
 
             return response()->json(['status' => 'ok']);
 
