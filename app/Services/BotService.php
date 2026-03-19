@@ -329,6 +329,12 @@ class BotService
         if ($diasTexto)          $configNegocio .= "\n{$diasTexto}";
         if ($todasLasZonas)      $configNegocio .= "\nZonas de entrega disponibles: {$todasLasZonas}";
         if ($masVendidosGlobal)  $configNegocio .= "\nProductos más vendidos del negocio: {$masVendidosGlobal}";
+
+        $costoExtra = $this->costoExtraCliente($cliente);
+        if ($costoExtra > 0) {
+            $configNegocio .= "\n\n⚠️ IMPORTANTE — RECARGO DE ZONA: Este cliente es de {$cliente->localidad}. A TODOS los precios de la lista debés sumarle \${$this->fmt($costoExtra)} de recargo por zona. Ejemplo: si el precio base es \$18000/kg, el precio para este cliente es \$" . $this->fmt(18000 + $costoExtra) . "/kg. Siempre aclará que incluye recargo por zona.";
+        }
+
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
         if ($instrucciones)      $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
 
