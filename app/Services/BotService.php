@@ -769,11 +769,7 @@ Herramientas disponibles:
             return 'El carrito está vacío.';
         }
 
-        $costoExtra = 0.0;
-        if ($client->localidad_id) {
-            $loc        = Localidad::find($client->localidad_id);
-            $costoExtra = (float) ($loc?->costo_extra ?? 0);
-        }
+        $costoExtra = $this->costoExtraCliente($client);
 
         $resultado = $this->formatCarrito($registro->items, $costoExtra);
 
@@ -801,6 +797,23 @@ Herramientas disponibles:
     {
         Carrito::where('cliente_id', $client->id)->delete();
         return 'Carrito vaciado.';
+    }
+
+    private function costoExtraCliente($client): float
+    {
+        if ($client->localidad_id) {
+            return (float) (Localidad::find($client->localidad_id)?->costo_extra ?? 0);
+        }
+        if ($client->localidad) {
+            $loc = Localidad::where('activo', true)
+                ->whereRaw('LOWER(nombre) = ?', [strtolower($client->localidad)])
+                ->first();
+            if ($loc) {
+                $client->update(['localidad_id' => $loc->id]);
+                return (float) ($loc->costo_extra ?? 0);
+            }
+        }
+        return 0.0;
     }
 
     private function formatCarrito(array $carrito, float $costoExtra = 0): string
@@ -923,11 +936,7 @@ Herramientas disponibles:
             ->get(['cod', 'PRE'])
             ->keyBy('cod');
 
-        $costoExtra = 0.0;
-        if ($client->localidad_id) {
-            $loc        = Localidad::find($client->localidad_id);
-            $costoExtra = (float) ($loc?->costo_extra ?? 0);
-        }
+        $costoExtra = $this->costoExtraCliente($client);
 
         $alertas  = [];
         $omitidos = [];
@@ -1088,11 +1097,7 @@ Herramientas disponibles:
             }
         }
 
-        $costoExtra = 0.0;
-        if ($client->localidad_id) {
-            $loc        = Localidad::find($client->localidad_id);
-            $costoExtra = (float) ($loc?->costo_extra ?? 0);
-        }
+        $costoExtra = $this->costoExtraCliente($client);
 
         $precio = $this->fmt((float) $producto->PRE + $costoExtra);
         $unidad = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
