@@ -145,13 +145,16 @@ class BotService
         // Los precios se obtienen siempre frescos via tool ver_producto
         $lista = Cache::remember('productos_bot_lista', 300, function () {
             $productos = Producto::where('PRE', '>', 0)
-                ->select('des', 'tipo', 'grupo', 'desgrupo', 'descripcion')
+                ->select('des', 'tipo', 'grupo', 'desgrupo', 'descripcion', 'notas_ia')
                 ->get();
 
             $formatear = function ($p) {
                 $linea = $p->des;
                 if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
                     $linea .= " ({$p->descripcion})";
+                }
+                if (!empty($p->notas_ia)) {
+                    $linea .= " [IA: {$p->notas_ia}]";
                 }
                 return $linea;
             };
@@ -1079,7 +1082,7 @@ Herramientas disponibles:
     private function verProducto($client, string $nombre): string
     {
         // Sin cache: siempre precio e imagen actualizados desde la BD
-        $productos = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion']);
+        $productos = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion', 'notas_ia']);
 
         $normalize = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
         $haystack  = $normalize($nombre);

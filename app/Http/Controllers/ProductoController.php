@@ -73,6 +73,22 @@ class ProductoController extends Controller
         return back()->with('success', "Descripción de {$producto->des} actualizada.");
     }
 
+    public function updateNotasIa(Request $request, int $id)
+    {
+        $producto = Producto::findOrFail($id);
+        $request->validate(['notas_ia' => 'nullable|string|max:500']);
+
+        $producto->update(['notas_ia' => $request->input('notas_ia', '')]);
+
+        Cache::forget('productos_bot_lista');
+
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true]);
+        }
+
+        return back()->with('success', "Notas IA de {$producto->des} actualizadas.");
+    }
+
     public function deleteImagen(int $id)
     {
         $producto = Producto::findOrFail($id);

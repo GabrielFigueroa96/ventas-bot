@@ -56,4 +56,5 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::post ('/productos/{producto}/imagen',     [ProductoController::class, 'uploadImagen'])->name('productos.imagen');
     Route::delete('/productos/{producto}/imagen',    [ProductoController::class, 'deleteImagen'])->name('productos.imagen.delete');
     Route::patch('/productos/{producto}/descripcion',[ProductoController::class, 'updateDescripcion'])->name('productos.descripcion');
+    Route::patch('/productos/{producto}/notas-ia',  [ProductoController::class, 'updateNotasIa'])->name('productos.notas_ia');
 });

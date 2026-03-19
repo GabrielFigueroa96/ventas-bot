@@ -23,6 +23,7 @@ class Producto extends Model
         'desgrupo',
         'imagen',
         'descripcion',
+        'notas_ia',
     ];
 
 
