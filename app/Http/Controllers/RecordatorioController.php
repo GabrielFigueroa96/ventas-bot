@@ -41,15 +41,11 @@ class RecordatorioController extends Controller
 
     public function edit(Recordatorio $rec)
     {
-        $localidades = Cuenta::select('loca')->distinct()->orderBy('loca')->pluck('loca')->filter()->values();
-        $provincias  = Cuenta::select('prov')->distinct()->orderBy('prov')->pluck('prov')->filter()->values();
+        $recordatorios = Recordatorio::orderByDesc('id')->get();
+        $localidades   = Localidad::where('activo', true)->orderBy('nombre')->get();
+        $provincias    = Localidad::where('activo', true)->whereNotNull('provincia')->distinct()->orderBy('provincia')->pluck('provincia');
 
-        return view('admin.recordatorios', [
-            'recordatorios' => Recordatorio::orderByDesc('id')->get(),
-            'editando'      => $rec,
-            'localidades'   => $localidades,
-            'provincias'    => $provincias,
-        ]);
+        return view('admin.recordatorios', compact('recordatorios', 'localidades', 'provincias') + ['editando' => $rec]);
     }
 
     public function update(Request $request, Recordatorio $rec)

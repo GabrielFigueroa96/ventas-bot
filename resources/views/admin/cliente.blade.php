@@ -73,11 +73,52 @@
     <div class="bg-white rounded-xl shadow flex flex-col" style="height: calc(100vh - 220px);">
         <div class="px-5 py-4 border-b font-semibold text-gray-700 flex items-center justify-between shrink-0">
             <span>Conversación</span>
-            @if($cliente->modo === 'humano')
-                <span class="text-xs text-orange-500 font-medium">Respondiendo manualmente</span>
-            @else
-                <span class="text-xs text-green-500 font-medium">Bot activo</span>
-            @endif
+            <div class="flex items-center gap-3">
+                @if($cliente->modo === 'humano')
+                    <span class="text-xs text-orange-500 font-medium">Respondiendo manualmente</span>
+                @else
+                    <span class="text-xs text-green-500 font-medium">Bot activo</span>
+                @endif
+                <button onclick="abrirModalImprimir()"
+                    class="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 border border-gray-200 hover:border-red-300 px-2.5 py-1 rounded-lg transition"
+                    title="Imprimir conversación">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+                    </svg>
+                    Imprimir
+                </button>
+            </div>
+        </div>
+
+        {{-- Modal imprimir --}}
+        <div id="modal-imprimir" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+                <h3 class="font-bold text-gray-800 text-base mb-4">Imprimir conversación</h3>
+                <form id="form-imprimir" target="_blank" method="GET" action="{{ route('admin.chat.imprimir', $cliente) }}">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-xs font-semibold text-gray-600 mb-1 block">Desde</label>
+                            <input type="date" name="desde" required
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                        </div>
+                        <div>
+                            <label class="text-xs font-semibold text-gray-600 mb-1 block">Hasta</label>
+                            <input type="date" name="hasta" required
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                        </div>
+                    </div>
+                    <div class="flex gap-2 mt-5">
+                        <button type="button" onclick="cerrarModalImprimir()"
+                            class="flex-1 border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm font-medium py-2 rounded-lg transition">
+                            Cancelar
+                        </button>
+                        <button type="submit"
+                            class="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 rounded-lg transition">
+                            Ver / Imprimir
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         {{-- Mensajes --}}
@@ -425,6 +466,26 @@ document.addEventListener('click', e => {
     if (!e.target.closest('#cuenta-buscar') && !e.target.closest('#cuenta-display')) {
         document.getElementById('cuenta-buscar')?.classList.add('hidden');
     }
+});
+
+// ── Modal imprimir ────────────────────────────────────────────────────────────
+function abrirModalImprimir() {
+    // Prellenar fechas: hoy como "hasta", hace 7 días como "desde"
+    const hoy = new Date();
+    const hace7 = new Date(hoy); hace7.setDate(hoy.getDate() - 7);
+    const fmt = d => d.toISOString().slice(0, 10);
+    const form = document.getElementById('form-imprimir');
+    form.querySelector('[name=desde]').value = fmt(hace7);
+    form.querySelector('[name=hasta]').value = fmt(hoy);
+    document.getElementById('modal-imprimir').classList.remove('hidden');
+}
+
+function cerrarModalImprimir() {
+    document.getElementById('modal-imprimir').classList.add('hidden');
+}
+
+document.getElementById('modal-imprimir')?.addEventListener('click', function(e) {
+    if (e.target === this) cerrarModalImprimir();
 });
 </script>
 @endsection

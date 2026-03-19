@@ -43,6 +43,20 @@ return [
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
         ],
 
+        // Conexión dinámica para el tenant activo (se configura en runtime por TenantManager)
+        'tenant' => [
+            'driver'    => 'mysql',
+            'host'      => '',
+            'port'      => '3306',
+            'database'  => '',
+            'username'  => '',
+            'password'  => '',
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix'    => '',
+            'strict'    => true,
+        ],
+
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DATABASE_URL'),

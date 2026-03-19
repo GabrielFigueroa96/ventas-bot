@@ -19,6 +19,17 @@ class BotService
     private const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
     private const OPENAI_MODEL = 'gpt-4o-mini';
 
+    private string $whatsappKey;
+    private string $openaiKey;
+    private string $phoneNumberId;
+
+    public function __construct(string $whatsappKey, string $openaiKey, string $phoneNumberId)
+    {
+        $this->whatsappKey   = $whatsappKey;
+        $this->openaiKey     = $openaiKey;
+        $this->phoneNumberId = $phoneNumberId;
+    }
+
     // -------------------------------------------------------------------------
     // Punto de entrada principal
     // -------------------------------------------------------------------------
@@ -406,7 +417,7 @@ Herramientas disponibles:
     // Descarga un archivo de WhatsApp y lo devuelve como base64
     public function downloadWhatsappMedia(string $mediaId): array
     {
-        $waToken = config('api.whatsapp.key');
+        $waToken = $this->whatsappKey;
 
         $meta = Http::withToken($waToken)
             ->get("https://graph.facebook.com/v19.0/{$mediaId}")
@@ -1062,11 +1073,11 @@ Herramientas disponibles:
 
     private function uploadMediaFromPath(string $path, string $mime = 'image/jpeg'): string
     {
-        $response = Http::withToken(config('api.whatsapp.key'))
+        $response = Http::withToken($this->whatsappKey)
             ->attach('file', file_get_contents($path), basename($path), ['Content-Type' => $mime])
             ->attach('messaging_product', 'whatsapp')
             ->attach('type', $mime)
-            ->post('https://graph.facebook.com/v19.0/295131097015095/media');
+            ->post('https://graph.facebook.com/v19.0/{$this->phoneNumberId}/media');
 
         $mediaId = $response->json('id');
 
@@ -1128,7 +1139,7 @@ Herramientas disponibles:
             $payload['tool_choice'] = 'auto';
         }
 
-        $response = Http::withToken(config('api.openai.key'))
+        $response = Http::withToken($this->openaiKey)
             ->post(self::OPENAI_URL, $payload)
             ->json();
 
@@ -1154,7 +1165,7 @@ Herramientas disponibles:
 
     public function transcribeAudio(string $mediaId): string
     {
-        $waToken = config('api.whatsapp.key');
+        $waToken = $this->whatsappKey;
 
         // 1. Obtener la URL de descarga del audio
         $meta = Http::withToken($waToken)
@@ -1177,7 +1188,7 @@ Herramientas disponibles:
         file_put_contents($tmpPath, $audioContent);
 
         // 4. Enviar a Whisper para transcribir
-        $response = Http::withToken(config('api.openai.key'))
+        $response = Http::withToken($this->openaiKey)
             ->attach('file', file_get_contents($tmpPath), basename($tmpPath))
             ->post('https://api.openai.com/v1/audio/transcriptions', [
                 'model'    => 'whisper-1',
@@ -1193,7 +1204,7 @@ Herramientas disponibles:
     {
         $mime = $file->getMimeType();
 
-        $response = Http::withToken(config('api.whatsapp.key'))
+        $response = Http::withToken($this->whatsappKey)
             ->attach(
                 'file',
                 file_get_contents($file->getRealPath()),
@@ -1202,7 +1213,7 @@ Herramientas disponibles:
             )
             ->attach('messaging_product', 'whatsapp')
             ->attach('type', $mime)
-            ->post('https://graph.facebook.com/v19.0/295131097015095/media');
+            ->post('https://graph.facebook.com/v19.0/{$this->phoneNumberId}/media');
 
         $mediaId = $response->json('id');
 
@@ -1224,8 +1235,8 @@ Herramientas disponibles:
         }
 
         try {
-            Http::withToken(config('api.whatsapp.key'))
-                ->post('https://graph.facebook.com/v19.0/295131097015095/messages', [
+            Http::withToken($this->whatsappKey)
+                ->post('https://graph.facebook.com/v19.0/{$this->phoneNumberId}/messages', [
                     'messaging_product' => 'whatsapp',
                     'to'                => $phone,
                     'type'              => $type,
@@ -1239,8 +1250,8 @@ Herramientas disponibles:
     public function sendWhatsapp(string $phone, string $message): void
     {
         try {
-            Http::withToken(config('api.whatsapp.key'))
-                ->post('https://graph.facebook.com/v19.0/295131097015095/messages', [
+            Http::withToken($this->whatsappKey)
+                ->post('https://graph.facebook.com/v19.0/{$this->phoneNumberId}/messages', [
                     'messaging_product' => 'whatsapp',
                     'to'                => $phone,
                     'type'              => 'text',

@@ -9,12 +9,31 @@ use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Pedidosia;
 use App\Services\BotService;
+use App\Services\TenantManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class AdminChatController extends Controller
 {
+    public function imprimir(Request $request, Cliente $cliente)
+    {
+        $request->validate([
+            'desde' => 'required|date',
+            'hasta' => 'required|date|after_or_equal:desde',
+        ]);
+
+        $desde = \Carbon\Carbon::parse($request->desde)->startOfDay();
+        $hasta = \Carbon\Carbon::parse($request->hasta)->endOfDay();
+
+        $mensajes = Message::where('cliente_id', $cliente->id)
+            ->whereBetween('created_at', [$desde, $hasta])
+            ->oldest('id')
+            ->get();
+
+        return view('admin.imprimir-conversacion', compact('cliente', 'mensajes', 'desde', 'hasta'));
+    }
+
     public function mensajesNuevos(Cliente $cliente, Request $request)
     {
         $desdeId = (int) $request->input('since', 0);
@@ -54,7 +73,8 @@ class AdminChatController extends Controller
             'archivo' => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf|max:16384',
         ]);
 
-        $bot       = app(BotService::class);
+        $tenant    = app(TenantManager::class)->get();
+        $bot       = new BotService($tenant->whatsapp_api_key, $tenant->openai_api_key, $tenant->phone_number_id);
         $texto     = '';
         $mediaPath = null;
         $tipo      = 'text';

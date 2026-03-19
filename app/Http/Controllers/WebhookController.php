@@ -8,53 +8,70 @@ use App\Models\Cliente;
 use App\Models\Message;
 use App\Models\Seguimiento;
 use App\Services\BotService;
+use App\Services\TenantManager;
 
 use Exception;
 use Illuminate\Support\Facades\Log;
 
 class WebhookController extends Controller
 {
+    /**
+     * Verificación GET que Meta envía al registrar el webhook.
+     * Identifica el tenant por el webhook_token para validar que existe.
+     */
     public function index(Request $request)
     {
         try {
-            $verifyToken = config('api.webhook.token');
-            $query = $request->query();
+            $token     = $request->query('hub_verify_token');
+            $mode      = $request->query('hub_mode');
+            $challenge = $request->query('hub_challenge');
 
-            $mode = $query['hub_mode'] ?? null;
-            $token = $query['hub_verify_token'] ?? null;
-            $challenge = $query['hub_challenge'] ?? null;
-
-            if ($mode && $token) {
-                if ($mode === 'subscribe' && $token === $verifyToken) {
-                    return response($challenge, 200)->header('Content-Type', 'text/plain');
-                }
+            if ($mode !== 'subscribe' || !$token) {
+                throw new Exception('Invalid request');
             }
 
-            throw new Exception('Invalid request');
+            // Buscar el tenant por su webhook_token
+            $manager = app(TenantManager::class);
+            if (!$manager->loadByWebhookToken($token)) {
+                throw new Exception('Unknown token');
+            }
+
+            return response($challenge, 200)->header('Content-Type', 'text/plain');
+
         } catch (Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 500);
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 403);
         }
     }
 
+    /**
+     * Recibe los mensajes entrantes de WhatsApp.
+     * El phone_number_id del payload identifica a qué carnicería pertenece.
+     */
     public function store(Request $request)
     {
-
         try {
-            $bodyContent = json_decode($request->getContent(), true);
-            $value       = $bodyContent['entry'][0]['changes'][0]['value'];
+            $bodyContent   = json_decode($request->getContent(), true);
+            $value         = $bodyContent['entry'][0]['changes'][0]['value'];
+            $phoneNumberId = $value['metadata']['phone_number_id'] ?? null;
+
+            // Identificar y activar el tenant
+            $manager = app(TenantManager::class);
+            if (!$phoneNumberId || !$manager->loadByPhoneNumberId($phoneNumberId)) {
+                Log::warning('Webhook: tenant no encontrado', ['phone_number_id' => $phoneNumberId]);
+                return response()->json(['status' => 'ignored']);
+            }
 
             if (empty($value['messages'])) {
                 return response()->json(['status' => 'ignored']);
             }
 
+            $tenant = $manager->get();
+            $bot    = new BotService($tenant->whatsapp_api_key, $tenant->openai_api_key, $tenant->phone_number_id);
+
             $msg   = $value['messages'][0];
             $phone = $msg['from'];
             $type  = $msg['type'];
             $wamid = $msg['id'];
-            $bot   = app(BotService::class);
 
             $image   = null;
             $message = '';
@@ -83,7 +100,6 @@ class WebhookController extends Controller
             $client = Cliente::firstOrCreate(['phone' => $phone]);
 
             // Guardado atómico: la constraint UNIQUE en wamid rechaza duplicados a nivel DB.
-            // Si dos webhooks llegan simultáneamente, el segundo falla aquí sin procesar nada.
             try {
                 Message::create([
                     'cliente_id' => $client->id,
@@ -122,15 +138,13 @@ class WebhookController extends Controller
                 'exception' => $ex,
                 'phone'     => $phone ?? null,
             ]);
-            if (!empty($phone)) {
-                app(BotService::class)->sendWhatsapp(
+            if (!empty($phone) && isset($bot)) {
+                $bot->sendWhatsapp(
                     $phone,
                     'Ocurrió un error procesando tu mensaje. Por favor intentá de nuevo en unos minutos.'
                 );
             }
             return response()->json(['error' => $ex->getMessage()], 500);
         }
-
     }
-    
 }
