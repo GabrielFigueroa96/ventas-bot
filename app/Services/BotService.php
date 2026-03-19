@@ -1071,9 +1071,10 @@ Herramientas disponibles:
 
     private function verProducto($client, string $nombre): string
     {
-        $producto = $this->productosCache()->first(
-            fn($p) => stripos($p->des, $nombre) !== false || stripos($nombre, $p->des) !== false
-        );
+        // Sin cache: siempre precio e imagen actualizados desde la BD
+        $producto = Producto::where('PRE', '>', 0)
+            ->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion'])
+            ->first(fn($p) => stripos($p->des, $nombre) !== false || stripos($nombre, $p->des) !== false);
 
         if (!$producto) {
             return "Producto '{$nombre}' no encontrado en la lista.";
