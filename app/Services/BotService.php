@@ -17,7 +17,7 @@ use App\Models\Pedido;
 class BotService
 {
     private const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-    private const OPENAI_MODEL = 'gpt-4o-mini';
+    private const OPENAI_MODEL = 'gpt-4.1';
 
     private function whatsappKey(): string   { return config('api.whatsapp.key'); }
     private function openaiKey(): string     { return config('api.openai.key'); }
