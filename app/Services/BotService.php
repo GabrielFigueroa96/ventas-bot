@@ -118,13 +118,14 @@ class BotService
     {
         $messages = $this->buildMessages($message, $cliente, $image);
         $empresa  = Cache::remember('bot_empresa_config', 300, fn() => Empresa::first());
+        $tools    = $this->tools($empresa);
 
         // Primera llamada: ChatGPT decide si responde o llama una función
-        $response = $this->callOpenAI($messages, $this->tools($empresa));
+        $response = $this->callOpenAI($messages, $tools);
         $choice   = $response['choices'][0];
 
         if ($choice['finish_reason'] === 'tool_calls') {
-            return $this->handleToolCalls($choice, $messages, $cliente);
+            return $this->handleToolCalls($choice, $messages, $cliente, $tools);
         }
 
         return $choice['message']['content'];
@@ -423,7 +424,8 @@ Herramientas disponibles:
 - ver_pedidos → historial y estado de pedidos
 - cancelar_pedido → cancelar un pedido pendiente
 - ver_precios → lista de precios actualizada (mostrala tal cual, sin reformatear)
-- ver_producto → detalle e imagen de un producto específico. Usá esta herramienta cuando el cliente pregunta por un producto (disponibilidad, precio, descripción, si hay X, cómo es el X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial pueden estar desactualizados — usá siempre ver_producto para el precio real. NO la volvás a llamar si ya fue llamada para ese producto en esta conversación y el cliente solo está confirmando o pidiendo cantidad.
+- ver_producto → detalle e imagen de un producto específico. Usá esta herramienta cuando el cliente pregunta por un producto (disponibilidad, precio, descripción, si hay X, cómo es el X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial pueden estar desactualizados — usá siempre ver_producto para el precio real. NO la volvás a llamar si el cliente solo está confirmando que quiere ese producto o pidiendo cantidad.
+- Cuando el cliente responde afirmativamente ('sí', 'dale', 'sí quiero', etc.) luego de que se le mostró un producto: NO llamés ver_producto. Preguntale directamente la cantidad y llamá agregar_al_carrito con lo que confirme. Si ya dijo la cantidad, llamá agregar_al_carrito directamente.
 - Si recibís una imagen, describila e intentá relacionarla con un pedido.",
         ];
 
@@ -638,39 +640,46 @@ Herramientas disponibles:
     // Ejecución de la función elegida por ChatGPT
     // -------------------------------------------------------------------------
 
-    private function handleToolCalls(array $choice, array $messages, $cliente): string
+    private function handleToolCalls(array $choice, array $messages, $cliente, array $tools = []): string
     {
-        // Agregar el mensaje del asistente con todos sus tool_calls
-        $messages[] = $choice['message'];
+        for ($round = 0; $round < 5; $round++) {
+            // Agregar el mensaje del asistente con todos sus tool_calls
+            $messages[] = $choice['message'];
 
-        // Responder a cada tool_call (OpenAI exige respuesta para cada ID)
-        foreach ($choice['message']['tool_calls'] as $toolCall) {
-            $funcName = $toolCall['function']['name'];
-            $args     = json_decode($toolCall['function']['arguments'], true) ?? [];
+            // Responder a cada tool_call (OpenAI exige respuesta para cada ID)
+            foreach ($choice['message']['tool_calls'] as $toolCall) {
+                $funcName = $toolCall['function']['name'];
+                $args     = json_decode($toolCall['function']['arguments'], true) ?? [];
 
-            $result = match ($funcName) {
-                'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
-                'ver_carrito'        => $this->verCarrito($cliente),
-                'vaciar_carrito'     => $this->vaciarCarrito($cliente),
-                'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['calle'] ?? '', $args['numero'] ?? '', $args['localidad'] ?? '', $args['dato_extra'] ?? '', $args['obs'] ?? ''),
-                'ver_pedidos'        => $this->orderStatus($cliente),
-                'ver_precios'        => $this->priceList($cliente),
-                'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false)),
-                'cancelar_pedido'    => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
-                default              => 'Función desconocida.',
-            };
+                $result = match ($funcName) {
+                    'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
+                    'ver_carrito'        => $this->verCarrito($cliente),
+                    'vaciar_carrito'     => $this->vaciarCarrito($cliente),
+                    'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['calle'] ?? '', $args['numero'] ?? '', $args['localidad'] ?? '', $args['dato_extra'] ?? '', $args['obs'] ?? ''),
+                    'ver_pedidos'        => $this->orderStatus($cliente),
+                    'ver_precios'        => $this->priceList($cliente),
+                    'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false)),
+                    'cancelar_pedido'    => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
+                    default              => 'Función desconocida.',
+                };
 
-            $messages[] = [
-                'role'         => 'tool',
-                'tool_call_id' => $toolCall['id'],
-                'content'      => $result,
-            ];
+                $messages[] = [
+                    'role'         => 'tool',
+                    'tool_call_id' => $toolCall['id'],
+                    'content'      => $result,
+                ];
+            }
+
+            // Siguiente llamada: GPT puede responder con texto o encadenar más tools
+            $response = $this->callOpenAI($messages, $tools);
+            $choice   = $response['choices'][0];
+
+            if ($choice['finish_reason'] !== 'tool_calls') {
+                break;
+            }
         }
 
-        // Segunda llamada: ChatGPT transforma los resultados en lenguaje natural
-        $response = $this->callOpenAI($messages);
-
-        return $response['choices'][0]['message']['content'];
+        return $choice['message']['content'] ?? '';
     }
 
     // -------------------------------------------------------------------------
@@ -702,13 +711,9 @@ Herramientas disponibles:
     {
         $registro   = $this->getCarrito($client);
         $carrito    = $registro ? $registro->items : [];
-        $productos  = $this->productosCache();
-        $costoExtra = 0.0;
-
-        if ($client->localidad_id) {
-            $loc        = Localidad::find($client->localidad_id);
-            $costoExtra = (float) ($loc?->costo_extra ?? 0);
-        }
+        $productos  = Producto::where('PRE', '>', 0)->get(['cod', 'des', 'PRE', 'tipo', 'descripcion']);
+        $costoExtra = $this->costoExtraCliente($client);
+        $normalize  = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
 
         foreach ($items as $item) {
             $descrip  = trim($item['descrip'] ?? '');
@@ -716,9 +721,12 @@ Herramientas disponibles:
 
             if ($descrip === '') continue;
 
-            $match = $productos->first(
-                fn($p) => stripos($p->des, $descrip) !== false || stripos($descrip, $p->des) !== false
-            );
+            $nd = $normalize($descrip);
+            $palabras = array_filter(explode(' ', $nd), fn($w) => strlen($w) > 2);
+
+            $match = $productos->first(fn($p) => str_contains($normalize($p->des), $nd) || str_contains($nd, $normalize($p->des)))
+                ?? $productos->first(fn($p) => collect($palabras)->every(fn($w) => str_contains($normalize($p->des), $w)))
+                ?? $productos->first(fn($p) => collect($palabras)->contains(fn($w) => str_contains($normalize($p->des), $w)));
 
             if (!$match) continue;
 
@@ -1220,7 +1228,7 @@ Herramientas disponibles:
         $payload = [
             'model'      => self::OPENAI_MODEL,
             'messages'   => $messages,
-            'max_tokens' => 300,
+            'max_tokens' => 500,
         ];
 
         if (!empty($tools)) {
