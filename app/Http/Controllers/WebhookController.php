@@ -98,9 +98,9 @@ class WebhookController extends Controller
             } elseif ($type === 'image') {
                 $image   = $bot->downloadWhatsappMedia($msg['image']['id']);
                 $message = $msg['image']['caption'] ?? '';
-                $imgPath = 'chat-images/' . md5($wamid) . '.jpg';
-                if (!is_dir(public_path('chat-images'))) {
-                    mkdir(public_path('chat-images'), 0755, true);
+                $imgPath = "chat-images/{$tenantId}/" . md5($wamid) . '.jpg';
+                if (!is_dir(public_path("chat-images/{$tenantId}"))) {
+                    mkdir(public_path("chat-images/{$tenantId}"), 0755, true);
                 }
                 file_put_contents(public_path($imgPath), base64_decode($image['base64']));
             } else {

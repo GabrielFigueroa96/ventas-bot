@@ -9,6 +9,7 @@ use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Pedidosia;
 use App\Services\BotService;
+use App\Services\TenantManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -78,6 +79,7 @@ class AdminChatController extends Controller
         ]);
 
         $bot       = app(BotService::class);
+        $tenantId  = app(TenantManager::class)->get()->id;
         $texto     = '';
         $mediaPath = null;
         $tipo      = 'text';
@@ -90,9 +92,9 @@ class AdminChatController extends Controller
                 $caption = $request->input('mensaje', '');
 
                 // Guardar localmente para mostrar en la conversación
-                $filename  = 'chat-images/' . Str::uuid() . '.' . $file->getClientOriginalExtension();
-                if (!is_dir(public_path('chat-images'))) {
-                    mkdir(public_path('chat-images'), 0755, true);
+                $filename  = "chat-images/{$tenantId}/" . Str::uuid() . '.' . $file->getClientOriginalExtension();
+                if (!is_dir(public_path("chat-images/{$tenantId}"))) {
+                    mkdir(public_path("chat-images/{$tenantId}"), 0755, true);
                 }
                 copy($file->getRealPath(), public_path($filename));
                 $mediaPath = $filename;

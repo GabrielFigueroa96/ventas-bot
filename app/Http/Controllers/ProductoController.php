@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Producto;
+use App\Services\TenantManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -25,10 +26,11 @@ class ProductoController extends Controller
 
     public function uploadImagen(Request $request, int $id)
     {
-        $producto = Producto::findOrFail($id);
+        $producto  = Producto::findOrFail($id);
+        $tenantId  = app(TenantManager::class)->get()->id;
         $request->validate(['imagen' => 'required|image|max:3072']);
 
-        $dir = public_path('producto-images');
+        $dir = public_path("producto-images/{$tenantId}");
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
@@ -44,7 +46,7 @@ class ProductoController extends Controller
         $file = $request->file('imagen');
         $slug = Str::slug($producto->des) . '-' . $producto->cod;
 
-        $name = $this->optimizarImagen($file->getRealPath(), $file->getMimeType(), $slug);
+        $name = $this->optimizarImagen($file->getRealPath(), $file->getMimeType(), $slug, $tenantId);
 
         $producto->update(['imagen' => $name]);
 
@@ -93,15 +95,16 @@ class ProductoController extends Controller
      * Redimensiona y comprime la imagen a máx 800px, guardando como WebP (si GD lo soporta) o JPEG.
      * Retorna la ruta relativa desde public/.
      */
-    private function optimizarImagen(string $srcPath, string $mime, string $slug): string
+    private function optimizarImagen(string $srcPath, string $mime, string $slug, int $tenantId): string
     {
         $maxWidth  = 800;
         $maxHeight = 800;
         $quality   = 80;
+        $base      = "producto-images/{$tenantId}";
 
         // Si GD no está disponible, guardar tal cual como JPEG
         if (!extension_loaded('gd')) {
-            $name = "producto-images/{$slug}.jpg";
+            $name = "{$base}/{$slug}.jpg";
             copy($srcPath, public_path($name));
             return $name;
         }
@@ -116,7 +119,7 @@ class ProductoController extends Controller
         };
 
         if (!$src) {
-            $name = "producto-images/{$slug}.jpg";
+            $name = "{$base}/{$slug}.jpg";
             copy($srcPath, public_path($name));
             return $name;
         }
@@ -141,10 +144,10 @@ class ProductoController extends Controller
 
         // Guardar como WebP si está disponible, sino JPEG
         if (function_exists('imagewebp')) {
-            $name = "producto-images/{$slug}.webp";
+            $name = "{$base}/{$slug}.webp";
             imagewebp($dst, public_path($name), $quality);
         } else {
-            $name = "producto-images/{$slug}.jpg";
+            $name = "{$base}/{$slug}.jpg";
             imagejpeg($dst, public_path($name), $quality);
         }
 

@@ -1089,8 +1089,10 @@ Herramientas disponibles:
         }
 
         // Enviar imagen con descripción y precio como caption (todo en 1 mensaje)
+        Log::info("verProducto [{$producto->des}] imagen='{$producto->imagen}'");
         if (!empty($producto->imagen) && $producto->imagen !== 'sinimagen.webp') {
             $path = public_path($producto->imagen);
+            Log::info("verProducto path={$path} exists=" . (file_exists($path) ? 'SI' : 'NO'));
             if (file_exists($path)) {
                 try {
                     $mime    = $this->mimeFromPath($path);
@@ -1098,10 +1100,8 @@ Herramientas disponibles:
                     $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $caption);
                     return "Ya envié al cliente la imagen de {$producto->des} con su precio y descripción. No repitas esta información, solo preguntá si desea agregarlo al carrito.";
                 } catch (\Throwable $e) {
-                    Log::error("verProducto imagen {$producto->des}: {$e->getMessage()}");
+                    Log::error("verProducto upload error [{$producto->des}]: {$e->getMessage()}");
                 }
-            } else {
-                Log::warning("verProducto: archivo no encontrado en {$path}");
             }
         }
 
