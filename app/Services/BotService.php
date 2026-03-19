@@ -712,7 +712,7 @@ Herramientas disponibles:
     {
         $registro   = $this->getCarrito($client);
         $carrito    = $registro ? $registro->items : [];
-        $productos  = Producto::where('PRE', '>', 0)->get(['cod', 'des', 'PRE', 'tipo', 'descripcion']);
+        $productos  = Producto::where('PRE', '>', 0)->get(['cod', 'des', 'PRE', 'tipo', 'descripcion', 'notas_ia']);
         $costoExtra = $this->costoExtraCliente($client);
         $normalize  = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
         $errores    = [];
@@ -731,8 +731,10 @@ Herramientas disponibles:
                 continue;
             }
 
-            $esPeso = $match->tipo !== 'Unidad';
-            $precio = (float) $match->PRE + $costoExtra;
+            // notas_ia con "precio fijo" → se cobra por unidad aunque tipo sea Peso
+            $precioFijo = !empty($match->notas_ia) && stripos($match->notas_ia, 'precio fijo') !== false;
+            $esPeso     = $match->tipo !== 'Unidad' && !$precioFijo;
+            $precio     = (float) $match->PRE + $costoExtra;
 
             $cant  = 0;
             $kilos = 0;
@@ -748,7 +750,8 @@ Herramientas disponibles:
                     $kilos = $cantidad;
                 }
             } else {
-                $cant = (int) $cantidad;
+                // Precio fijo o tipo Unidad: se cobra por cantidad entera
+                $cant = max(1, (int) $cantidad);
             }
 
             $base = $esPeso ? $kilos : $cant;
@@ -1111,7 +1114,13 @@ Herramientas disponibles:
             return "Encontré varias opciones para '{$nombre}'. Cada una puede tener precio diferente — NO menciones precios hasta que el cliente elija una y se llame ver_producto para esa específica:\n{$opciones}\nPreguntale al cliente cuál quiere.";
         }
 
-        $producto = $candidatos->first();
+        $producto  = $candidatos->first();
+        $normalize = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
+
+        // Si la coincidencia no es exacta (fuzzy), confirmar antes de mostrar
+        if ($normalize($producto->des) !== $normalize($nombre)) {
+            return "Encontré '{$producto->des}' como posible coincidencia para '{$nombre}'. Preguntale al cliente: '¿Te referís a {$producto->des}?' y si confirma llamá ver_producto con el nombre exacto '{$producto->des}'.";
+        }
 
         $caption = "*{$producto->des}*";
         if (!empty($producto->descripcion)) {
