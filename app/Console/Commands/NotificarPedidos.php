@@ -7,7 +7,9 @@ use App\Models\Pedido;
 use App\Models\PedidoNotificacion;
 use App\Models\Pedidosia;
 use App\Services\BotService;
+use App\Services\TenantManager;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class NotificarPedidos extends Command
@@ -18,9 +20,13 @@ class NotificarPedidos extends Command
     private const MSG_ENVIO  = "¡Hola {nombre}! 🎉 Tu pedido #{nro} ya está listo y en camino a tu domicilio. ¡Gracias!";
     private const MSG_RETIRO = "¡Hola {nombre}! 🎉 Tu pedido #{nro} ya está listo. Podés pasar a retirarlo cuando quieras. ¡Gracias!";
 
-    public function handle(BotService $bot): void
+    public function handle(): void
     {
-        $this->procesarEstado($bot, Pedido::ESTADO_FINALIZADO);
+        $tenants = DB::connection('mysql')->table('tenants')->where('activo', true)->get();
+        foreach ($tenants as $tenant) {
+            app(TenantManager::class)->loadById($tenant->id);
+            $this->procesarEstado(app(BotService::class), Pedido::ESTADO_FINALIZADO);
+        }
     }
 
     private function procesarEstado(BotService $bot, int $estado): void

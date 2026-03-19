@@ -80,6 +80,7 @@ class TenantManager
 
     private function switchConnection(object $tenant): void
     {
+        // Cambiar la conexión a la DB del tenant
         config([
             'database.connections.tenant.driver'    => 'mysql',
             'database.connections.tenant.host'      => $tenant->db_host,
@@ -96,5 +97,12 @@ class TenantManager
         DB::purge('tenant');
         DB::reconnect('tenant');
         DB::setDefaultConnection('tenant');
+
+        // Setear las credenciales de API de este tenant para que BotService las lea con config()
+        config([
+            'api.whatsapp.key'             => $tenant->whatsapp_api_key,
+            'api.whatsapp.phone_number_id' => $tenant->phone_number_id,
+            'api.openai.key'               => $tenant->openai_api_key,
+        ]);
     }
 }

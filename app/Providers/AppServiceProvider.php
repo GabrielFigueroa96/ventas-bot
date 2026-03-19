@@ -9,7 +9,6 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // Una única instancia de TenantManager por request
         $this->app->singleton(TenantManager::class);
     }
 

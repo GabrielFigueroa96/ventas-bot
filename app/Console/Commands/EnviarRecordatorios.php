@@ -6,7 +6,9 @@ use App\Models\Cliente;
 use App\Models\Pedido;
 use App\Models\Recordatorio;
 use App\Services\BotService;
+use App\Services\TenantManager;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class EnviarRecordatorios extends Command
@@ -14,7 +16,16 @@ class EnviarRecordatorios extends Command
     protected $signature   = 'recordatorios:enviar';
     protected $description = 'Envía recordatorios programados por WhatsApp a clientes';
 
-    public function handle(BotService $bot): void
+    public function handle(): void
+    {
+        $tenants = DB::connection('mysql')->table('tenants')->where('activo', true)->get();
+        foreach ($tenants as $tenant) {
+            app(TenantManager::class)->loadById($tenant->id);
+            $this->procesarTenant(app(BotService::class));
+        }
+    }
+
+    private function procesarTenant(BotService $bot): void
     {
         $recordatorios = Recordatorio::where('activo', true)->get()->filter->deberia();
 

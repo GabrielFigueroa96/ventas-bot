@@ -9,7 +9,6 @@ use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Pedidosia;
 use App\Services\BotService;
-use App\Services\TenantManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -73,8 +72,7 @@ class AdminChatController extends Controller
             'archivo' => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf|max:16384',
         ]);
 
-        $tenant    = app(TenantManager::class)->get();
-        $bot       = new BotService($tenant->whatsapp_api_key, $tenant->openai_api_key, $tenant->phone_number_id);
+        $bot       = app(BotService::class);
         $texto     = '';
         $mediaPath = null;
         $tipo      = 'text';

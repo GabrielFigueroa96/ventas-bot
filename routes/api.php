@@ -15,8 +15,9 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});
+// Webhook directo (Meta apunta aquí en modo dev o sin gateway)
+Route::get ('/webhook', [WebhookController::class, 'verify']);
+Route::post('/webhook', [WebhookController::class, 'direct']);
 
-Route::resource('/webhook', WebhookController::class);
+// Endpoint que llama el gateway (producción)
+Route::post('/handle', [WebhookController::class, 'handle']);
