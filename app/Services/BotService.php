@@ -423,7 +423,7 @@ Herramientas disponibles:
 - ver_pedidos → historial y estado de pedidos
 - cancelar_pedido → cancelar un pedido pendiente
 - ver_precios → lista de precios actualizada (mostrala tal cual, sin reformatear)
-- ver_producto → detalle e imagen de un producto específico. SIEMPRE usá esta herramienta cuando el cliente menciona o pregunta por cualquier producto (disponibilidad, precio, si hay X, cómo es el X, tenés X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial de conversación pueden estar desactualizados — ignoralos siempre y llamá a ver_producto para obtener el precio real.
+- ver_producto → detalle e imagen de un producto específico. Usá esta herramienta cuando el cliente pregunta por un producto (disponibilidad, precio, descripción, si hay X, cómo es el X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial pueden estar desactualizados — usá siempre ver_producto para el precio real. NO la volvás a llamar si ya fue llamada para ese producto en esta conversación y el cliente solo está confirmando o pidiendo cantidad.
 - Si recibís una imagen, describila e intentá relacionarla con un pedido.",
         ];
 
@@ -1122,7 +1122,7 @@ Herramientas disponibles:
                     $mime    = $this->mimeFromPath($path);
                     $mediaId = $this->uploadMediaFromPath($path, $mime);
                     $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $caption);
-                    return "IMAGEN_ENVIADA. El cliente ya recibió la imagen con precio y descripción. Tu respuesta debe ser ÚNICAMENTE: '¿Lo agregamos al carrito?' Sin mencionar ningún precio ni dato del producto.";
+                    return "IMAGEN_ENVIADA para {$producto->des}. El cliente ya recibió imagen, descripción y precio. Preguntale '¿Lo agregamos al carrito? ¿Cuánto querés?' (en un solo mensaje, sin repetir datos del producto). Si confirma con cantidad, llamá agregar_al_carrito. Si dice 'sí' sin cantidad, pedile solo la cantidad. NO volvás a llamar ver_producto para este mismo producto.";
                 } catch (\Throwable $e) {
                     Log::error("verProducto upload error [{$producto->des}]: {$e->getMessage()}");
                 }
@@ -1131,7 +1131,7 @@ Herramientas disponibles:
 
         // Sin imagen: enviar el texto directo y decirle a GPT que no lo repita
         $this->sendWhatsapp($client->phone, $caption);
-        return "TEXTO_ENVIADO. El cliente ya recibió precio y descripción. Tu respuesta debe ser ÚNICAMENTE: '¿Lo agregamos al carrito?' Sin mencionar ningún precio ni dato del producto.";
+        return "TEXTO_ENVIADO para {$producto->des}. El cliente ya recibió descripción y precio. Preguntale '¿Lo agregamos al carrito? ¿Cuánto querés?' (en un solo mensaje, sin repetir datos del producto). Si confirma con cantidad, llamá agregar_al_carrito. Si dice 'sí' sin cantidad, pedile solo la cantidad. NO volvás a llamar ver_producto para este mismo producto.";
     }
 
     private function mimeFromPath(string $path): string
