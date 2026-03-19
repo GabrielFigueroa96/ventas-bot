@@ -405,6 +405,7 @@ Reglas de cantidad para agregar_al_carrito:
 - Formato numérico argentino: el cliente puede escribir con punto para miles y coma para decimales. Interpretá correctamente: \'1.500\' = 1500 | \'2,5\' = 2.5 | \'0,750\' = 0.75 | \'1.200,50\' = 1200.5
 
 NUNCA menciones un producto fuera de la lista. NUNCA inventes ni estimes precios.
+Al llamar agregar_al_carrito, usá el nombre del producto EXACTAMENTE como aparece en la lista de productos disponibles. NUNCA inferas el nombre a partir del historial de conversación — el historial puede referenciar pedidos anteriores que no reflejan lo que el cliente pide ahora. Si el nombre que el cliente dice puede corresponder a varios productos de la lista, llamá ver_producto primero para que el cliente elija.
 
 ════════════════════════════════
 FLUJO 3 — INFORMAR ESTADO
@@ -713,7 +714,8 @@ Herramientas disponibles:
         $carrito    = $registro ? $registro->items : [];
         $productos  = Producto::where('PRE', '>', 0)->get(['cod', 'des', 'PRE', 'tipo', 'descripcion']);
         $costoExtra = $this->costoExtraCliente($client);
-        $ambiguos   = [];
+        $normalize  = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
+        $errores    = [];
 
         foreach ($items as $item) {
             $descrip  = trim($item['descrip'] ?? '');
@@ -721,17 +723,13 @@ Herramientas disponibles:
 
             if ($descrip === '') continue;
 
-            $candidatos = $this->buscarCandidatos($productos, $descrip);
+            // Solo coincidencia exacta (normalizada): el nombre debe ser igual al de la lista
+            $match = $productos->first(fn($p) => $normalize($p->des) === $normalize($descrip));
 
-            if ($candidatos->isEmpty()) continue;
-
-            if ($candidatos->count() > 1) {
-                $opciones = $candidatos->pluck('des')->map(fn($d) => "• {$d}")->implode("\n");
-                $ambiguos[] = "Para '{$descrip}' encontré varias opciones. Cada una puede tener precio diferente — NO menciones precios:\n{$opciones}\nPreguntale al cliente cuál quiere y usá el nombre exacto al volver a llamar agregar_al_carrito.";
+            if (!$match) {
+                $errores[] = "Producto '{$descrip}' no encontrado en la lista. Llamá ver_producto para encontrar el nombre exacto correcto antes de agregar.";
                 continue;
             }
-
-            $match = $candidatos->first();
 
             $esPeso = $match->tipo !== 'Unidad';
             $precio = (float) $match->PRE + $costoExtra;
@@ -788,8 +786,8 @@ Herramientas disponibles:
 
         $resultado = $this->formatCarrito($carrito);
 
-        if (!empty($ambiguos)) {
-            $resultado .= "\n\n" . implode("\n\n", $ambiguos);
+        if (!empty($errores)) {
+            $resultado .= "\n\n" . implode("\n", $errores);
         }
 
         return $resultado;
@@ -996,6 +994,7 @@ Herramientas disponibles:
                 'nro'       => $nro,
                 'nomcli'    => $nomcli,
                 'codcli'    => $codcli,
+                'codigo'    => $item['cod'] ?? null,
                 'descrip'   => $item['des'],
                 'kilos'     => $item['kilos'],
                 'cant'      => $item['cant'],
