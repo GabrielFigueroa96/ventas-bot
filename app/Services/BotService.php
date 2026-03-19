@@ -1070,7 +1070,7 @@ Herramientas disponibles:
             ->attach('file', file_get_contents($path), basename($path), ['Content-Type' => $mime])
             ->attach('messaging_product', 'whatsapp')
             ->attach('type', $mime)
-            ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId . '/media');
+            ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/media');
 
         $mediaId = $response->json('id');
 
@@ -1206,7 +1206,7 @@ Herramientas disponibles:
             )
             ->attach('messaging_product', 'whatsapp')
             ->attach('type', $mime)
-            ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId . '/media');
+            ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/media');
 
         $mediaId = $response->json('id');
 
@@ -1229,7 +1229,7 @@ Herramientas disponibles:
 
         try {
             Http::withToken($this->whatsappKey())
-                ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId . '/messages', [
+                ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
                     'messaging_product' => 'whatsapp',
                     'to'                => $phone,
                     'type'              => $type,
@@ -1244,14 +1244,14 @@ Herramientas disponibles:
     {
         try {
             Http::withToken($this->whatsappKey())
-                ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId . '/messages', [
+                ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
                     'messaging_product' => 'whatsapp',
                     'to'                => $phone,
                     'type'              => 'text',
                     'text'              => ['body' => $message],
                 ]);
-        } catch (\Throwable) {
-            // silencioso para no romper el flujo
+        } catch (\Throwable $e) {
+            Log::error('sendWhatsapp error: ' . $e->getMessage());
         }
     }
 }
