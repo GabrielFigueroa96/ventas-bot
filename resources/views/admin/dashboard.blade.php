@@ -114,9 +114,13 @@
         <div class="px-4 sm:px-6 py-3 flex items-start justify-between gap-3">
             <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
+                    @if($s->cliente)
                     <a href="{{ route('admin.cliente', $s->cliente) }}" class="font-medium text-gray-800 hover:underline text-sm">
                         {{ $s->cliente->name ?? $s->cliente->phone }}
                     </a>
+                    @else
+                    <span class="font-medium text-gray-400 text-sm">Cliente eliminado</span>
+                    @endif
                     <span class="text-xs px-2 py-0.5 rounded-full font-medium
                         {{ $s->tipo === 'sin_pedido' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500' }}">
                         {{ $s->tipo === 'sin_pedido' ? 'Sin pedido' : 'Inactivo' }}
