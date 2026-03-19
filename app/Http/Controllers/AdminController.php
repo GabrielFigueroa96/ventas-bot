@@ -18,27 +18,34 @@ class AdminController extends Controller
     {
         $empresa = Empresa::first();
 
-        // Precios gpt-4o-mini por token (USD)
-        $precioPorMillon = ['input' => 0.150, 'output' => 0.600];
+        // Tipo de cambio — configurar en .env
+        $dolarArs = (float) env('DOLAR_ARS', 1300);
 
+        // Costo OpenAI: suma costo_usd guardado por llamada (incluye todos los modelos)
         $tokensMes = DB::table('token_usos')
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
-            ->selectRaw('SUM(prompt_tokens) as input, SUM(completion_tokens) as output, SUM(total_tokens) as total')
+            ->selectRaw('SUM(prompt_tokens) as input, SUM(completion_tokens) as output, SUM(total_tokens) as total, SUM(costo_usd) as costo')
             ->first();
 
         $inputTokens  = (int) ($tokensMes->input  ?? 0);
         $outputTokens = (int) ($tokensMes->output ?? 0);
         $totalTokens  = (int) ($tokensMes->total  ?? 0);
+        $costoMesUsd  = round((float) ($tokensMes->costo ?? 0), 6);
 
-        $costoMesUsd = round(
-            ($inputTokens  / 1_000_000 * $precioPorMillon['input']) +
-            ($outputTokens / 1_000_000 * $precioPorMillon['output']),
-            6
-        );
+        // Costo WhatsApp: conversaciones únicas por cliente/día este mes
+        // WhatsApp cobra por ventana de 24h por cliente (aprox. 1 conversación por cliente/día activo)
+        $waCostoPorConv = (float) env('WA_COSTO_USD', 0.05);
+        $waConvMes = DB::table('messages')
+            ->where('direction', 'outgoing')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->selectRaw('COUNT(DISTINCT CONCAT(cliente_id, DATE(created_at))) as conversaciones')
+            ->value('conversaciones') ?? 0;
 
-        // Tipo de cambio aprox — actualizá este valor en .env como DOLAR_ARS
-        $dolarArs = (float) env('DOLAR_ARS', 1300);
+        $costoWaUsd = round($waConvMes * $waCostoPorConv, 4);
+
+        $costoTotalUsd = round($costoMesUsd + $costoWaUsd, 4);
         $costoMes = $costoMesUsd;
 
         $seguimientos = Seguimiento::with('cliente')
@@ -51,9 +58,14 @@ class AdminController extends Controller
             'pedidos_hoy'  => Pedido::whereDate('fecha', today())->distinct('nro')->count('nro'),
             'pedidos_pend' => Pedido::where('estado', Pedido::ESTADO_PENDIENTE)->distinct('nro')->count('nro'),
             'mensajes_hoy' => Message::whereDate('created_at', today())->count(),
-            'tokens_mes'   => number_format($totalTokens),
-            'costo_mes_usd'=> $costoMes,
-            'costo_mes_ars'=> round($costoMes * $dolarArs, 2),
+            'tokens_mes'      => number_format($totalTokens),
+            'costo_mes_usd'   => $costoMesUsd,
+            'costo_mes_ars'   => round($costoMesUsd * $dolarArs, 2),
+            'wa_conv_mes'     => (int) $waConvMes,
+            'wa_costo_usd'    => $costoWaUsd,
+            'wa_costo_ars'    => round($costoWaUsd * $dolarArs, 2),
+            'costo_total_usd' => $costoTotalUsd,
+            'costo_total_ars' => round($costoTotalUsd * $dolarArs, 2),
         ];
 
         $pedidos_recientes = Pedido::orderByDesc('reg')

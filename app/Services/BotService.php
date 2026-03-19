@@ -19,6 +19,14 @@ class BotService
     private const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
     private const OPENAI_MODEL = 'gpt-4.1';
 
+    // Precios por millón de tokens (USD) por modelo
+    private const PRECIOS_OPENAI = [
+        'gpt-4.1'      => ['input' => 2.00, 'output' => 8.00],
+        'gpt-4.1-mini' => ['input' => 0.40, 'output' => 1.60],
+        'gpt-4o'       => ['input' => 2.50, 'output' => 10.00],
+        'gpt-4o-mini'  => ['input' => 0.15, 'output' => 0.60],
+    ];
+
     private function whatsappKey(): string   { return config('api.whatsapp.key'); }
     private function openaiKey(): string     { return config('api.openai.key'); }
     private function phoneNumberId(): string { return config('api.whatsapp.phone_number_id'); }
@@ -222,7 +230,7 @@ class BotService
         // Historial de últimos 10 mensajes para mantener contexto del pedido
         $history = Message::where('cliente_id', $cliente->id)
             ->latest()
-            ->take(10)
+            ->take(20)
             ->get()
             ->reverse();
 
@@ -383,16 +391,17 @@ FLUJO 2 — TOMAR PEDIDO
 ════════════════════════════════
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
-1. Agregá cada producto con agregar_al_carrito (el sistema calcula kg, precio y neto). Para quitar un ítem, pasá cantidad 0.
-2. Mostrá el resumen con ver_carrito. Si hay alertas de precio (⚠️) o producto no disponible (❌), ofrecé actualizar o eliminar el ítem antes de continuar.
-3. Preguntá en un solo mensaje: {$paso3Fecha} | {$paso3Entrega} | {$paso3Pago}
-4. Si eligió ENVÍO:
+1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación extra ni resumas antes. Si el cliente dice si, dale, esta bien o similar con una cantidad implícita o explícita → accioná.
+2. Podés agregar múltiples productos en una sola llamada a agregar_al_carrito.
+3. Mostrá el resumen con ver_carrito. Si hay alertas de precio (⚠️) o producto no disponible (❌), ofrecé actualizar o eliminar el ítem antes de continuar.
+4. Preguntá en un solo mensaje: {$paso3Fecha} | {$paso3Entrega} | {$paso3Pago}
+5. Si eligió ENVÍO:
    - Si hay última dirección registrada, ofrecésela para confirmar o cambiar.
    - Si no hay, pedí calle, número y localidad (dato extra como piso/depto es opcional).
    - Confirmale la dirección antes de proceder.
-5. Cuando tenés todos los datos (fecha, tipo_entrega, forma_pago, dirección si aplica), llamá DIRECTAMENTE a crear_pedido sin enviar ningún mensaje previo.
+6. Cuando tenés todos los datos (fecha, tipo_entrega, forma_pago, dirección si aplica), llamá DIRECTAMENTE a crear_pedido sin enviar ningún mensaje previo.
    - Fecha en obs si el cliente dice horario o turno (no en fecha_entrega).
-6. Una vez creado el pedido (ves \'Pedido #X registrado\' en la respuesta del sistema), confirmáselo al cliente y no vuelvas a pedir confirmación. Si pregunta por el total o detalle, usá ver_pedidos.
+7. Una vez creado el pedido (ves \'Pedido #X registrado\' en la respuesta del sistema), confirmáselo al cliente y no vuelvas a pedir confirmación. Si pregunta por el total o detalle, usá ver_pedidos.
 
 IMPORTANTE: Nunca calcules precios ni totales manualmente. Los precios pueden incluir recargos por zona que solo el sistema conoce. Siempre usá ver_carrito para mostrar importes.
 
@@ -691,14 +700,6 @@ Herramientas disponibles:
     // Carrito
     // -------------------------------------------------------------------------
 
-    private function productosCache()
-    {
-        return Cache::remember(
-            'productos_bot_precios',
-            300,
-            fn() => Producto::where('PRE', '>', 0)->get(['cod', 'des', 'PRE', 'tipo', 'imagen', 'descripcion'])
-        );
-    }
 
     private function getCarrito($client): ?Carrito
     {
@@ -1270,9 +1271,10 @@ Herramientas disponibles:
     private function callOpenAI(array $messages, array $tools = []): array
     {
         $payload = [
-            'model'      => self::OPENAI_MODEL,
-            'messages'   => $messages,
-            'max_tokens' => 500,
+            'model'       => self::OPENAI_MODEL,
+            'messages'    => $messages,
+            'max_tokens'  => 500,
+            'temperature' => 0.3,
         ];
 
         if (!empty($tools)) {
@@ -1280,23 +1282,43 @@ Herramientas disponibles:
             $payload['tool_choice'] = 'auto';
         }
 
-        $response = Http::withToken($this->openaiKey())
-            ->post(self::OPENAI_URL, $payload)
-            ->json();
+        $response = null;
+        $intentos = 2;
+        for ($i = 0; $i < $intentos; $i++) {
+            $response = Http::withToken($this->openaiKey())
+                ->timeout(30)
+                ->post(self::OPENAI_URL, $payload)
+                ->json();
+
+            if (isset($response['choices'])) break;
+
+            Log::warning("OpenAI intento " . ($i + 1) . " fallido: " . json_encode($response));
+            if ($i < $intentos - 1) sleep(1);
+        }
 
         if (!isset($response['choices'])) {
             $error = $response['error']['message'] ?? json_encode($response);
-            Log::error("OpenAI error: {$error}");
+            Log::error("OpenAI error tras {$intentos} intentos: {$error}");
             throw new \RuntimeException("Error al contactar OpenAI: {$error}");
         }
 
         // Guardar uso de tokens
         if (isset($response['usage'])) {
+            $modelo     = $response['model'] ?? self::OPENAI_MODEL;
+            $precios    = self::PRECIOS_OPENAI[$modelo] ?? self::PRECIOS_OPENAI[self::OPENAI_MODEL] ?? ['input' => 0, 'output' => 0];
+            $input      = (int) $response['usage']['prompt_tokens'];
+            $output     = (int) $response['usage']['completion_tokens'];
+            $costoUsd   = round(
+                ($input  / 1_000_000 * $precios['input']) +
+                ($output / 1_000_000 * $precios['output']),
+                8
+            );
             DB::table('token_usos')->insert([
-                'modelo'            => $response['model'] ?? self::OPENAI_MODEL,
-                'prompt_tokens'     => $response['usage']['prompt_tokens'],
-                'completion_tokens' => $response['usage']['completion_tokens'],
-                'total_tokens'      => $response['usage']['total_tokens'],
+                'modelo'            => $modelo,
+                'prompt_tokens'     => $input,
+                'completion_tokens' => $output,
+                'total_tokens'      => $input + $output,
+                'costo_usd'         => $costoUsd,
                 'created_at'        => now(),
             ]);
         }

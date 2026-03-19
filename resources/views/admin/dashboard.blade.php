@@ -49,28 +49,49 @@
     </div>
 </div>
 
-{{-- Card tokens mes --}}
-<div class="bg-white rounded-xl shadow px-4 sm:px-6 py-4 mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-    <div class="flex items-center gap-3">
-        <div class="bg-purple-100 text-purple-600 rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0">🤖</div>
-        <div>
-            <p class="text-xs text-gray-500 uppercase font-medium">Tokens usados este mes</p>
-            <p class="text-2xl font-bold text-gray-800">{{ $stats['tokens_mes'] }}</p>
+{{-- Card costos mes --}}
+<div class="bg-white rounded-xl shadow px-4 sm:px-6 py-4 mb-6 sm:mb-8">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+
+        {{-- OpenAI --}}
+        <div class="flex items-start gap-3 flex-1">
+            <div class="bg-purple-100 text-purple-600 rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0">🤖</div>
+            <div>
+                <p class="text-xs text-gray-500 uppercase font-medium">OpenAI — tokens este mes</p>
+                <p class="text-2xl font-bold text-gray-800">{{ $stats['tokens_mes'] }}</p>
+                @php
+                    $usd = $stats['costo_mes_usd'];
+                    $usdFormato = $usd < 0.001 ? '< $0.001' : '$' . rtrim(rtrim(number_format($usd, 6), '0'), '.');
+                @endphp
+                <p class="text-lg font-bold text-purple-600 mt-0.5">{{ $usdFormato }} USD</p>
+                <p class="text-sm text-gray-500">≈ ${{ number_format($stats['costo_mes_ars'], 2, ',', '.') }} ARS</p>
+                <p class="text-xs text-gray-400 mt-0.5">gpt-4.1 · $2.00/1M input · $8.00/1M output</p>
+            </div>
         </div>
-    </div>
-    <div class="sm:text-right">
-        <p class="text-xs text-gray-500 uppercase font-medium">Costo estimado este mes</p>
-        @php
-            $usd = $stats['costo_mes_usd'];
-            $usdFormato = $usd < 0.001
-                ? '< $0.001'
-                : '$' . rtrim(rtrim(number_format($usd, 6), '0'), '.');
-        @endphp
-        <p class="text-2xl font-bold text-purple-600">{{ $usdFormato }} <span class="text-base font-medium text-gray-400">USD</span></p>
-        <p class="text-sm text-gray-600 font-medium mt-0.5">
-            ≈ ${{ number_format($stats['costo_mes_ars'], 2, ',', '.') }} <span class="text-xs text-gray-400">ARS</span>
-        </p>
-        <p class="text-xs text-gray-400 mt-0.5">gpt-4o-mini · $0.15/1M input · $0.60/1M output</p>
+
+        {{-- WhatsApp --}}
+        <div class="flex items-start gap-3 flex-1">
+            <div class="bg-green-100 text-green-600 rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0">💬</div>
+            <div>
+                <p class="text-xs text-gray-500 uppercase font-medium">WhatsApp — conversaciones este mes</p>
+                <p class="text-2xl font-bold text-gray-800">{{ number_format($stats['wa_conv_mes']) }}</p>
+                <p class="text-lg font-bold text-green-600 mt-0.5">${{ number_format($stats['wa_costo_usd'], 4) }} USD</p>
+                <p class="text-sm text-gray-500">≈ ${{ number_format($stats['wa_costo_ars'], 2, ',', '.') }} ARS</p>
+                <p class="text-xs text-gray-400 mt-0.5">aprox. ${{ env('WA_COSTO_USD', 0.05) }} USD/conversación · configurar en .env WA_COSTO_USD</p>
+            </div>
+        </div>
+
+        {{-- Total --}}
+        <div class="flex items-start gap-3 flex-1">
+            <div class="bg-orange-100 text-orange-600 rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0">💰</div>
+            <div>
+                <p class="text-xs text-gray-500 uppercase font-medium">Total estimado este mes</p>
+                <p class="text-2xl font-bold text-orange-600">${{ number_format($stats['costo_total_usd'], 4) }} USD</p>
+                <p class="text-sm text-gray-500">≈ ${{ number_format($stats['costo_total_ars'], 2, ',', '.') }} ARS</p>
+                <p class="text-xs text-gray-400 mt-0.5">OpenAI + WhatsApp</p>
+            </div>
+        </div>
+
     </div>
 </div>
 

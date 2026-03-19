@@ -62,12 +62,26 @@
             <div class="relative">
                 <textarea
                     data-url="{{ route('admin.productos.descripcion', $producto) }}"
-                    placeholder="Descripción para el bot (ej: corte tierno ideal para asado, se vende entero...)"
+                    placeholder="Descripción visible al cliente (ej: corte tierno ideal para asado...)"
                     maxlength="255"
                     rows="2"
                     class="desc-input w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-red-300 text-gray-600 placeholder-gray-300"
                 >{{ $producto->descripcion }}</textarea>
                 <span class="desc-status absolute top-1 right-1.5 text-xs text-green-500 hidden">✓</span>
+            </div>
+
+            {{-- Notas IA (solo las ve el bot, no el cliente) --}}
+            <div class="relative">
+                <textarea
+                    data-url="{{ route('admin.productos.notas_ia', $producto) }}"
+                    data-field="notas_ia"
+                    placeholder="Notas para la IA (ej: precio fijo por unidad, no multiplicar por kg...)"
+                    maxlength="500"
+                    rows="2"
+                    class="ia-input w-full text-xs border border-purple-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-purple-300 text-gray-600 placeholder-gray-300 bg-purple-50"
+                >{{ $producto->notas_ia }}</textarea>
+                <span class="ia-status absolute top-1 right-1.5 text-xs text-green-500 hidden">✓</span>
+                <span class="absolute bottom-1 right-1.5 text-xs text-purple-300">🤖 solo IA</span>
             </div>
 
             {{-- Upload --}}
@@ -95,28 +109,31 @@
 <script>
 const csrfToken = document.querySelector('meta[name=csrf-token]').content;
 
-document.querySelectorAll('.desc-input').forEach(textarea => {
-    let original = textarea.value;
-
-    textarea.addEventListener('blur', async () => {
-        if (textarea.value === original) return;
-
-        const status = textarea.parentElement.querySelector('.desc-status');
-        try {
-            await fetch(textarea.dataset.url, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
-                    'Accept': 'application/json',
-                },
-                body: JSON.stringify({ descripcion: textarea.value }),
-            });
-            original = textarea.value;
-            status.classList.remove('hidden');
-            setTimeout(() => status.classList.add('hidden'), 2000);
-        } catch (_) {}
+function autoSaveTextarea(selector, statusSelector, bodyKey) {
+    document.querySelectorAll(selector).forEach(textarea => {
+        let original = textarea.value;
+        textarea.addEventListener('blur', async () => {
+            if (textarea.value === original) return;
+            const status = textarea.parentElement.querySelector(statusSelector);
+            try {
+                await fetch(textarea.dataset.url, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ [bodyKey]: textarea.value }),
+                });
+                original = textarea.value;
+                status.classList.remove('hidden');
+                setTimeout(() => status.classList.add('hidden'), 2000);
+            } catch (_) {}
+        });
     });
-});
+}
+
+autoSaveTextarea('.desc-input', '.desc-status', 'descripcion');
+autoSaveTextarea('.ia-input',   '.ia-status',   'notas_ia');
 </script>
 @endsection
