@@ -1074,7 +1074,7 @@ Herramientas disponibles:
         $productos = Cache::remember(
             'productos_bot_precios',
             300,
-            fn() => Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen'])
+            fn() => Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion'])
         );
 
         $producto = $productos->first(
@@ -1085,26 +1085,32 @@ Herramientas disponibles:
             return "Producto '{$nombre}' no encontrado en la lista.";
         }
 
-        // Enviar imagen si tiene
+        $costoExtra = $this->costoExtraCliente($client);
+        $precio     = $this->fmt((float) $producto->PRE + $costoExtra);
+        $unidad     = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
+
+        $caption = "*{$producto->des}*\n\$" . $precio . " ({$unidad})";
+        if (!empty($producto->descripcion) && $producto->descripcion !== 'sinimagen.webp') {
+            $caption .= "\n_{$producto->descripcion}_";
+        }
+
+        // Enviar imagen con descripción y precio como caption (todo en 1 mensaje)
         if (!empty($producto->imagen) && $producto->imagen !== 'sinimagen.webp') {
             $path = public_path($producto->imagen);
             if (file_exists($path)) {
                 try {
                     $mime    = mime_content_type($path) ?: 'image/jpeg';
                     $mediaId = $this->uploadMediaFromPath($path, $mime);
-                    $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $producto->des);
+                    $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $caption);
+                    return "Ya envié al cliente la imagen de {$producto->des} con su precio y descripción. No repitas esta información, solo preguntá si desea agregarlo al carrito.";
                 } catch (\Throwable $e) {
                     Log::error("verProducto imagen {$producto->des}: {$e->getMessage()}");
                 }
             }
         }
 
-        $costoExtra = $this->costoExtraCliente($client);
-
-        $precio = $this->fmt((float) $producto->PRE + $costoExtra);
-        $unidad = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
-
-        return "Producto: {$producto->des} — \${$precio} ({$unidad}).";
+        // Sin imagen: devolver texto para que GPT lo envíe
+        return $caption;
     }
 
     private function uploadMediaFromPath(string $path, string $mime = 'image/jpeg'): string
