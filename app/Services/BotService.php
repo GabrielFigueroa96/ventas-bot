@@ -637,7 +637,7 @@ Herramientas disponibles:
                 'vaciar_carrito'     => $this->vaciarCarrito($cliente),
                 'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['calle'] ?? '', $args['numero'] ?? '', $args['localidad'] ?? '', $args['dato_extra'] ?? '', $args['obs'] ?? ''),
                 'ver_pedidos'        => $this->orderStatus($cliente),
-                'ver_precios'        => $this->priceList(),
+                'ver_precios'        => $this->priceList($cliente),
                 'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? ''),
                 'cancelar_pedido'    => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
                 default              => 'Función desconocida.',
@@ -1122,7 +1122,7 @@ Herramientas disponibles:
         return $mediaId;
     }
 
-    private function priceList(): string
+    private function priceList($client): string
     {
         $productos = Producto::where('PRE', '>', 0)
             ->select('des', 'PRE', 'tipo', 'desgrupo')
@@ -1131,6 +1131,8 @@ Herramientas disponibles:
         if ($productos->isEmpty()) {
             return 'No hay productos disponibles en este momento.';
         }
+
+        $costoExtra = $this->costoExtraCliente($client);
 
         $bloques = [];
 
@@ -1145,12 +1147,16 @@ Herramientas disponibles:
             foreach ($grupos as $nombreGrupo => $items) {
                 $lineas[] = "_{$nombreGrupo}_";
                 foreach ($items as $p) {
-                    $precio    = $this->fmt((float) $p->PRE);
-                    $unidad    = $tipo === 'Unidad' ? '/u' : '/kg';
+                    $precio   = $this->fmt((float) $p->PRE + $costoExtra);
+                    $unidad   = $tipo === 'Unidad' ? '/u' : '/kg';
                     $lineas[] = "• {$p->des}: \${$precio}{$unidad}";
                 }
             }
             $bloques[] = implode("\n", $lineas);
+        }
+
+        if ($costoExtra > 0) {
+            $bloques[] = "_(*Precios incluyen recargo por zona: \${$this->fmt($costoExtra)})_";
         }
 
         return implode("\n\n", $bloques);
