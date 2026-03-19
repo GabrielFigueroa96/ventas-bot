@@ -713,7 +713,7 @@ Herramientas disponibles:
         $carrito    = $registro ? $registro->items : [];
         $productos  = Producto::where('PRE', '>', 0)->get(['cod', 'des', 'PRE', 'tipo', 'descripcion']);
         $costoExtra = $this->costoExtraCliente($client);
-        $normalize  = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
+        $ambiguos   = [];
 
         foreach ($items as $item) {
             $descrip  = trim($item['descrip'] ?? '');
@@ -721,14 +721,17 @@ Herramientas disponibles:
 
             if ($descrip === '') continue;
 
-            $nd = $normalize($descrip);
-            $palabras = array_filter(explode(' ', $nd), fn($w) => strlen($w) > 2);
+            $candidatos = $this->buscarCandidatos($productos, $descrip);
 
-            $match = $productos->first(fn($p) => str_contains($normalize($p->des), $nd) || str_contains($nd, $normalize($p->des)))
-                ?? $productos->first(fn($p) => collect($palabras)->every(fn($w) => str_contains($normalize($p->des), $w)))
-                ?? $productos->first(fn($p) => collect($palabras)->contains(fn($w) => str_contains($normalize($p->des), $w)));
+            if ($candidatos->isEmpty()) continue;
 
-            if (!$match) continue;
+            if ($candidatos->count() > 1) {
+                $opciones = $candidatos->pluck('des')->map(fn($d) => "• {$d}")->implode("\n");
+                $ambiguos[] = "Para '{$descrip}' encontré varias opciones:\n{$opciones}\nEspecificá cuál querés.";
+                continue;
+            }
+
+            $match = $candidatos->first();
 
             $esPeso = $match->tipo !== 'Unidad';
             $precio = (float) $match->PRE + $costoExtra;
@@ -783,7 +786,13 @@ Herramientas disponibles:
             ]);
         }
 
-        return $this->formatCarrito($carrito);
+        $resultado = $this->formatCarrito($carrito);
+
+        if (!empty($ambiguos)) {
+            $resultado .= "\n\n" . implode("\n\n", $ambiguos);
+        }
+
+        return $resultado;
     }
 
     private function verCarrito($client): string
@@ -1091,23 +1100,19 @@ Herramientas disponibles:
     private function verProducto($client, string $nombre, bool $solicitaPrecio = false): string
     {
         // Sin cache: siempre precio e imagen actualizados desde la BD
-        $productos = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion', 'notas_ia']);
+        $productos    = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion', 'notas_ia']);
+        $candidatos   = $this->buscarCandidatos($productos, $nombre);
 
-        $normalize = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
-        $haystack  = $normalize($nombre);
-        $palabras  = array_filter(explode(' ', $haystack), fn($w) => \strlen($w) > 2);
-
-        $producto = $productos
-            // 1º: coincidencia directa (con normalización de acentos)
-            ->first(fn($p) => str_contains($normalize($p->des), $haystack) || str_contains($haystack, $normalize($p->des)))
-            // 2º: todas las palabras significativas están en el nombre del producto
-            ?? $productos->first(fn($p) => collect($palabras)->every(fn($w) => str_contains($normalize($p->des), $w)))
-            // 3º: alguna palabra significativa está en el nombre
-            ?? $productos->first(fn($p) => collect($palabras)->contains(fn($w) => str_contains($normalize($p->des), $w)));
-
-        if (!$producto) {
+        if ($candidatos->isEmpty()) {
             return "Producto '{$nombre}' no encontrado. Los productos disponibles son: " . $productos->pluck('des')->join(', ') . '.';
         }
+
+        if ($candidatos->count() > 1) {
+            $opciones = $candidatos->pluck('des')->map(fn($d) => "• {$d}")->implode("\n");
+            return "Encontré varias opciones para '{$nombre}':\n{$opciones}\n¿Cuál de estos querés?";
+        }
+
+        $producto = $candidatos->first();
 
         $caption = "*{$producto->des}*";
         if (!empty($producto->descripcion)) {
@@ -1152,6 +1157,37 @@ Herramientas disponibles:
             'webp'        => 'image/webp',
             default       => mime_content_type($path) ?: 'image/jpeg',
         };
+    }
+
+    /**
+     * Busca candidatos en una colección de productos por niveles de prioridad.
+     * Devuelve todos los que coinciden en el nivel más específico encontrado.
+     */
+    private function buscarCandidatos(\Illuminate\Support\Collection $productos, string $nombre): \Illuminate\Support\Collection
+    {
+        $normalize = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
+        $nd        = $normalize($nombre);
+        $palabras  = array_values(array_filter(explode(' ', $nd), fn($w) => \strlen($w) > 2));
+
+        // 1º exacto
+        $r = $productos->filter(fn($p) => $normalize($p->des) === $nd);
+        if ($r->isNotEmpty()) return $r->values();
+
+        // 2º parcial (busqueda contiene nombre o nombre contiene busqueda)
+        $r = $productos->filter(fn($p) => str_contains($normalize($p->des), $nd) || str_contains($nd, $normalize($p->des)));
+        if ($r->isNotEmpty()) return $r->values();
+
+        // 3º todas las palabras significativas presentes
+        if (!empty($palabras)) {
+            $r = $productos->filter(fn($p) => collect($palabras)->every(fn($w) => str_contains($normalize($p->des), $w)));
+            if ($r->isNotEmpty()) return $r->values();
+
+            // 4º alguna palabra significativa presente
+            $r = $productos->filter(fn($p) => collect($palabras)->contains(fn($w) => str_contains($normalize($p->des), $w)));
+            if ($r->isNotEmpty()) return $r->values();
+        }
+
+        return collect();
     }
 
     private function uploadMediaFromPath(string $path, string $mime = 'image/jpeg'): string
