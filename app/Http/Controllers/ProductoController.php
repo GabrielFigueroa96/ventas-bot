@@ -133,25 +133,15 @@ class ProductoController extends Controller
 
         $dst = imagecreatetruecolor($newW, $newH);
 
-        // Preservar transparencia para PNG
-        if ($mime === 'image/png') {
-            imagealphablending($dst, false);
-            imagesavealpha($dst, true);
-        }
+        // Fondo blanco (para PNGs con transparencia al convertir a JPEG)
+        $white = imagecolorallocate($dst, 255, 255, 255);
+        imagefill($dst, 0, 0, $white);
 
         imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
-        imagedestroy($src);
 
-        // Guardar como WebP si está disponible, sino JPEG
-        if (function_exists('imagewebp')) {
-            $name = "{$base}/{$slug}.webp";
-            imagewebp($dst, public_path($name), $quality);
-        } else {
-            $name = "{$base}/{$slug}.jpg";
-            imagejpeg($dst, public_path($name), $quality);
-        }
-
-        imagedestroy($dst);
+        // Guardar siempre como JPEG calidad 80 (compatible con WhatsApp, liviano)
+        $name = "{$base}/{$slug}.jpg";
+        imagejpeg($dst, public_path($name), $quality);
 
         return $name;
     }

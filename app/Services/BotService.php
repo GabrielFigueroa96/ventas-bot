@@ -1123,8 +1123,20 @@ Herramientas disponibles:
 
     private function uploadMediaFromPath(string $path, string $mime = 'image/jpeg'): string
     {
+        // WhatsApp no acepta WebP para mensajes de imagen — convertir a JPEG en memoria
+        if ($mime === 'image/webp' && extension_loaded('gd') && function_exists('imagecreatefromwebp')) {
+            $src = imagecreatefromwebp($path);
+            if ($src) {
+                ob_start();
+                imagejpeg($src, null, 85);
+                $contents = ob_get_clean();
+                $mime     = 'image/jpeg';
+                $filename = pathinfo($path, PATHINFO_FILENAME) . '.jpg';
+            }
+        }
+
         $response = Http::withToken($this->whatsappKey())
-            ->attach('file', file_get_contents($path), basename($path), ['Content-Type' => $mime])
+            ->attach('file', $contents ?? file_get_contents($path), $filename ?? basename($path), ['Content-Type' => $mime])
             ->attach('messaging_product', 'whatsapp')
             ->attach('type', $mime)
             ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/media');
@@ -1286,16 +1298,16 @@ Herramientas disponibles:
             $body['caption'] = $caption;
         }
 
-        try {
-            Http::withToken($this->whatsappKey())
-                ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
-                    'messaging_product' => 'whatsapp',
-                    'to'                => $phone,
-                    'type'              => $type,
-                    $type               => $body,
-                ]);
-        } catch (\Throwable) {
-            // silencioso
+        $response = Http::withToken($this->whatsappKey())
+            ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
+                'messaging_product' => 'whatsapp',
+                'to'                => $phone,
+                'type'              => $type,
+                $type               => $body,
+            ]);
+
+        if (!$response->successful()) {
+            Log::error("sendWhatsappMedia error [{$type}] to {$phone}: " . $response->body());
         }
     }
 
