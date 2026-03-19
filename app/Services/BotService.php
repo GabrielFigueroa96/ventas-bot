@@ -1072,12 +1072,22 @@ Herramientas disponibles:
     private function verProducto($client, string $nombre): string
     {
         // Sin cache: siempre precio e imagen actualizados desde la BD
-        $producto = Producto::where('PRE', '>', 0)
-            ->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion'])
-            ->first(fn($p) => stripos($p->des, $nombre) !== false || stripos($nombre, $p->des) !== false);
+        $productos = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion']);
+
+        $normalize = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
+        $haystack  = $normalize($nombre);
+        $palabras  = array_filter(explode(' ', $haystack), fn($w) => \strlen($w) > 2);
+
+        $producto = $productos
+            // 1º: coincidencia directa (con normalización de acentos)
+            ->first(fn($p) => str_contains($normalize($p->des), $haystack) || str_contains($haystack, $normalize($p->des)))
+            // 2º: todas las palabras significativas están en el nombre del producto
+            ?? $productos->first(fn($p) => collect($palabras)->every(fn($w) => str_contains($normalize($p->des), $w)))
+            // 3º: alguna palabra significativa está en el nombre
+            ?? $productos->first(fn($p) => collect($palabras)->contains(fn($w) => str_contains($normalize($p->des), $w)));
 
         if (!$producto) {
-            return "Producto '{$nombre}' no encontrado en la lista.";
+            return "Producto '{$nombre}' no encontrado. Los productos disponibles son: " . $productos->pluck('des')->join(', ') . '.';
         }
 
         $costoExtra = $this->costoExtraCliente($client);
