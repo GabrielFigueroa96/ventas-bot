@@ -75,6 +75,17 @@ class WebhookController extends Controller
             }
             $tenantId = $manager->get()->id;
 
+            // Procesar actualizaciones de estado (sent/delivered/read)
+            if (!empty($value['statuses'])) {
+                foreach ($value['statuses'] as $status) {
+                    $wamidStatus = $status['id']     ?? null;
+                    $newStatus   = $status['status'] ?? null;
+                    if ($wamidStatus && $newStatus) {
+                        Message::where('wamid', $wamidStatus)->update(['status' => $newStatus]);
+                    }
+                }
+            }
+
             if (empty($value['messages'])) {
                 return response()->json(['status' => 'ignored']);
             }
@@ -138,6 +149,8 @@ class WebhookController extends Controller
                 'cliente_id' => $client->id,
                 'message'    => $reply,
                 'direction'  => 'outgoing',
+                'wamid'      => $bot->lastOutgoingWamid,
+                'status'     => $bot->lastOutgoingWamid ? 'sent' : null,
             ]);
 
             MessageLog::on('mysql')->create([

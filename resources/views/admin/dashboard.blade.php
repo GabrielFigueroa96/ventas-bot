@@ -50,45 +50,45 @@
 </div>
 
 {{-- Card costos mes --}}
-<div class="bg-white rounded-xl shadow px-4 sm:px-6 py-4 mb-6 sm:mb-8">
-    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+<div class="bg-white rounded-xl shadow mb-6 sm:mb-8 overflow-hidden">
+    <div class="divide-y sm:divide-y-0 sm:divide-x divide-gray-100 flex flex-col sm:flex-row">
 
         {{-- OpenAI --}}
-        <div class="flex items-start gap-3 flex-1">
-            <div class="bg-purple-100 text-purple-600 rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0">🤖</div>
-            <div>
-                <p class="text-xs text-gray-500 uppercase font-medium">OpenAI — tokens este mes</p>
-                <p class="text-2xl font-bold text-gray-800">{{ $stats['tokens_mes'] }}</p>
+        <div class="flex items-start gap-3 flex-1 px-4 sm:px-5 py-4">
+            <div class="bg-purple-100 text-purple-600 rounded-full w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-base sm:text-lg shrink-0 mt-0.5">🤖</div>
+            <div class="min-w-0">
+                <p class="text-xs text-gray-500 uppercase font-medium tracking-wide">OpenAI este mes</p>
+                <p class="text-xl sm:text-2xl font-bold text-gray-800 mt-0.5">{{ $stats['tokens_mes'] }} <span class="text-sm font-normal text-gray-400">tokens</span></p>
                 @php
                     $usd = $stats['costo_mes_usd'];
-                    $usdFormato = $usd < 0.001 ? '< $0.001' : '$' . rtrim(rtrim(number_format($usd, 6), '0'), '.');
+                    $usdFormato = $usd < 0.001 ? '< $0.001' : '$' . rtrim(rtrim(number_format($usd, 4), '0'), '.');
                 @endphp
-                <p class="text-lg font-bold text-purple-600 mt-0.5">{{ $usdFormato }} USD</p>
+                <p class="text-lg font-bold text-purple-600">{{ $usdFormato }} <span class="text-sm font-normal text-gray-400">USD</span></p>
                 <p class="text-sm text-gray-500">≈ ${{ number_format($stats['costo_mes_ars'], 2, ',', '.') }} ARS</p>
-                <p class="text-xs text-gray-400 mt-0.5">gpt-4.1 · $2.00/1M input · $8.00/1M output</p>
+                <p class="text-xs text-gray-400 mt-1">gpt-4.1 · $2/1M in · $8/1M out</p>
             </div>
         </div>
 
         {{-- WhatsApp --}}
-        <div class="flex items-start gap-3 flex-1">
-            <div class="bg-green-100 text-green-600 rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0">💬</div>
-            <div>
-                <p class="text-xs text-gray-500 uppercase font-medium">WhatsApp — conversaciones este mes</p>
-                <p class="text-2xl font-bold text-gray-800">{{ number_format($stats['wa_conv_mes']) }}</p>
-                <p class="text-lg font-bold text-green-600 mt-0.5">${{ number_format($stats['wa_costo_usd'], 4) }} USD</p>
+        <div class="flex items-start gap-3 flex-1 px-4 sm:px-5 py-4">
+            <div class="bg-green-100 text-green-600 rounded-full w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-base sm:text-lg shrink-0 mt-0.5">💬</div>
+            <div class="min-w-0">
+                <p class="text-xs text-gray-500 uppercase font-medium tracking-wide">WhatsApp este mes</p>
+                <p class="text-xl sm:text-2xl font-bold text-gray-800 mt-0.5">{{ number_format($stats['wa_conv_mes']) }} <span class="text-sm font-normal text-gray-400">conv.</span></p>
+                <p class="text-lg font-bold text-green-600">${{ number_format($stats['wa_costo_usd'], 2) }} <span class="text-sm font-normal text-gray-400">USD</span></p>
                 <p class="text-sm text-gray-500">≈ ${{ number_format($stats['wa_costo_ars'], 2, ',', '.') }} ARS</p>
-                <p class="text-xs text-gray-400 mt-0.5">aprox. ${{ env('WA_COSTO_USD', 0.05) }} USD/conversación · configurar en .env WA_COSTO_USD</p>
+                <p class="text-xs text-gray-400 mt-1">~${{ env('WA_COSTO_USD', '0.05') }}/conv · ajustar en .env</p>
             </div>
         </div>
 
         {{-- Total --}}
-        <div class="flex items-start gap-3 flex-1">
-            <div class="bg-orange-100 text-orange-600 rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0">💰</div>
-            <div>
-                <p class="text-xs text-gray-500 uppercase font-medium">Total estimado este mes</p>
-                <p class="text-2xl font-bold text-orange-600">${{ number_format($stats['costo_total_usd'], 4) }} USD</p>
+        <div class="flex items-start gap-3 flex-1 px-4 sm:px-5 py-4 bg-orange-50 sm:bg-white">
+            <div class="bg-orange-100 text-orange-600 rounded-full w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-base sm:text-lg shrink-0 mt-0.5">💰</div>
+            <div class="min-w-0">
+                <p class="text-xs text-gray-500 uppercase font-medium tracking-wide">Total estimado</p>
+                <p class="text-xl sm:text-2xl font-bold text-orange-600 mt-0.5">${{ number_format($stats['costo_total_usd'], 2) }} <span class="text-sm font-normal text-gray-400">USD</span></p>
                 <p class="text-sm text-gray-500">≈ ${{ number_format($stats['costo_total_ars'], 2, ',', '.') }} ARS</p>
-                <p class="text-xs text-gray-400 mt-0.5">OpenAI + WhatsApp</p>
+                <p class="text-xs text-gray-400 mt-1">OpenAI + WhatsApp</p>
             </div>
         </div>
 

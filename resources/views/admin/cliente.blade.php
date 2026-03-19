@@ -145,7 +145,18 @@
                             @endphp
                             <p class="leading-snug">{!! $txt !!}</p>
                         @endif
-                        <p class="text-xs mt-1 opacity-60">{{ $msg->fecha }}</p>
+                        <p class="text-xs mt-1 opacity-60 flex items-center gap-1">
+                            {{ $msg->fecha }}
+                            @if($msg->direction === 'outgoing')
+                                @if($msg->status === 'read')
+                                    <span title="Leído" class="text-blue-300">✓✓</span>
+                                @elseif($msg->status === 'delivered')
+                                    <span title="Entregado" class="opacity-80">✓✓</span>
+                                @elseif($msg->status === 'sent')
+                                    <span title="Enviado" class="opacity-80">✓</span>
+                                @endif
+                            @endif
+                        </p>
                     </div>
                 </div>
                 @empty
@@ -237,11 +248,18 @@ function bubbleHtml(msg) {
         content += `<p class="leading-snug">${formatWpp(msg.message)}</p>`;
     }
 
+    let tick = '';
+    if (isOut) {
+        if (msg.status === 'read')      tick = '<span title="Leído" class="text-blue-300">✓✓</span>';
+        else if (msg.status === 'delivered') tick = '<span title="Entregado" class="opacity-80">✓✓</span>';
+        else if (msg.status === 'sent') tick = '<span title="Enviado" class="opacity-80">✓</span>';
+    }
+
     return `
         <div class="flex ${align}" data-id="${msg.id}">
             <div class="max-w-xs px-4 py-2 rounded-2xl text-sm ${bubble}">
                 ${content}
-                <p class="text-xs mt-1 opacity-60">${msg.created_at}</p>
+                <p class="text-xs mt-1 opacity-60 flex items-center gap-1">${msg.created_at} ${tick}</p>
             </div>
         </div>`;
 }

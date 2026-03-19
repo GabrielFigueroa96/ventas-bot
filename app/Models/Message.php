@@ -28,6 +28,7 @@ class Message extends Model
         'type',
         'wamid',
         'media_path',
+        'status',
     ];
 
     // Fecha formateada con timezone de la app

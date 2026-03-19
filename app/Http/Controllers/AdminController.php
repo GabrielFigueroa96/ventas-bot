@@ -21,32 +21,52 @@ class AdminController extends Controller
         // Tipo de cambio — configurar en .env
         $dolarArs = (float) env('DOLAR_ARS', 1300);
 
-        // Costo OpenAI: suma costo_usd guardado por llamada (incluye todos los modelos)
-        $tokensMes = DB::table('token_usos')
+        // Costo OpenAI: calcula desde tokens reales agrupados por modelo (funciona con datos viejos y nuevos)
+        $preciosModelos = [
+            'gpt-4.1'      => ['input' => 2.00, 'output' => 8.00],
+            'gpt-4.1-mini' => ['input' => 0.40, 'output' => 1.60],
+            'gpt-4o'       => ['input' => 2.50, 'output' => 10.00],
+            'gpt-4o-mini'  => ['input' => 0.15, 'output' => 0.60],
+        ];
+
+        $filasPorModelo = DB::table('token_usos')
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
-            ->selectRaw('SUM(prompt_tokens) as input, SUM(completion_tokens) as output, SUM(total_tokens) as total, SUM(costo_usd) as costo')
-            ->first();
+            ->selectRaw('modelo, SUM(prompt_tokens) as input, SUM(completion_tokens) as output, SUM(total_tokens) as total')
+            ->groupBy('modelo')
+            ->get();
 
-        $inputTokens  = (int) ($tokensMes->input  ?? 0);
-        $outputTokens = (int) ($tokensMes->output ?? 0);
-        $totalTokens  = (int) ($tokensMes->total  ?? 0);
-        $costoMesUsd  = round((float) ($tokensMes->costo ?? 0), 6);
+        $costoMesUsd  = 0;
+        $inputTokens  = 0;
+        $outputTokens = 0;
+        $totalTokens  = 0;
+
+        foreach ($filasPorModelo as $fila) {
+            $p            = $preciosModelos[$fila->modelo] ?? $preciosModelos['gpt-4.1'];
+            $costoMesUsd += ($fila->input  / 1_000_000 * $p['input'])
+                          + ($fila->output / 1_000_000 * $p['output']);
+            $inputTokens  += (int) $fila->input;
+            $outputTokens += (int) $fila->output;
+            $totalTokens  += (int) $fila->total;
+        }
+        $costoMesUsd = round($costoMesUsd, 6);
 
         // Costo WhatsApp: conversaciones únicas por cliente/día este mes
-        // WhatsApp cobra por ventana de 24h por cliente (aprox. 1 conversación por cliente/día activo)
         $waCostoPorConv = (float) env('WA_COSTO_USD', 0.05);
-        $waConvMes = DB::table('messages')
-            ->where('direction', 'outgoing')
-            ->whereMonth('created_at', now()->month)
-            ->whereYear('created_at', now()->year)
-            ->selectRaw('COUNT(DISTINCT CONCAT(cliente_id, DATE(created_at))) as conversaciones')
-            ->value('conversaciones') ?? 0;
+        try {
+            $waConvMes = DB::table('messages')
+                ->where('direction', 'outgoing')
+                ->whereMonth('created_at', now()->month)
+                ->whereYear('created_at', now()->year)
+                ->selectRaw('COUNT(DISTINCT CONCAT(cliente_id, DATE(created_at))) as conversaciones')
+                ->value('conversaciones') ?? 0;
+        } catch (\Throwable $e) {
+            $waConvMes = 0;
+        }
 
-        $costoWaUsd = round($waConvMes * $waCostoPorConv, 4);
-
+        $costoWaUsd    = round($waConvMes * $waCostoPorConv, 4);
         $costoTotalUsd = round($costoMesUsd + $costoWaUsd, 4);
-        $costoMes = $costoMesUsd;
+        $costoMes      = $costoMesUsd;
 
         $seguimientos = Seguimiento::with('cliente')
             ->orderByDesc('enviado_at')

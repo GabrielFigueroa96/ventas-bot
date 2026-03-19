@@ -16,6 +16,8 @@ use App\Models\Pedido;
 
 class BotService
 {
+    public ?string $lastOutgoingWamid = null;
+
     private const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
     private const OPENAI_MODEL = 'gpt-4.1';
 
@@ -1413,13 +1415,14 @@ Herramientas disponibles:
     public function sendWhatsapp(string $phone, string $message): void
     {
         try {
-            Http::withToken($this->whatsappKey())
+            $response = Http::withToken($this->whatsappKey())
                 ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
                     'messaging_product' => 'whatsapp',
                     'to'                => $phone,
                     'type'              => 'text',
                     'text'              => ['body' => $message],
                 ]);
+            $this->lastOutgoingWamid = data_get($response->json(), 'messages.0.id');
         } catch (\Throwable $e) {
             Log::error('sendWhatsapp error: ' . $e->getMessage());
         }
