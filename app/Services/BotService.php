@@ -429,7 +429,9 @@ Herramientas disponibles:
             // En mensajes del bot, borrar precios de productos (pueden estar desactualizados)
             // pero NO en resúmenes de pedidos (Pedido #, Total:, Estado:) que son históricos y correctos
             if ($msg->direction === 'outgoing' && !preg_match('/Pedido\s*#|Total:|Estado:|Subtotal:/i', $content)) {
-                $content = preg_replace('/\$[\d\.,]+\s*(?:\/\s*(?:kg|u|unidad))?/i', '$[actualizado]', $content);
+                // Eliminar frases con precio para que GPT no las repita ni use precios viejos
+                $content = preg_replace('/cuesta\s+\$[\d\.,]+[^.]*\./i', 'ya fue informado al cliente.', $content);
+                $content = preg_replace('/\$[\d\.,]+\s*(?:\/\s*(?:kg|u|unidad|por\s+\w+))?/i', '', $content);
             }
             $messages[] = [
                 'role'    => $msg->direction === 'incoming' ? 'user' : 'assistant',
