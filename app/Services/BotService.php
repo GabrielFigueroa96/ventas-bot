@@ -1114,15 +1114,16 @@ Herramientas disponibles:
                     $mime    = $this->mimeFromPath($path);
                     $mediaId = $this->uploadMediaFromPath($path, $mime);
                     $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $caption);
-                    return "Ya envié al cliente la imagen de {$producto->des} con su precio y descripción. No repitas esta información, solo preguntá si desea agregarlo al carrito.";
+                    return "IMAGEN_ENVIADA. El cliente ya recibió la imagen con precio y descripción. Tu respuesta debe ser ÚNICAMENTE: '¿Lo agregamos al carrito?' Sin mencionar ningún precio ni dato del producto.";
                 } catch (\Throwable $e) {
                     Log::error("verProducto upload error [{$producto->des}]: {$e->getMessage()}");
                 }
             }
         }
 
-        // Sin imagen (o falló el envío): devolver texto para que GPT lo envíe
-        return $caption;
+        // Sin imagen: enviar el texto directo y decirle a GPT que no lo repita
+        $this->sendWhatsapp($client->phone, $caption);
+        return "TEXTO_ENVIADO. El cliente ya recibió precio y descripción. Tu respuesta debe ser ÚNICAMENTE: '¿Lo agregamos al carrito?' Sin mencionar ningún precio ni dato del producto.";
     }
 
     private function mimeFromPath(string $path): string
