@@ -134,8 +134,9 @@ class AdminController extends Controller
         return view('admin.clientes', compact('clientes'));
     }
 
-    public function cliente(Cliente $cliente)
+    public function cliente(int $id)
     {
+        $cliente = Cliente::findOrFail($id);
         $cliente->load('cuenta');
 
         $mensajes = Message::where('cliente_id', $cliente->id)

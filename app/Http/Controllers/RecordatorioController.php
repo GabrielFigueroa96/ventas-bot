@@ -39,8 +39,9 @@ class RecordatorioController extends Controller
         return redirect()->route('admin.recordatorios')->with('ok', 'Recordatorio creado.');
     }
 
-    public function edit(Recordatorio $rec)
+    public function edit(int $id)
     {
+        $rec = Recordatorio::findOrFail($id);
         $recordatorios = Recordatorio::orderByDesc('id')->get();
         $localidades   = Localidad::where('activo', true)->orderBy('nombre')->get();
         $provincias    = Localidad::where('activo', true)->whereNotNull('provincia')->distinct()->orderBy('provincia')->pluck('provincia');
@@ -48,8 +49,9 @@ class RecordatorioController extends Controller
         return view('admin.recordatorios', compact('recordatorios', 'localidades', 'provincias') + ['editando' => $rec]);
     }
 
-    public function update(Request $request, Recordatorio $rec)
+    public function update(Request $request, int $id)
     {
+        $rec = Recordatorio::findOrFail($id);
         $data = $request->validate([
             'nombre'            => 'required|string|max:100',
             'mensaje'           => 'required|string',
@@ -70,14 +72,16 @@ class RecordatorioController extends Controller
         return redirect()->route('admin.recordatorios')->with('ok', 'Recordatorio actualizado.');
     }
 
-    public function destroy(Recordatorio $rec)
+    public function destroy(int $id)
     {
+        $rec = Recordatorio::findOrFail($id);
         $rec->delete();
         return redirect()->route('admin.recordatorios')->with('ok', 'Recordatorio eliminado.');
     }
 
-    public function toggle(Recordatorio $rec)
+    public function toggle(int $id)
     {
+        $rec = Recordatorio::findOrFail($id);
         $rec->update(['activo' => !$rec->activo]);
         return response()->json(['activo' => $rec->activo]);
     }

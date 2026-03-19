@@ -15,8 +15,9 @@ use Illuminate\Support\Str;
 
 class AdminChatController extends Controller
 {
-    public function imprimir(Request $request, Cliente $cliente)
+    public function imprimir(Request $request, int $id)
     {
+        $cliente = Cliente::findOrFail($id);
         $request->validate([
             'desde' => 'required|date',
             'hasta' => 'required|date|after_or_equal:desde',
@@ -33,8 +34,9 @@ class AdminChatController extends Controller
         return view('admin.imprimir-conversacion', compact('cliente', 'mensajes', 'desde', 'hasta'));
     }
 
-    public function mensajesNuevos(Cliente $cliente, Request $request)
+    public function mensajesNuevos(int $id, Request $request)
     {
+        $cliente = Cliente::findOrFail($id);
         $desdeId = (int) $request->input('since', 0);
 
         $mensajes = Message::where('cliente_id', $cliente->id)
@@ -53,20 +55,23 @@ class AdminChatController extends Controller
         return response()->json($mensajes);
     }
 
-    public function tomarControl(Cliente $cliente)
+    public function tomarControl(int $id)
     {
+        $cliente = Cliente::findOrFail($id);
         $cliente->update(['modo' => 'humano']);
         return back()->with('success', 'Tomaste el control del chat.');
     }
 
-    public function liberarControl(Cliente $cliente)
+    public function liberarControl(int $id)
     {
+        $cliente = Cliente::findOrFail($id);
         $cliente->update(['modo' => 'bot']);
         return back()->with('success', 'El bot retomó el control.');
     }
 
-    public function enviar(Request $request, Cliente $cliente)
+    public function enviar(Request $request, int $id)
     {
+        $cliente = Cliente::findOrFail($id);
         $request->validate([
             'mensaje' => 'nullable|string|max:4096',
             'archivo' => 'nullable|file|mimes:jpg,jpeg,png,gif,pdf|max:16384',
@@ -145,8 +150,9 @@ class AdminChatController extends Controller
         return response()->json($cuentas);
     }
 
-    public function setCuenta(Request $request, Cliente $cliente)
+    public function setCuenta(Request $request, int $id)
     {
+        $cliente = Cliente::findOrFail($id);
         $request->validate(['cuenta_cod' => 'nullable|string']);
         $cuentaCod = $request->input('cuenta_cod');
 
@@ -164,8 +170,9 @@ class AdminChatController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function pedidosPanel(Cliente $cliente)
+    public function pedidosPanel(int $id)
     {
+        $cliente = Cliente::findOrFail($id);
         $cliente->load('cuenta');
         $codcli     = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
         $pedidosRaw = Pedido::where('codcli', $codcli)

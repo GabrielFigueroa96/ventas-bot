@@ -32,8 +32,9 @@ class LocalidadController extends Controller
         return redirect()->route('admin.localidades')->with('ok', 'Localidad creada.');
     }
 
-    public function update(Request $request, Localidad $localidad)
+    public function update(Request $request, int $id)
     {
+        $localidad = Localidad::findOrFail($id);
         $data = $request->validate([
             'nombre'         => 'required|string|max:100|unique:localidades,nombre,' . $localidad->id,
             'provincia'      => 'nullable|string|max:100',
@@ -50,14 +51,16 @@ class LocalidadController extends Controller
         return redirect()->route('admin.localidades')->with('ok', 'Localidad actualizada.');
     }
 
-    public function destroy(Localidad $localidad)
+    public function destroy(int $id)
     {
+        $localidad = Localidad::findOrFail($id);
         $localidad->delete();
         return redirect()->route('admin.localidades')->with('ok', 'Localidad eliminada.');
     }
 
-    public function toggle(Localidad $localidad)
+    public function toggle(int $id)
     {
+        $localidad = Localidad::findOrFail($id);
         $localidad->update(['activo' => !$localidad->activo]);
         return response()->json(['activo' => $localidad->activo]);
     }

@@ -23,8 +23,9 @@ class ProductoController extends Controller
         return view('admin.productos', compact('productos'));
     }
 
-    public function uploadImagen(Request $request, Producto $producto)
+    public function uploadImagen(Request $request, int $id)
     {
+        $producto = Producto::findOrFail($id);
         $request->validate(['imagen' => 'required|image|max:3072']);
 
         $dir = public_path('producto-images');
@@ -54,8 +55,9 @@ class ProductoController extends Controller
         return back()->with('success', "Imagen de {$producto->des} actualizada.");
     }
 
-    public function updateDescripcion(Request $request, Producto $producto)
+    public function updateDescripcion(Request $request, int $id)
     {
+        $producto = Producto::findOrFail($id);
         $request->validate(['descripcion' => 'nullable|string|max:255']);
 
         $producto->update(['descripcion' => $request->input('descripcion', '')]);
@@ -70,8 +72,9 @@ class ProductoController extends Controller
         return back()->with('success', "Descripción de {$producto->des} actualizada.");
     }
 
-    public function deleteImagen(Producto $producto)
+    public function deleteImagen(int $id)
     {
+        $producto = Producto::findOrFail($id);
         if ($producto->imagen && $producto->imagen !== 'sinimagen.webp') {
             $path = public_path($producto->imagen);
             if (file_exists($path)) {
