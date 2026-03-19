@@ -1071,13 +1071,7 @@ Herramientas disponibles:
 
     private function verProducto($client, string $nombre): string
     {
-        $productos = Cache::remember(
-            'productos_bot_precios',
-            300,
-            fn() => Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion'])
-        );
-
-        $producto = $productos->first(
+        $producto = $this->productosCache()->first(
             fn($p) => stripos($p->des, $nombre) !== false || stripos($nombre, $p->des) !== false
         );
 
@@ -1090,7 +1084,7 @@ Herramientas disponibles:
         $unidad     = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
 
         $caption = "*{$producto->des}*\n\$" . $precio . " ({$unidad})";
-        if (!empty($producto->descripcion) && $producto->descripcion !== 'sinimagen.webp') {
+        if (!empty($producto->descripcion)) {
             $caption .= "\n_{$producto->descripcion}_";
         }
 
@@ -1099,18 +1093,32 @@ Herramientas disponibles:
             $path = public_path($producto->imagen);
             if (file_exists($path)) {
                 try {
-                    $mime    = mime_content_type($path) ?: 'image/jpeg';
+                    $mime    = $this->mimeFromPath($path);
                     $mediaId = $this->uploadMediaFromPath($path, $mime);
                     $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $caption);
                     return "Ya envié al cliente la imagen de {$producto->des} con su precio y descripción. No repitas esta información, solo preguntá si desea agregarlo al carrito.";
                 } catch (\Throwable $e) {
                     Log::error("verProducto imagen {$producto->des}: {$e->getMessage()}");
                 }
+            } else {
+                Log::warning("verProducto: archivo no encontrado en {$path}");
             }
         }
 
-        // Sin imagen: devolver texto para que GPT lo envíe
+        // Sin imagen (o falló el envío): devolver texto para que GPT lo envíe
         return $caption;
+    }
+
+    private function mimeFromPath(string $path): string
+    {
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        return match ($ext) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png'         => 'image/png',
+            'gif'         => 'image/gif',
+            'webp'        => 'image/webp',
+            default       => mime_content_type($path) ?: 'image/jpeg',
+        };
     }
 
     private function uploadMediaFromPath(string $path, string $mime = 'image/jpeg'): string
