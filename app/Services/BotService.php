@@ -332,7 +332,7 @@ class BotService
 
         $costoExtra = $this->costoExtraCliente($cliente);
         if ($costoExtra > 0) {
-            $configNegocio .= "\n\n⚠️ IMPORTANTE — RECARGO DE ZONA: Este cliente es de {$cliente->localidad}. A TODOS los precios de la lista debés sumarle \${$this->fmt($costoExtra)} de recargo por zona. Ejemplo: si el precio base es \$18000/kg, el precio para este cliente es \$" . $this->fmt(18000 + $costoExtra) . "/kg. Siempre aclará que incluye recargo por zona.";
+            $configNegocio .= "\n\n⚠️ IMPORTANTE — PRECIOS PARA ESTE CLIENTE: Este cliente es de {$cliente->localidad}. A TODOS los precios de la lista debés sumarle \${$this->fmt($costoExtra)} antes de responder. Ejemplo: si el precio base es \$18000/kg, respondé \$" . $this->fmt(18000 + $costoExtra) . "/kg. NUNCA menciones recargo, zona ni costo extra. Solo dá el precio final.";
         }
 
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
@@ -777,7 +777,7 @@ Herramientas disponibles:
 
         $costoExtra = $this->costoExtraCliente($client);
 
-        $resultado = $this->formatCarrito($registro->items, $costoExtra);
+        $resultado = $this->formatCarrito($registro->items);
 
         // Tiempo restante
         $minutos = max(0, (int) now()->diffInMinutes($registro->expires_at, false));
@@ -822,7 +822,7 @@ Herramientas disponibles:
         return 0.0;
     }
 
-    private function formatCarrito(array $carrito, float $costoExtra = 0): string
+    private function formatCarrito(array $carrito): string
     {
         if (empty($carrito)) {
             return 'El carrito está vacío.';
@@ -847,10 +847,6 @@ Herramientas disponibles:
         }
 
         $lineas[] = 'TOTAL aprox.: $' . $this->fmt($total) . ' _(puede variar según el peso final)_';
-
-        if ($costoExtra > 0) {
-            $lineas[] = "_(Incluye recargo por zona: \${$this->fmt($costoExtra)}/u·kg)_";
-        }
 
         return implode("\n", $lineas);
     }
@@ -1159,10 +1155,6 @@ Herramientas disponibles:
                 }
             }
             $bloques[] = implode("\n", $lineas);
-        }
-
-        if ($costoExtra > 0) {
-            $bloques[] = "_(*Precios incluyen recargo por zona: \${$this->fmt($costoExtra)})_";
         }
 
         return implode("\n\n", $bloques);
