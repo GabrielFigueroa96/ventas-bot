@@ -610,9 +610,10 @@ Herramientas disponibles:
                     'parameters'  => [
                         'type'       => 'object',
                         'properties' => [
-                            'nombre' => ['type' => 'string', 'description' => 'Nombre del producto tal como aparece en la lista.'],
+                            'nombre'          => ['type' => 'string',  'description' => 'Nombre del producto tal como aparece en la lista.'],
+                            'solicita_precio' => ['type' => 'boolean', 'description' => 'true si el cliente preguntó explícitamente por el precio o costo del producto. false si solo preguntó por disponibilidad, descripción o imagen.'],
                         ],
-                        'required' => ['nombre'],
+                        'required' => ['nombre', 'solicita_precio'],
                     ],
                 ],
             ],
@@ -654,7 +655,7 @@ Herramientas disponibles:
                 'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['calle'] ?? '', $args['numero'] ?? '', $args['localidad'] ?? '', $args['dato_extra'] ?? '', $args['obs'] ?? ''),
                 'ver_pedidos'        => $this->orderStatus($cliente),
                 'ver_precios'        => $this->priceList($cliente),
-                'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? ''),
+                'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false)),
                 'cancelar_pedido'    => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
                 default              => 'Función desconocida.',
             };
@@ -1079,7 +1080,7 @@ Herramientas disponibles:
         return "Pedido #{$nro} cancelado correctamente.";
     }
 
-    private function verProducto($client, string $nombre): string
+    private function verProducto($client, string $nombre, bool $solicitaPrecio = false): string
     {
         // Sin cache: siempre precio e imagen actualizados desde la BD
         $productos = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion', 'notas_ia']);
@@ -1100,13 +1101,15 @@ Herramientas disponibles:
             return "Producto '{$nombre}' no encontrado. Los productos disponibles son: " . $productos->pluck('des')->join(', ') . '.';
         }
 
-        $costoExtra = $this->costoExtraCliente($client);
-        $precio     = $this->fmt((float) $producto->PRE + $costoExtra);
-        $unidad     = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
-
-        $caption = "*{$producto->des}*\n\$" . $precio . " ({$unidad})";
+        $caption = "*{$producto->des}*";
         if (!empty($producto->descripcion)) {
             $caption .= "\n_{$producto->descripcion}_";
+        }
+        if ($solicitaPrecio) {
+            $costoExtra = $this->costoExtraCliente($client);
+            $precio     = $this->fmt((float) $producto->PRE + $costoExtra);
+            $unidad     = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
+            $caption   .= "\n\${$precio} ({$unidad})";
         }
 
         // Enviar imagen con descripción y precio como caption (todo en 1 mensaje)
