@@ -11,10 +11,23 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
-        .nav-link { @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/10 transition-all duration-150; }
-        .nav-link.active { @apply text-white bg-red-600/80; }
-        .nav-link svg { @apply shrink-0 opacity-75; }
-        .nav-link.active svg { @apply opacity-100; }
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #9ca3af;
+            text-decoration: none;
+            transition: background 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        .nav-link:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .nav-link.active { background: rgba(220,38,38,0.75); color: #fff; }
+        .nav-link svg { flex-shrink: 0; width: 18px; height: 18px; opacity: 0.8; }
+        .nav-link.active svg { opacity: 1; }
         #sidebar { transition: transform 0.25s ease; }
         @media (max-width: 1023px) {
             #sidebar { transform: translateX(-100%); position: fixed; z-index: 50; }
