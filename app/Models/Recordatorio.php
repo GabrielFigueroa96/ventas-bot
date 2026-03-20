@@ -38,8 +38,9 @@ class Recordatorio extends Model
         if ($this->ultimo_envio_at && $this->ultimo_envio_at->isToday()) return false;
         if (!empty($this->dias) && !in_array((int) now()->format('w'), $this->dias)) return false;
 
-        // Dispara si ya pasó la hora configurada hoy (no requiere match exacto de minuto)
+        // Dispara si está dentro de los 10 minutos posteriores a la hora configurada
         $horaConfig = \Carbon\Carbon::today()->setTimeFromTimeString($this->hora);
-        return now()->gte($horaConfig);
+        $diff = now()->diffInMinutes($horaConfig, false);
+        return $diff >= -10 && $diff <= 0;
     }
 }
