@@ -1,6 +1,5 @@
 @extends('admin.layout')
 @section('title', 'Dashboard')
-@section('empresa_nombre', $empresa?->nombre ?? 'Carnicería Bot')
 
 @section('content')
 
