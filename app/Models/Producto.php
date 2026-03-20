@@ -5,6 +5,25 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int    $id
+ * @property float  $cod
+ * @property string $des
+ * @property float  $iva
+ * @property int    $grupo
+ * @property string $desgrupo
+ * @property int    $unid
+ * @property float  $kilos
+ * @property float  $pre
+ * @property float  $PRE
+ * @property float  $cant
+ * @property float  $pre2
+ * @property float  $pre3
+ * @property string $tipo
+ * @property string $imagen
+ * @property string $descripcion
+ * @property string $notas_ia
+ */
 class Producto extends Model
 {
     use HasFactory;

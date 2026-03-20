@@ -13,13 +13,17 @@ class ProductoController extends Controller
 {
     public function index(Request $request)
     {
-        $search = $request->input('search');
+        $search     = $request->input('search');
+        $filtroCat  = $request->input('catalogo');   // 'si' | 'no' | null
+        $filtroDisp = $request->input('disponible'); // 'si' | 'no' | null
 
         $productos = Producto::where('PRE', '>', 0)
             ->with('iaProducto')
-            ->when($search, fn($q) =>
-                $q->where('des', 'like', "%{$search}%")
-            )
+            ->when($search, fn($q) => $q->where('des', 'like', "%{$search}%"))
+            ->when($filtroCat === 'si',  fn($q) => $q->whereHas('iaProducto'))
+            ->when($filtroCat === 'no',  fn($q) => $q->whereDoesntHave('iaProducto'))
+            ->when($filtroDisp === 'si', fn($q) => $q->whereHas('iaProducto', fn($q) => $q->where('disponible', true)))
+            ->when($filtroDisp === 'no', fn($q) => $q->whereHas('iaProducto', fn($q) => $q->where('disponible', false)))
             ->orderBy('des')
             ->get();
 
@@ -27,24 +31,25 @@ class ProductoController extends Controller
     }
 
     /** Agrega el producto al catálogo del bot (crea ia_productos si no existe). */
-    public function agregarCatalogo(Producto $producto)
+    public function agregarCatalogo($cod)
     {
+        $producto = Producto::where('cod', $cod)->firstOrFail();
         if (!$producto->iaProducto) {
             IaProducto::create([
                 'cod'        => $producto->cod,
-                'precio'     => (float) $producto->PRE,
+                'precio'     => (float) $producto->pre,
                 'disponible' => true,
             ]);
             Cache::forget('productos_bot_lista');
         }
-        return back()->with('success', "{$producto->des} agregado al catálogo del bot.");
+        return response()->json(['ok' => true]);
     }
 
     /** Quita el producto del catálogo del bot (elimina ia_productos). */
-    public function quitarCatalogo(Producto $producto)
+    public function quitarCatalogo($cod)
     {
+        $producto = Producto::where('cod', $cod)->firstOrFail();
         if ($producto->iaProducto) {
-            // Borrar imagen si existe
             $img = $producto->iaProducto->imagen;
             if ($img && file_exists(public_path($img))) {
                 unlink(public_path($img));
@@ -53,25 +58,27 @@ class ProductoController extends Controller
             Cache::forget('productos_bot_lista');
             Cache::forget('productos_bot_precios');
         }
-        return back()->with('success', "{$producto->des} quitado del catálogo.");
+        return response()->json(['ok' => true]);
     }
 
     /** Activa / desactiva la visibilidad del producto para el bot. */
-    public function toggleDisponible(Producto $producto)
+    public function toggleDisponible($cod)
     {
+        $producto = Producto::where('cod', $cod)->firstOrFail();
         $ia = $producto->iaProducto;
         if (!$ia) {
-            return back()->with('error', 'El producto no está en el catálogo del bot.');
+            return response()->json(['ok' => false], 422);
         }
         $ia->update(['disponible' => !$ia->disponible]);
         Cache::forget('productos_bot_lista');
-        return back();
+        return response()->json(['ok' => true, 'disponible' => $ia->disponible]);
     }
 
-    public function updatePrecio(Request $request, Producto $producto)
+    public function updatePrecio(Request $request, $cod)
     {
         $request->validate(['precio' => 'required|numeric|min:0']);
 
+        $producto = Producto::findOrFail($cod);
         $ia = $producto->iaProducto;
         if (!$ia) {
             return response()->json(['ok' => false, 'error' => 'No en catálogo'], 422);
@@ -86,9 +93,10 @@ class ProductoController extends Controller
         return back()->with('success', "Precio de {$producto->des} actualizado.");
     }
 
-    public function uploadImagen(Request $request, Producto $producto)
+    public function uploadImagen(Request $request, $cod)
     {
-        $ia = $this->getOrCreateIa($producto);
+        $producto = Producto::findOrFail($cod);
+        $ia       = $this->getOrCreateIa($producto);
         $tenantId = app(TenantManager::class)->get()->id;
         $request->validate(['imagen' => 'required|image|max:3072']);
 
@@ -116,10 +124,11 @@ class ProductoController extends Controller
         return back()->with('success', "Imagen de {$producto->des} actualizada.");
     }
 
-    public function updateDescripcion(Request $request, Producto $producto)
+    public function updateDescripcion(Request $request, $cod)
     {
         $request->validate(['descripcion' => 'nullable|string|max:500']);
 
+        $producto = Producto::findOrFail($cod);
         $ia = $this->getOrCreateIa($producto);
         $ia->update(['descripcion' => $request->input('descripcion', '')]);
 
@@ -132,10 +141,11 @@ class ProductoController extends Controller
         return back()->with('success', "Descripción de {$producto->des} actualizada.");
     }
 
-    public function updateNotasIa(Request $request, Producto $producto)
+    public function updateNotasIa(Request $request, $cod)
     {
         $request->validate(['notas_ia' => 'nullable|string|max:500']);
 
+        $producto = Producto::findOrFail($cod);
         $ia = $this->getOrCreateIa($producto);
         $ia->update(['notas_ia' => $request->input('notas_ia', '')]);
 
@@ -147,8 +157,9 @@ class ProductoController extends Controller
         return back()->with('success', "Notas IA de {$producto->des} actualizadas.");
     }
 
-    public function deleteImagen(Producto $producto)
+    public function deleteImagen($cod)
     {
+        $producto = Producto::findOrFail($cod);
         $ia = $producto->iaProducto;
         if ($ia && $ia->imagen && $ia->imagen !== 'sinimagen.webp') {
             $path = public_path($ia->imagen);
@@ -169,9 +180,9 @@ class ProductoController extends Controller
     private function getOrCreateIa(Producto $producto): IaProducto
     {
         return $producto->iaProducto ?? IaProducto::create([
-            'tablaplu_id' => $producto->id,
-            'precio'      => (float) $producto->PRE,
-            'disponible'  => true,
+            'cod'        => $producto->cod,
+            'precio'     => (float) $producto->PRE,
+            'disponible' => true,
         ]);
     }
 

@@ -2,155 +2,216 @@
 @section('title', 'Productos')
 
 @section('content')
-<div class="flex items-center justify-between mb-5">
-    <h1 class="text-xl sm:text-2xl font-bold text-gray-800">Productos</h1>
+<div class="flex items-center justify-between mb-4">
+    <h1 class="text-xl font-bold text-gray-800">Productos</h1>
     <span class="text-sm text-gray-400">{{ $productos->count() }} productos</span>
 </div>
 
 @if(session('success'))
-    <div class="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2 rounded-lg mb-4">
-        {{ session('success') }}
-    </div>
+    <div class="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2 rounded-lg mb-4">{{ session('success') }}</div>
+@endif
+@if(session('error'))
+    <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg mb-4">{{ session('error') }}</div>
 @endif
 
-{{-- Buscador --}}
-<form method="GET" class="mb-5">
+{{-- Filtros --}}
+<form method="GET" class="flex flex-wrap gap-2 mb-4 items-center">
     <input type="text" name="search" value="{{ request('search') }}"
-        placeholder="Buscar producto..."
-        class="w-full sm:w-80 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+        placeholder="Buscar..."
+        class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 w-48">
+
+    <select name="catalogo" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+        <option value="">En catálogo: todos</option>
+        <option value="si" @selected(request('catalogo') === 'si')>En catálogo: sí</option>
+        <option value="no" @selected(request('catalogo') === 'no')>En catálogo: no</option>
+    </select>
+
+    <select name="disponible" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+        <option value="">Visible: todos</option>
+        <option value="si" @selected(request('disponible') === 'si')>Visible al cliente: sí</option>
+        <option value="no" @selected(request('disponible') === 'no')>Visible al cliente: no</option>
+    </select>
+
+    <button type="submit" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm px-3 py-1.5 rounded-lg">Filtrar</button>
+    @if(request('search') || request('catalogo') || request('disponible'))
+        <a href="{{ route('admin.productos') }}" class="text-sm text-gray-400 hover:text-red-500">Limpiar</a>
+    @endif
 </form>
 
-<div class="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-    @foreach($productos as $producto)
-    @php
-        $ia          = $producto->iaProducto;
-        $enCatalogo  = $ia !== null;
-        $imgPath     = $ia?->imagen;
-        $tieneImagen = $imgPath && file_exists(public_path($imgPath));
-        $imgUrl      = $tieneImagen ? asset($imgPath) : null;
-    @endphp
-    <div class="bg-white rounded-xl shadow overflow-hidden flex flex-col {{ !$enCatalogo ? 'opacity-60' : '' }}">
-
-        {{-- Imagen --}}
-        <div class="relative bg-gray-100 aspect-square flex items-center justify-center overflow-hidden">
-            @if($imgUrl)
-                <img src="{{ $imgUrl }}" alt="{{ $producto->des }}" class="w-full h-full object-cover">
-                @if($enCatalogo)
-                <form method="POST" action="{{ route('admin.productos.imagen.delete', $producto) }}"
-                      onsubmit="return confirm('¿Eliminar imagen?')"
-                      class="absolute top-2 right-2">
-                    @csrf @method('DELETE')
-                    <button class="bg-white bg-opacity-80 hover:bg-red-100 text-red-600 rounded-full w-7 h-7 flex items-center justify-center text-xs shadow">✕</button>
-                </form>
+{{-- Lista --}}
+<div class="bg-white rounded-xl shadow overflow-hidden">
+    <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+            <tr>
+                <th class="px-3 py-2 text-left w-12"></th>
+                <th class="px-3 py-2 text-left">Producto</th>
+                <th class="px-3 py-2 text-right w-28">Precio sistema</th>
+                <th class="px-3 py-2 text-right w-32">Precio bot</th>
+                <th class="px-3 py-2 text-center w-24">Catálogo</th>
+                <th class="px-3 py-2 text-center w-24">Visible</th>
+                <th class="px-3 py-2 text-center w-10"></th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+        @forelse($productos as $producto)
+        @php
+            $ia         = $producto->iaProducto;
+            $enCatalogo = $ia !== null;
+            $imgPath    = $ia?->imagen;
+            $tieneImg   = $imgPath && file_exists(public_path($imgPath));
+            $imgUrl     = $tieneImg ? asset($imgPath) : null;
+            $rowId      = 'row-' . $producto->cod;
+        @endphp
+        {{-- Fila principal --}}
+        <tr class="{{ !$enCatalogo ? 'opacity-60' : '' }}">
+            <td class="px-3 py-2">
+                @if($imgUrl)
+                    <img src="{{ $imgUrl }}" alt="" class="w-9 h-9 object-cover rounded-lg">
+                @else
+                    <div class="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300 text-lg">🥩</div>
                 @endif
-            @else
-                <span class="text-4xl opacity-20">🥩</span>
-            @endif
-
-            {{-- Badge disponible/inactivo --}}
-            @if($enCatalogo)
-                <span class="absolute top-2 left-2 text-xs px-2 py-0.5 rounded-full font-medium
-                    {{ $ia->disponible ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500' }}">
-                    {{ $ia->disponible ? 'Visible' : 'Oculto' }}
-                </span>
-            @endif
-        </div>
-
-        {{-- Info --}}
-        <div class="px-3 py-2 flex-1 flex flex-col gap-2">
-            <div>
-                <p class="font-medium text-gray-800 text-sm leading-tight">{{ $producto->des }}</p>
-                <p class="text-xs text-gray-400 mt-0.5">
-                    Precio sistema: {{ number_format($producto->PRE, 2, ',', '.') }} $
-                    / {{ $producto->tipo === 'Unidad' ? 'u' : 'kg' }}
-                </p>
-            </div>
-
-            @if($enCatalogo)
-                {{-- Precio bot --}}
-                <div class="flex items-center gap-1.5">
-                    <span class="text-xs text-gray-500 shrink-0">Precio bot $</span>
-                    <input type="number" step="0.01" min="0"
-                        value="{{ number_format($ia->precio, 2, '.', '') }}"
-                        data-url="{{ route('admin.productos.precio', $producto) }}"
-                        class="precio-input w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-red-300">
-                    <span class="precio-status text-xs text-green-500 hidden">✓</span>
-                </div>
-
-                {{-- Descripción visible al cliente --}}
-                <div class="relative">
-                    <textarea
-                        data-url="{{ route('admin.productos.descripcion', $producto) }}"
-                        placeholder="Descripción visible al cliente..."
-                        maxlength="500" rows="2"
-                        class="desc-input w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-red-300 text-gray-600 placeholder-gray-300"
-                    >{{ $ia->descripcion }}</textarea>
-                    <span class="desc-status absolute top-1 right-1.5 text-xs text-green-500 hidden">✓</span>
-                </div>
-
-                {{-- Notas IA --}}
-                <div class="relative">
-                    <textarea
-                        data-url="{{ route('admin.productos.notas_ia', $producto) }}"
-                        data-field="notas_ia"
-                        placeholder="Notas para la IA (ej: precio fijo, no multiplicar por kg...)"
-                        maxlength="500" rows="2"
-                        class="ia-input w-full text-xs border border-purple-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-purple-300 text-gray-600 placeholder-gray-300 bg-purple-50"
-                    >{{ $ia->notas_ia }}</textarea>
-                    <span class="ia-status absolute top-1 right-1.5 text-xs text-green-500 hidden">✓</span>
-                    <span class="absolute bottom-1 right-1.5 text-xs text-purple-300">🤖 solo IA</span>
-                </div>
-
-                {{-- Imagen --}}
-                <form method="POST" action="{{ route('admin.productos.imagen', $producto) }}"
-                      enctype="multipart/form-data">
-                    @csrf
-                    <label class="flex items-center gap-2 cursor-pointer group">
-                        <input type="file" name="imagen" accept="image/*" class="hidden" onchange="this.form.submit()">
-                        <span class="w-full text-center text-xs border border-dashed border-gray-300 group-hover:border-red-400 group-hover:text-red-500 text-gray-400 rounded-lg py-1.5 transition">
-                            {{ $imgUrl ? '📷 Cambiar imagen' : '📷 Subir imagen' }}
-                        </span>
-                    </label>
-                </form>
-
-                {{-- Acciones --}}
-                <div class="flex gap-2 mt-auto pt-1 border-t border-gray-100">
-                    <form method="POST" action="{{ route('admin.productos.disponible', $producto) }}" class="flex-1">
-                        @csrf @method('PATCH')
-                        <button class="w-full text-xs py-1 rounded-lg border
-                            {{ $ia->disponible ? 'border-gray-300 text-gray-500 hover:bg-gray-50' : 'border-green-400 text-green-600 hover:bg-green-50' }}">
-                            {{ $ia->disponible ? 'Ocultar' : 'Mostrar' }}
-                        </button>
-                    </form>
-                    <form method="POST" action="{{ route('admin.productos.catalogo.quitar', $producto) }}"
-                          onsubmit="return confirm('¿Quitar del catálogo del bot?')">
+            </td>
+            <td class="px-3 py-2">
+                <p class="font-medium text-gray-800 leading-tight">{{ $producto->des }}</p>
+                <p class="text-xs text-gray-400">{{ $producto->desgrupo }} · {{ $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg' }}</p>
+            </td>
+            <td class="px-3 py-2 text-right text-gray-500 tabular-nums">
+                ${{ number_format($producto->PRE, 2, ',', '.') }}
+            </td>
+            <td class="px-3 py-2 text-right tabular-nums">
+                @if($enCatalogo)
+                    <div class="flex items-center justify-end gap-1">
+                        <span class="text-gray-400 text-xs">$</span>
+                        <input type="number" step="0.01" min="0"
+                            value="{{ number_format($ia->precio, 2, '.', '') }}"
+                            data-url="{{ route('admin.productos.precio', $producto->cod) }}"
+                            class="precio-input w-24 border border-gray-200 rounded px-2 py-0.5 text-right text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                        <span class="precio-status text-green-500 text-xs hidden">✓</span>
+                    </div>
+                @else
+                    <span class="text-gray-300">—</span>
+                @endif
+            </td>
+            <td class="px-3 py-2 text-center">
+                @if($enCatalogo)
+                    <form method="POST" action="{{ route('admin.productos.catalogo.quitar', $producto->cod) }}"
+                          onsubmit="return confirm('¿Quitar del catálogo?')">
                         @csrf @method('DELETE')
-                        <button class="text-xs px-3 py-1 rounded-lg border border-red-300 text-red-500 hover:bg-red-50">
-                            Quitar
+                        <button type="submit" class="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 hover:bg-red-50 hover:text-red-600 px-2 py-0.5 rounded-full transition">
+                            ✓ Sí
                         </button>
                     </form>
-                </div>
-
+                @else
+                    <form method="POST" action="{{ route('admin.productos.catalogo.agregar', $producto->cod) }}">
+                        @csrf
+                        <button type="submit" class="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-500 hover:bg-green-50 hover:text-green-600 px-2 py-0.5 rounded-full transition">
+                            + Agregar
+                        </button>
+                    </form>
+                @endif
+            </td>
+            <td class="px-3 py-2 text-center">
+                @if($enCatalogo)
+                    <form method="POST" action="{{ route('admin.productos.disponible', $producto->cod) }}">
+                        @csrf @method('PATCH')
+                        <button type="submit"
+                            class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full transition
+                                {{ $ia->disponible ? 'bg-blue-100 text-blue-700 hover:bg-gray-100 hover:text-gray-500' : 'bg-gray-100 text-gray-400 hover:bg-blue-50 hover:text-blue-600' }}">
+                            {{ $ia->disponible ? '👁 Visible' : '🚫 Oculto' }}
+                        </button>
+                    </form>
+                @else
+                    <span class="text-gray-300 text-xs">—</span>
+                @endif
+            </td>
+            @if($enCatalogo)
+            <td class="px-3 py-2 text-center">
+                <button type="button" onclick="toggleDetalle('{{ $rowId }}')"
+                    class="text-gray-400 hover:text-red-500 text-sm px-2 py-1 rounded hover:bg-gray-100 transition">
+                    ✏️
+                </button>
+            </td>
             @else
-                {{-- No está en el catálogo --}}
-                <p class="text-xs text-gray-400 italic">No visible para el bot</p>
-                <form method="POST" action="{{ route('admin.productos.catalogo.agregar', $producto) }}" class="mt-auto">
-                    @csrf
-                    <button class="w-full text-xs py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium">
-                        + Agregar al catálogo
-                    </button>
-                </form>
+            <td></td>
             @endif
-        </div>
+        </tr>
 
-    </div>
-    @endforeach
+        {{-- Fila de detalle (colapsable) --}}
+        @if($enCatalogo)
+        <tr id="{{ $rowId }}" class="hidden bg-gray-50">
+            <td colspan="7" class="px-4 py-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+                    {{-- Descripción --}}
+                    <div class="relative sm:col-span-1">
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Descripción (visible al cliente)</label>
+                        <textarea
+                            data-url="{{ route('admin.productos.descripcion', $producto->cod) }}"
+                            placeholder="Ej: corte tierno ideal para asado..."
+                            maxlength="500" rows="2"
+                            class="desc-input w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-red-300 placeholder-gray-300"
+                        >{{ $ia->descripcion }}</textarea>
+                        <span class="desc-status absolute top-6 right-1.5 text-xs text-green-500 hidden">✓</span>
+                    </div>
+
+                    {{-- Notas IA --}}
+                    <div class="relative sm:col-span-1">
+                        <label class="block text-xs font-medium text-purple-500 mb-1">Notas para la IA 🤖</label>
+                        <textarea
+                            data-url="{{ route('admin.productos.notas_ia', $producto->cod) }}"
+                            placeholder="Ej: precio fijo por unidad, no multiplicar por kg..."
+                            maxlength="500" rows="2"
+                            class="ia-input w-full text-xs border border-purple-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-purple-300 bg-purple-50 placeholder-gray-300"
+                        >{{ $ia->notas_ia }}</textarea>
+                        <span class="ia-status absolute top-6 right-1.5 text-xs text-green-500 hidden">✓</span>
+                    </div>
+
+                    {{-- Imagen --}}
+                    <div class="sm:col-span-1 flex flex-col gap-2">
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Imagen</label>
+                        <div class="flex items-start gap-3">
+                            @if($imgUrl)
+                                <img src="{{ $imgUrl }}" class="w-16 h-16 object-cover rounded-lg border border-gray-200">
+                                <form method="POST" action="{{ route('admin.productos.imagen.delete', $producto->cod) }}"
+                                      onsubmit="return confirm('¿Eliminar imagen?')">
+                                    @csrf @method('DELETE')
+                                    <button class="text-xs text-red-500 hover:underline">Eliminar</button>
+                                </form>
+                            @endif
+                            <form method="POST" action="{{ route('admin.productos.imagen', $producto->cod) }}"
+                                  enctype="multipart/form-data">
+                                @csrf
+                                <label class="cursor-pointer text-xs border border-dashed border-gray-300 hover:border-red-400 hover:text-red-500 text-gray-400 rounded-lg px-3 py-1.5 transition block text-center">
+                                    <input type="file" name="imagen" accept="image/*" class="hidden" onchange="this.form.submit()">
+                                    📷 {{ $imgUrl ? 'Cambiar' : 'Subir imagen' }}
+                                </label>
+                            </form>
+                        </div>
+                    </div>
+
+                </div>
+            </td>
+        </tr>
+        @endif
+
+        @empty
+        <tr>
+            <td colspan="7" class="px-4 py-8 text-center text-sm text-gray-400">No hay productos con esos filtros.</td>
+        </tr>
+        @endforelse
+        </tbody>
+    </table>
 </div>
 @endsection
 
 @section('scripts')
 <script>
 const csrfToken = document.querySelector('meta[name=csrf-token]').content;
+
+function toggleDetalle(id) {
+    const row = document.getElementById(id);
+    if (row) row.classList.toggle('hidden');
+}
 
 function autoSaveTextarea(selector, statusSelector, bodyKey) {
     document.querySelectorAll(selector).forEach(textarea => {
@@ -165,8 +226,7 @@ function autoSaveTextarea(selector, statusSelector, bodyKey) {
                     body: JSON.stringify({ [bodyKey]: textarea.value }),
                 });
                 original = textarea.value;
-                status.classList.remove('hidden');
-                setTimeout(() => status.classList.add('hidden'), 2000);
+                if (status) { status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 2000); }
             } catch (_) {}
         });
     });
@@ -175,7 +235,6 @@ function autoSaveTextarea(selector, statusSelector, bodyKey) {
 autoSaveTextarea('.desc-input', '.desc-status', 'descripcion');
 autoSaveTextarea('.ia-input',   '.ia-status',   'notas_ia');
 
-// Auto-save precio
 document.querySelectorAll('.precio-input').forEach(input => {
     let original = input.value;
     input.addEventListener('blur', async () => {
@@ -188,8 +247,7 @@ document.querySelectorAll('.precio-input').forEach(input => {
                 body: JSON.stringify({ precio: input.value }),
             });
             original = input.value;
-            status.classList.remove('hidden');
-            setTimeout(() => status.classList.add('hidden'), 2000);
+            if (status) { status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 2000); }
         } catch (_) {}
     });
 });

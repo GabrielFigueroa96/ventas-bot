@@ -4,6 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int    $id
+ * @property float  $cod
+ * @property float  $precio
+ * @property string $descripcion
+ * @property string $imagen
+ * @property bool   $disponible
+ * @property string $notas_ia
+ */
 class IaProducto extends Model
 {
     protected $table = 'ia_productos';
