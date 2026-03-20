@@ -261,22 +261,24 @@ class WebhookController extends Controller
             ->where('respondio', false)
             ->update(['respondio' => true]);
 
-        if ($client->modo === 'humano') {
+        if ($client->modo === 'humano' || $client->estado === 'humano') {
             return response()->json(['status' => 'human_mode']);
         }
 
         $reply = $bot->process($client, $msgText, null);
 
-        $this->saveOutgoingMessage($client->id, $reply, null);
+        if ($reply !== '') {
+            $this->saveOutgoingMessage($client->id, $reply, null);
 
-        MessageLog::on('mysql')->create([
-            'tenant_id' => $tenantId,
-            'phone'     => $phone,
-            'type'      => 'text',
-            'message'   => $msgText,
-            'reply'     => $reply,
-            'enviado'   => true,
-        ]);
+            MessageLog::on('mysql')->create([
+                'tenant_id' => $tenantId,
+                'phone'     => $phone,
+                'type'      => 'text',
+                'message'   => $msgText,
+                'reply'     => $reply,
+                'enviado'   => true,
+            ]);
+        }
 
         return response()->json(['status' => 'ok']);
     }
