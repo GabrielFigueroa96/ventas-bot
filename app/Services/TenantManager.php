@@ -17,7 +17,7 @@ class TenantManager
         $tenant = Cache::remember("tenant_phone_{$phoneNumberId}", 300, fn() =>
             DB::connection('mysql')
                 ->table('ia_tenants')
-                ->where('phone_number_id', $phoneNumberId)
+                ->where('phone_number_id', trim($phoneNumberId))
                 ->where('activo', true)
                 ->first()
         );
@@ -40,6 +40,28 @@ class TenantManager
             DB::connection('mysql')
                 ->table('ia_tenants')
                 ->where('webhook_token', $token)
+                ->where('activo', true)
+                ->first()
+        );
+
+        if (!$tenant) {
+            return false;
+        }
+
+        $this->switchConnection($tenant);
+        $this->tenant = $tenant;
+        return true;
+    }
+
+    /**
+     * Activa el tenant a partir del page_id que llega en el webhook de Messenger/Instagram.
+     */
+    public function loadByPageId(string $pageId): bool
+    {
+        $tenant = Cache::remember("tenant_page_{$pageId}", 300, fn() =>
+            DB::connection('mysql')
+                ->table('ia_tenants')
+                ->where('page_id', $pageId)
                 ->where('activo', true)
                 ->first()
         );
@@ -107,9 +129,11 @@ class TenantManager
 
         // Setear las credenciales de API de este tenant para que BotService las lea con config()
         config([
-            'api.whatsapp.key'             => $tenant->whatsapp_api_key,
-            'api.whatsapp.phone_number_id' => $tenant->phone_number_id,
+            'api.whatsapp.key'             => $tenant->whatsapp_api_key ?? null,
+            'api.whatsapp.phone_number_id' => $tenant->phone_number_id ?? null,
             'api.openai.key'               => $tenant->openai_api_key,
+            'api.messenger.page_id'        => $tenant->page_id ?? null,
+            'api.messenger.token'          => $tenant->messenger_token ?? null,
         ]);
     }
 }

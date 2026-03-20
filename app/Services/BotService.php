@@ -75,14 +75,14 @@ class BotService
                         ? "¡Hola! Soy {$nombreIa}. En breve alguien del equipo te va a atender. ¡Gracias por escribirnos!"
                         : "¡Hola! En breve alguien del equipo te va a atender. ¡Gracias por escribirnos!";
                     $client->update(['estado' => 'humano']);
-                    $this->sendWhatsapp($client->phone, $saludo);
+                    $this->sendReply($client, $saludo);
                     return $saludo;
                 }
 
                 $client->update(['estado' => 'esperando_nombre']);
                 $saludo   = $nombreIa ? "¡Hola! Soy {$nombreIa}, el asistente del negocio." : "¡Hola! Soy el asistente del negocio.";
                 $response = "{$saludo} ¿Cuál es tu nombre?";
-                $this->sendWhatsapp($client->phone, $response);
+                $this->sendReply($client, $response);
                 return $response;
             } else {
                 $nombre = ucfirst(strtolower(trim($message)));
@@ -91,7 +91,7 @@ class BotService
                 $response = "¡Hola, {$nombre}! ¿En qué localidad estás?"
                     . ($localidades ? " (Repartimos en: {$localidades})" : '');
             }
-            $this->sendWhatsapp($client->phone, $response);
+            $this->sendReply($client, $response);
             return $response;
         }
 
@@ -127,7 +127,7 @@ class BotService
                     . " Podés pasar a retirar al local. ¿En qué puedo ayudarte?";
             }
 
-            $this->sendWhatsapp($client->phone, $response);
+            $this->sendReply($client, $response);
             return $response;
         }
 
@@ -140,7 +140,7 @@ class BotService
                 $client->update(['calle' => $input, 'numero' => null, 'estado' => 'esperando_dato_extra']);
             }
             $response = "¿Tenés algún dato extra? (piso, depto, referencia) — respondé *no* para omitir.";
-            $this->sendWhatsapp($client->phone, $response);
+            $this->sendReply($client, $response);
             return $response;
         }
 
@@ -151,12 +151,12 @@ class BotService
             $dir      = trim("{$client->calle} {$client->numero}");
             $response = "¡Todo listo, {$client->name}! Dirección guardada: {$dir}"
                 . ($datoExtra ? " ({$datoExtra})" : '') . ". ¿En qué puedo ayudarte?";
-            $this->sendWhatsapp($client->phone, $response);
+            $this->sendReply($client, $response);
             return $response;
         }
 
         $response = $this->askChatGPT($message, $client, $image);
-        $this->sendWhatsapp($client->phone, $response);
+        $this->sendReply($client, $response);
         return $response;
     }
 
@@ -1285,9 +1285,15 @@ Herramientas disponibles:
             Log::info("verProducto path={$path} exists=" . (file_exists($path) ? 'SI' : 'NO'));
             if (file_exists($path)) {
                 try {
-                    $mime    = $this->mimeFromPath($path);
-                    $mediaId = $this->uploadMediaFromPath($path, $mime);
-                    $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $caption);
+                    $isMessenger = str_starts_with($client->phone, 'fb_') || str_starts_with($client->phone, 'ig_');
+                    if ($isMessenger) {
+                        $imageUrl = config('app.url') . '/' . $producto->imagen;
+                        $this->sendReplyImage($client, $imageUrl, $caption);
+                    } else {
+                        $mime    = $this->mimeFromPath($path);
+                        $mediaId = $this->uploadMediaFromPath($path, $mime);
+                        $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $caption);
+                    }
                     return $puedePedir
                         ? "IMAGEN_ENVIADA para {$producto->des}. El cliente ya recibió imagen, descripción y precio. Preguntale '¿Lo agregamos al carrito? ¿Cuánto querés?' (en un solo mensaje, sin repetir datos del producto). Si confirma con cantidad, llamá agregar_al_carrito. Si dice 'sí' sin cantidad, pedile solo la cantidad. NO volvás a llamar ver_producto para este mismo producto."
                         : "IMAGEN_ENVIADA para {$producto->des}. El cliente ya recibió imagen, descripción y precio. NO preguntes cantidad ni ofrezcas agregar al carrito. Si quiere comprar, indicale que contacte al negocio directamente.";
@@ -1298,7 +1304,7 @@ Herramientas disponibles:
         }
 
         // Sin imagen: enviar el texto directo y decirle a GPT que no lo repita
-        $this->sendWhatsapp($client->phone, $caption);
+        $this->sendReply($client, $caption);
         return $puedePedir
             ? "TEXTO_ENVIADO para {$producto->des}. El cliente ya recibió descripción y precio. Preguntale '¿Lo agregamos al carrito? ¿Cuánto querés?' (en un solo mensaje, sin repetir datos del producto). Si confirma con cantidad, llamá agregar_al_carrito. Si dice 'sí' sin cantidad, pedile solo la cantidad. NO volvás a llamar ver_producto para este mismo producto."
             : "TEXTO_ENVIADO para {$producto->des}. El cliente ya recibió descripción y precio. NO preguntes cantidad ni ofrezcas agregar al carrito. Si quiere comprar, indicale que contacte al negocio directamente.";
@@ -1591,6 +1597,106 @@ Herramientas disponibles:
             }
         } catch (\Throwable $e) {
             Log::error('sendWhatsappImageByUrl error: ' . $e->getMessage());
+        }
+    }
+
+    // ── Multi-canal ──────────────────────────────────────────────────────────
+
+    /**
+     * Envía texto al cliente según su canal (WhatsApp, Messenger o Instagram).
+     * Para clientes de WhatsApp usa sendWhatsapp(); para Messenger/Instagram usa sendMessenger().
+     * El canal se detecta por el prefijo del campo phone: "fb_" = Messenger, "ig_" = Instagram.
+     */
+    public function sendReply(\App\Models\Cliente $client, string $message): void
+    {
+        $phone = $client->phone;
+
+        if (str_starts_with($phone, 'fb_') || str_starts_with($phone, 'ig_')) {
+            $recipientId = substr($phone, 3);
+            $this->sendMessenger($recipientId, $message);
+        } else {
+            $this->sendWhatsapp($phone, $message);
+        }
+    }
+
+    /**
+     * Envía imagen al cliente según su canal.
+     */
+    public function sendReplyImage(\App\Models\Cliente $client, string $imageUrl, string $caption = ''): void
+    {
+        $phone = $client->phone;
+
+        if (str_starts_with($phone, 'fb_') || str_starts_with($phone, 'ig_')) {
+            $recipientId = substr($phone, 3);
+            $this->sendMessengerImage($recipientId, $imageUrl, $caption);
+        } else {
+            $this->sendWhatsappImageByUrl($phone, $imageUrl, $caption);
+        }
+    }
+
+    /**
+     * Envía un texto via Messenger / Instagram (Graph API).
+     */
+    public function sendMessenger(string $recipientId, string $message): void
+    {
+        $pageId    = config('api.messenger.page_id');
+        $pageToken = config('api.messenger.token');
+
+        if (!$pageId || !$pageToken) {
+            Log::error('sendMessenger: page_id o token no configurados.');
+            return;
+        }
+
+        try {
+            Http::withToken($pageToken)
+                ->timeout(10)
+                ->post("https://graph.facebook.com/v19.0/{$pageId}/messages", [
+                    'recipient' => ['id' => $recipientId],
+                    'message'   => ['text' => $message],
+                ]);
+        } catch (\Throwable $e) {
+            Log::error('sendMessenger error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Envía una imagen via Messenger / Instagram (Graph API).
+     */
+    public function sendMessengerImage(string $recipientId, string $imageUrl, string $caption = ''): void
+    {
+        $pageId    = config('api.messenger.page_id');
+        $pageToken = config('api.messenger.token');
+
+        if (!$pageId || !$pageToken) {
+            Log::error('sendMessengerImage: page_id o token no configurados.');
+            return;
+        }
+
+        try {
+            Http::withToken($pageToken)
+                ->timeout(10)
+                ->post("https://graph.facebook.com/v19.0/{$pageId}/messages", [
+                    'recipient' => ['id' => $recipientId],
+                    'message'   => [
+                        'attachment' => [
+                            'type'    => 'image',
+                            'payload' => ['url' => $imageUrl, 'is_reusable' => true],
+                        ],
+                        'text' => $caption ?: null,
+                    ],
+                ]);
+
+            if ($caption) {
+                // Messenger no soporta caption en attachment, enviar caption como mensaje separado
+                Http::withToken($pageToken)
+                    ->timeout(10)
+                    ->post("https://graph.facebook.com/v19.0/{$pageId}/messages", [
+                        'recipient' => ['id' => $recipientId],
+                        'message'   => ['text' => $caption],
+                    ]);
+            }
+        } catch (\Throwable $e) {
+            Log::error('sendMessengerImage error: ' . $e->getMessage());
         }
     }
 }
