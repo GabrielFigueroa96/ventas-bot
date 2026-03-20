@@ -282,7 +282,8 @@ class AdminController extends Controller
 
         $config->fill($data)->save();
 
-        \Illuminate\Support\Facades\Cache::forget('bot_empresa_config');
+        $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
+        \Illuminate\Support\Facades\Cache::forget('bot_empresa_config_' . $tenantId);
         \Illuminate\Support\Facades\Cache::forget('productos_bot_lista');
 
         return back()->with('ok', 'Configuración guardada.');

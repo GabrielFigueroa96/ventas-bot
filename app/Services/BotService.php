@@ -59,7 +59,7 @@ class BotService
         // Registro inicial: nombre → localidad → provincia
         if (empty($client->name) || $client->estado === 'esperando_nombre') {
             if ($client->estado !== 'esperando_nombre') {
-                $config   = Cache::remember('bot_empresa_config', 300, fn() => IaEmpresa::first());
+                $config   = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
                 $nombreIa = trim($config?->nombre_ia ?? '');
                 $atiende  = $config?->bot_atiende_nuevos ?? 'bot';
 
@@ -167,7 +167,7 @@ class BotService
     public function askChatGPT(string $message, $cliente, ?array $image = null): string
     {
         $messages = $this->buildMessages($message, $cliente, $image);
-        $empresa  = Cache::remember('bot_empresa_config', 300, fn() => IaEmpresa::first());
+        $empresa  = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
         $tools    = $this->tools($empresa);
 
         // Primera llamada: ChatGPT decide si responde o llama una función
@@ -190,7 +190,7 @@ class BotService
         $nombre  = $cliente->name ?? 'cliente';
         $codcli  = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
         $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
-        $empresa = Cache::remember('bot_empresa_config', 300, fn() => IaEmpresa::first());
+        $empresa = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
 
         // Lista cacheada 5 minutos — solo nombres, sin precios
         // Los precios se obtienen siempre frescos via tool ver_producto
@@ -1116,7 +1116,7 @@ Herramientas disponibles:
         $registro?->delete();
 
         // Notificar al local
-        $config = Cache::remember('bot_empresa_config', 300, fn() => IaEmpresa::first());
+        $config = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
         $telLocal = trim($config?->telefono_pedidos ?? '');
         if ($telLocal) {
             $entregaTexto = $tipoEntrega === 'envio'
