@@ -6,8 +6,10 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use App\Models\Carrito;
 use App\Models\Empresa;
+use App\Models\IaEmpresa;
 use App\Models\Factventas;
 use App\Models\Localidad;
 use App\Models\Pedidosia;
@@ -44,7 +46,16 @@ class BotService
         if (empty($client->name) || $client->estado === 'esperando_nombre') {
             if ($client->estado !== 'esperando_nombre') {
                 $client->update(['estado' => 'esperando_nombre']);
-                $response = "¡Hola! Soy el asistente de la carnicería. ¿Cuál es tu nombre?";
+                $config   = Cache::remember('bot_empresa_config', 300, fn() => IaEmpresa::first());
+                $nombreIa = trim($config?->nombre_ia ?? '');
+                $saludo   = $nombreIa ? "¡Hola! Soy {$nombreIa}, el asistente del negocio." : "¡Hola! Soy el asistente del negocio.";
+                $response = "{$saludo} ¿Cuál es tu nombre?";
+
+                // Enviar imagen de bienvenida si está configurada
+                if (!empty($config?->imagen_bienvenida)) {
+                    $imageUrl = Storage::disk('public')->url($config->imagen_bienvenida);
+                    $this->sendWhatsappImageByUrl($client->phone, $imageUrl);
+                }
             } else {
                 $nombre = ucfirst(strtolower(trim($message)));
                 $client->update(['name' => $nombre, 'estado' => 'esperando_localidad']);
@@ -70,7 +81,7 @@ class BotService
                     'localidad_id' => $match->id,
                     'estado'       => 'esperando_calle',
                 ]);
-                $diasLabel = Empresa::DIAS_LABEL;
+                $diasLabel = IaEmpresa::DIAS_LABEL;
                 $dias      = $match->dias_reparto ?? [];
                 $diasTexto = !empty($dias)
                     ? 'Repartimos en tu zona los: ' . implode(', ', array_map(fn($d) => $diasLabel[$d], $dias)) . '. '
@@ -128,7 +139,7 @@ class BotService
     public function askChatGPT(string $message, $cliente, ?array $image = null): string
     {
         $messages = $this->buildMessages($message, $cliente, $image);
-        $empresa  = Cache::remember('bot_empresa_config', 300, fn() => Empresa::first());
+        $empresa  = Cache::remember('bot_empresa_config', 300, fn() => IaEmpresa::first());
         $tools    = $this->tools($empresa);
 
         // Primera llamada: ChatGPT decide si responde o llama una función
@@ -151,7 +162,7 @@ class BotService
         $nombre  = $cliente->name ?? 'cliente';
         $codcli  = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
         $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
-        $empresa = Cache::remember('bot_empresa_config', 300, fn() => Empresa::first());
+        $empresa = Cache::remember('bot_empresa_config', 300, fn() => IaEmpresa::first());
 
         // Lista cacheada 5 minutos — solo nombres, sin precios
         // Los precios se obtienen siempre frescos via tool ver_producto
@@ -248,7 +259,7 @@ class BotService
         $instrucciones = trim($empresa?->bot_instrucciones ?? '');
 
         // Días de reparto: usa la localidad del cliente si tiene una configurada, si no la global
-        $diasLabel     = Empresa::DIAS_LABEL;
+        $diasLabel     = IaEmpresa::DIAS_LABEL;
         $localidadObj = $cliente->localidad_id
             ? Localidad::find($cliente->localidad_id)
             : ($cliente->localidad
@@ -308,8 +319,8 @@ class BotService
         }
 
         // Medios de pago habilitados
-        $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(Empresa::MEDIOS_PAGO);
-        $mediosLabel       = Empresa::MEDIOS_PAGO;
+        $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
+        $mediosLabel       = IaEmpresa::MEDIOS_PAGO;
         $mediosTexto       = 'Medios de pago aceptados: ' . implode(', ', array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados)) . '.';
 
         // Próximo día de reparto disponible para este cliente
@@ -352,9 +363,14 @@ class BotService
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
         if ($instrucciones)      $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
 
+        $nombreIa       = trim($empresa?->nombre_ia ?? '');
+        $telefonoPedidos = trim($empresa?->telefono_pedidos ?? '');
+        $identidad      = $nombreIa ? "Te llamás {$nombreIa}." : '';
+        $telTexto       = $telefonoPedidos ? "\nTeléfono del local: {$telefonoPedidos}" : '';
+
         $messages[] = [
             'role'    => 'system',
-            'content' => "Sos el asistente de una carnicería. Amable, breve y directo. Respondé siempre en español argentino.
+            'content' => "Sos el asistente virtual del negocio. {$identidad} Amable, breve y directo. Respondé siempre en español argentino.
 Respondés consultas sobre: pedidos, precios, productos, horarios, dirección, formas de pago, días de reparto y cualquier información del negocio que tengas disponible.
 Para cualquier otra consulta ajena al negocio, decí amablemente que no podés ayudar con eso.
 Formato de precios: NUNCA uses separador de miles. Usá coma para decimales solo si hay centavos. Ejemplos correctos: \$1500 | \$36000 | \$2800,50. Nunca: \$1.500,00 ni \$36,000 ni \$21000,00.
@@ -362,7 +378,7 @@ Hoy es {$fecha}.
 Cliente: {$nombre}{$cuentaTexto}
 Último pedido: {$ultimoPedidoTexto}
 {$favoritosTexto}
-{$ultimaDirTexto}{$configNegocio}
+{$ultimaDirTexto}{$telTexto}{$configNegocio}
 
 Productos disponibles (solo nombres — para precios usá siempre ver_producto):
 {$lista}
@@ -1466,6 +1482,28 @@ Herramientas disponibles:
             $this->lastOutgoingWamid = data_get($response->json(), 'messages.0.id');
         } catch (\Throwable $e) {
             Log::error('sendWhatsapp error: ' . $e->getMessage());
+        }
+    }
+
+    public function sendWhatsappImageByUrl(string $phone, string $imageUrl, string $caption = ''): void
+    {
+        try {
+            $body = ['link' => $imageUrl];
+            if ($caption !== '') {
+                $body['caption'] = $caption;
+            }
+            $response = Http::withToken($this->whatsappKey())
+                ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $phone,
+                    'type'              => 'image',
+                    'image'             => $body,
+                ]);
+            if (!$response->successful()) {
+                Log::error("sendWhatsappImageByUrl error to {$phone}: " . $response->body());
+            }
+        } catch (\Throwable $e) {
+            Log::error('sendWhatsappImageByUrl error: ' . $e->getMessage());
         }
     }
 }

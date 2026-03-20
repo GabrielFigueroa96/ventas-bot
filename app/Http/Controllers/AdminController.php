@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\Cliente;
 use App\Models\Empresa;
 use App\Models\Factventas;
+use App\Models\IaEmpresa;
 use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Pedidosia;
 use App\Models\Seguimiento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class AdminController extends Controller
 {
@@ -234,24 +236,42 @@ class AdminController extends Controller
 
     public function configuracion()
     {
-        $empresa = Empresa::first();
-        return view('admin.configuracion', compact('empresa'));
+        $config = IaEmpresa::firstOrNew([]);
+        return view('admin.configuracion', compact('config'));
     }
 
     public function guardarConfiguracion(Request $request)
     {
-        $empresa = Empresa::first();
-        $empresa->update([
-            'bot_info'           => $request->bot_info,
-            'bot_instrucciones'  => $request->bot_instrucciones,
+        $config = IaEmpresa::firstOrNew([]);
+
+        $data = [
+            'nombre_ia'          => $request->input('nombre_ia'),
+            'telefono_pedidos'   => $request->input('telefono_pedidos'),
+            'bot_info'           => $request->input('bot_info'),
+            'bot_instrucciones'  => $request->input('bot_instrucciones'),
             'bot_permite_retiro' => $request->boolean('bot_permite_retiro'),
             'bot_permite_envio'  => $request->boolean('bot_permite_envio'),
-            'bot_medios_pago'    => $request->has('bot_medios_pago') ? $request->bot_medios_pago : null,
-        ]);
+            'bot_medios_pago'    => $request->has('bot_medios_pago') ? $request->input('bot_medios_pago') : null,
+        ];
 
-        // Limpiar cache para que el bot tome los cambios de inmediato
-        \Illuminate\Support\Facades\Cache::forget('productos_bot_lista');
+        if ($request->hasFile('imagen_bienvenida')) {
+            // Borra la imagen anterior si existe
+            if ($config->imagen_bienvenida) {
+                Storage::disk('public')->delete($config->imagen_bienvenida);
+            }
+            $path = $request->file('imagen_bienvenida')->store('ia', 'public');
+            $data['imagen_bienvenida'] = $path;
+        }
+
+        if ($request->boolean('eliminar_imagen') && $config->imagen_bienvenida) {
+            Storage::disk('public')->delete($config->imagen_bienvenida);
+            $data['imagen_bienvenida'] = null;
+        }
+
+        $config->fill($data)->save();
+
         \Illuminate\Support\Facades\Cache::forget('bot_empresa_config');
+        \Illuminate\Support\Facades\Cache::forget('productos_bot_lista');
 
         return back()->with('ok', 'Configuración guardada.');
     }
