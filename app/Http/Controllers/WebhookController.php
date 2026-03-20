@@ -76,18 +76,18 @@ class WebhookController extends Controller
             }
             $tenantId = $manager->get()->id;
 
-            // Procesar actualizaciones de estado (sent/delivered/read)
-            if (!empty($value['statuses'])) {
-                foreach ($value['statuses'] as $status) {
-                    $wamidStatus = $status['id']     ?? null;
-                    $newStatus   = $status['status'] ?? null;
-                    if ($wamidStatus && $newStatus) {
-                        Message::where('wamid', $wamidStatus)->update(['status' => $newStatus]);
+            // Status updates: actualizar en background solo si hay mensaje real también
+            // Si es solo status (sin mensaje entrante), retornar sin tocar la DB del tenant
+            if (empty($value['messages'])) {
+                if (!empty($value['statuses'])) {
+                    foreach ($value['statuses'] as $status) {
+                        $wamidStatus = $status['id']     ?? null;
+                        $newStatus   = $status['status'] ?? null;
+                        if ($wamidStatus && $newStatus) {
+                            Message::where('wamid', $wamidStatus)->update(['status' => $newStatus]);
+                        }
                     }
                 }
-            }
-
-            if (empty($value['messages'])) {
                 return response()->json(['status' => 'ignored']);
             }
 

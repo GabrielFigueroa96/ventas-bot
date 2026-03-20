@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class TenantManager
@@ -13,11 +14,13 @@ class TenantManager
      */
     public function loadByPhoneNumberId(string $phoneNumberId): bool
     {
-        $tenant = DB::connection('mysql')
-            ->table('tenants')
-            ->where('phone_number_id', $phoneNumberId)
-            ->where('activo', true)
-            ->first();
+        $tenant = Cache::remember("tenant_phone_{$phoneNumberId}", 300, fn() =>
+            DB::connection('mysql')
+                ->table('tenants')
+                ->where('phone_number_id', $phoneNumberId)
+                ->where('activo', true)
+                ->first()
+        );
 
         if (!$tenant) {
             return false;
@@ -33,11 +36,13 @@ class TenantManager
      */
     public function loadByWebhookToken(string $token): bool
     {
-        $tenant = DB::connection('mysql')
-            ->table('tenants')
-            ->where('webhook_token', $token)
-            ->where('activo', true)
-            ->first();
+        $tenant = Cache::remember("tenant_token_{$token}", 300, fn() =>
+            DB::connection('mysql')
+                ->table('tenants')
+                ->where('webhook_token', $token)
+                ->where('activo', true)
+                ->first()
+        );
 
         if (!$tenant) {
             return false;
@@ -53,11 +58,13 @@ class TenantManager
      */
     public function loadById(int $id): bool
     {
-        $tenant = DB::connection('mysql')
-            ->table('tenants')
-            ->where('id', $id)
-            ->where('activo', true)
-            ->first();
+        $tenant = Cache::remember("tenant_id_{$id}", 300, fn() =>
+            DB::connection('mysql')
+                ->table('tenants')
+                ->where('id', $id)
+                ->where('activo', true)
+                ->first()
+        );
 
         if (!$tenant) {
             return false;

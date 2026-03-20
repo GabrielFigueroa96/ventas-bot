@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Carrito;
 use App\Models\Empresa;
+use App\Models\Factventas;
 use App\Models\Localidad;
 use App\Models\Pedidosia;
 use App\Models\Producto;
@@ -604,7 +605,7 @@ Herramientas disponibles:
                 'type'     => 'function',
                 'function' => [
                     'name'        => 'ver_pedidos',
-                    'description' => 'Muestra el historial y estado de los últimos pedidos del cliente.',
+                    'description' => 'Muestra el historial y estado de los últimos pedidos del cliente. Para pedidos finalizados incluye el detalle real de la factura (kilos, precio unitario, total) y el número de comprobante.',
                     'parameters'  => ['type' => 'object', 'properties' => new \stdClass()],
                 ],
             ],
@@ -1069,14 +1070,54 @@ Herramientas disponibles:
             return 'El cliente no tiene pedidos registrados.';
         }
 
-        return $pedidos->map(function ($items, $nro) {
-            $fecha  = $items->first()->fecha;
-            $estado = $items->first()->estado_texto;
-            $detalle = $items->map(function ($p) {
-                return $p->cant > 1 ? "{$p->cant}u {$p->descrip}" : "{$p->kilos}kg {$p->descrip}";
-            })->implode(', ');
-            return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}";
-        })->implode("\n");
+        // Pre-cargar facturas de pedidos finalizados
+        $pares = $pedidos->flatten()
+            ->where('estado', Pedido::ESTADO_FINALIZADO)
+            ->whereNotNull('venta')->where('venta', '>', 0)
+            ->unique(fn($p) => "{$p->venta}-{$p->pv}")->values();
+
+        $facturas = collect();
+        if ($pares->isNotEmpty()) {
+            $rows = Factventas::where(function ($q) use ($pares) {
+                foreach ($pares as $p) {
+                    $q->orWhere(fn($s) => $s->where('nro', $p->venta)->where('pv', $p->pv));
+                }
+            })->get();
+            $facturas = $rows->groupBy(fn($f) => "{$f->nro}-{$f->pv}");
+        }
+
+        return $pedidos->map(function ($items, $nro) use ($facturas) {
+            $first  = $items->first();
+            $fecha  = $first->fecha;
+            $estado = $first->estado_texto;
+
+            // Pedido pendiente: mostrar lo que pidió
+            if ($first->estado != Pedido::ESTADO_FINALIZADO) {
+                $detalle = $items->map(fn($p) =>
+                    $p->cant > 1 ? "{$p->cant}u {$p->descrip}" : "{$p->kilos}kg {$p->descrip}"
+                )->implode(', ');
+                return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}";
+            }
+
+            // Pedido finalizado: mostrar factura real si existe
+            $key   = "{$first->venta}-{$first->pv}";
+            $lineas = $facturas->get($key);
+
+            if ($lineas && $lineas->isNotEmpty()) {
+                $comprobante = $lineas->first()->fact . ' ' . str_pad($first->pv, 4, '0', STR_PAD_LEFT) . '-' . str_pad($first->venta, 8, '0', STR_PAD_LEFT);
+                $total = $lineas->sum('neto');
+                $detalle = $lineas->map(fn($f) =>
+                    "{$f->descrip}: {$f->kilos}kg × $" . number_format($f->precio, 2, ',', '.') . " = $" . number_format($f->neto, 2, ',', '.')
+                )->implode(' | ');
+                return "Pedido #{$nro} ({$fecha}): {$estado}\nComprobante: {$comprobante}\nDetalle real: {$detalle}\nTotal: $" . number_format($total, 2, ',', '.');
+            }
+
+            // Finalizado pero sin factura aún
+            $detalle = $items->map(fn($p) =>
+                $p->cant > 1 ? "{$p->cant}u {$p->descrip}" : "{$p->kilos}kg {$p->descrip}"
+            )->implode(', ');
+            return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado} (sin comprobante asociado aún)";
+        })->implode("\n\n");
     }
 
 
