@@ -8,9 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('carritos', function (Blueprint $table) {
+        Schema::create('ia_carritos', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('cliente_id')->constrained('clientes')->cascadeOnDelete();
+            $table->foreignId('cliente_id')->constrained('ia_clientes')->cascadeOnDelete();
             $table->json('items');
             $table->timestamp('expires_at');
             $table->timestamps();
@@ -19,6 +19,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('carritos');
+        Schema::dropIfExists('ia_carritos');
     }
 };

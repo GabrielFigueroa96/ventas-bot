@@ -8,9 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('seguimientos', function (Blueprint $table) {
+        Schema::create('ia_seguimientos', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('cliente_id')->constrained('clientes')->cascadeOnDelete();
+            $table->foreignId('cliente_id')->constrained('ia_clientes')->cascadeOnDelete();
             $table->enum('tipo', ['sin_pedido', 'inactivo']);
             $table->text('mensaje_enviado');
             $table->boolean('respondio')->default(false);
@@ -20,6 +20,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('seguimientos');
+        Schema::dropIfExists('ia_seguimientos');
     }
 };

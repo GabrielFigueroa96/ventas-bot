@@ -19,6 +19,8 @@ class Cliente extends Model
 {
     use HasFactory;
 
+    protected $table = 'ia_clientes';
+
     protected $fillable = [
         'phone', 'name',
         'localidad', 'provincia', 'localidad_id',

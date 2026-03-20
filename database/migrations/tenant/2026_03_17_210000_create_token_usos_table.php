@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('token_usos', function (Blueprint $table) {
+        Schema::create('ia_token_usos', function (Blueprint $table) {
             $table->id();
             $table->string('modelo')->default('gpt-4o-mini');
             $table->unsignedInteger('prompt_tokens');
@@ -20,6 +20,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('token_usos');
+        Schema::dropIfExists('ia_token_usos');
     }
 };

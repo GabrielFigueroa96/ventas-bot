@@ -1356,7 +1356,7 @@ Herramientas disponibles:
                 ($output / 1_000_000 * $precios['output']),
                 8
             );
-            DB::table('token_usos')->insert([
+            DB::table('ia_token_usos')->insert([
                 'modelo'            => $modelo,
                 'prompt_tokens'     => $input,
                 'completion_tokens' => $output,

@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('pedido_notificaciones', function (Blueprint $table) {
+        Schema::create('ia_pedido_notificaciones', function (Blueprint $table) {
             $table->id();
             $table->integer('nro');
             $table->string('pv')->default('');
@@ -22,6 +22,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('pedido_notificaciones');
+        Schema::dropIfExists('ia_pedido_notificaciones');
     }
 };

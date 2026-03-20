@@ -15,7 +15,7 @@ return new class extends Migration
             if (!Schema::hasColumn('users', 'tenant_id')) {
                 $table->unsignedBigInteger('tenant_id')->nullable()->after('id');
             }
-            $table->foreign('tenant_id')->references('id')->on('tenants')->nullOnDelete();
+            $table->foreign('tenant_id')->references('id')->on('ia_tenants')->nullOnDelete();
         });
     }
 

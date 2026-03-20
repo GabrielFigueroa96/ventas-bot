@@ -11,14 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('messages', function (Blueprint $table) {
+        Schema::table('ia_messages', function (Blueprint $table) {
             $table->string('wamid')->nullable()->unique()->after('type');
         });
     }
 
     public function down(): void
     {
-        Schema::table('messages', function (Blueprint $table) {
+        Schema::table('ia_messages', function (Blueprint $table) {
             $table->dropColumn('wamid');
         });
     }

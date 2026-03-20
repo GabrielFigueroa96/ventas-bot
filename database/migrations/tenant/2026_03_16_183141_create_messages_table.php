@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('messages', function (Blueprint $table) {
+        Schema::create('ia_messages', function (Blueprint $table) {
             $table->id();
             $table->foreignId('cliente_id')
                 ->constrained()
@@ -35,6 +35,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('messages');
+        Schema::dropIfExists('ia_messages');
     }
 };

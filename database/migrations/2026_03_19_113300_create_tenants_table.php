@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('tenants', function (Blueprint $table) {
+        Schema::create('ia_tenants', function (Blueprint $table) {
             $table->id();
             $table->string('nombre');
             $table->string('phone_number_id')->unique()->comment('ID del número en Meta/WhatsApp');
@@ -32,6 +32,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('tenants');
+        Schema::dropIfExists('ia_tenants');
     }
 };

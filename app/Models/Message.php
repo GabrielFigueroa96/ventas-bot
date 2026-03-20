@@ -21,6 +21,8 @@ class Message extends Model
 {
     use HasFactory;
 
+    protected $table = 'ia_messages';
+
     protected $fillable = [
         'cliente_id',
         'message',

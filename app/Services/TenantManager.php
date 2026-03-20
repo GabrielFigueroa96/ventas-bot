@@ -16,7 +16,7 @@ class TenantManager
     {
         $tenant = Cache::remember("tenant_phone_{$phoneNumberId}", 300, fn() =>
             DB::connection('mysql')
-                ->table('tenants')
+                ->table('ia_tenants')
                 ->where('phone_number_id', $phoneNumberId)
                 ->where('activo', true)
                 ->first()
@@ -38,7 +38,7 @@ class TenantManager
     {
         $tenant = Cache::remember("tenant_token_{$token}", 300, fn() =>
             DB::connection('mysql')
-                ->table('tenants')
+                ->table('ia_tenants')
                 ->where('webhook_token', $token)
                 ->where('activo', true)
                 ->first()
@@ -60,7 +60,7 @@ class TenantManager
     {
         $tenant = Cache::remember("tenant_id_{$id}", 300, fn() =>
             DB::connection('mysql')
-                ->table('tenants')
+                ->table('ia_tenants')
                 ->where('id', $id)
                 ->where('activo', true)
                 ->first()

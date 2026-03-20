@@ -15,7 +15,7 @@ class MigrateTenant extends Command
     {
         $tenantId = $this->option('tenant');
 
-        $query = DB::connection('mysql')->table('tenants')->where('activo', true);
+        $query = DB::connection('mysql')->table('ia_tenants')->where('activo', true);
         if ($tenantId) {
             $query->where('id', $tenantId);
         }

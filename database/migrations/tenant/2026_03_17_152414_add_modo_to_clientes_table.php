@@ -11,14 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('clientes', function (Blueprint $table) {
+        Schema::table('ia_clientes', function (Blueprint $table) {
             $table->enum('modo', ['bot', 'humano'])->default('bot')->after('estado');
         });
     }
 
     public function down(): void
     {
-        Schema::table('clientes', function (Blueprint $table) {
+        Schema::table('ia_clientes', function (Blueprint $table) {
             $table->dropColumn('modo');
         });
     }

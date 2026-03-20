@@ -11,14 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('localidades', function (Blueprint $table) {
+        Schema::table('ia_localidades', function (Blueprint $table) {
             $table->string('provincia', 100)->nullable()->after('nombre');
         });
     }
 
     public function down(): void
     {
-        Schema::table('localidades', function (Blueprint $table) {
+        Schema::table('ia_localidades', function (Blueprint $table) {
             $table->dropColumn('provincia');
         });
     }

@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Recordatorio extends Model
 {
+    protected $table = 'ia_recordatorios';
+
     protected $fillable = [
         'nombre', 'mensaje', 'tipo',
         'filtro_localidad', 'filtro_provincia',

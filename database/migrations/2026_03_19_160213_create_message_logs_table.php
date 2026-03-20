@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('message_logs', function (Blueprint $table) {
+        Schema::create('ia_message_logs', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id')->nullable();
             $table->string('phone')->nullable();
@@ -23,7 +23,7 @@ return new class extends Migration
             $table->boolean('enviado')->default(true);
             $table->timestamps();
 
-            $table->foreign('tenant_id')->references('id')->on('tenants')->nullOnDelete();
+            $table->foreign('tenant_id')->references('id')->on('ia_tenants')->nullOnDelete();
             $table->index(['tenant_id', 'created_at']);
         });
     }
@@ -33,6 +33,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('message_logs');
+        Schema::dropIfExists('ia_message_logs');
     }
 };

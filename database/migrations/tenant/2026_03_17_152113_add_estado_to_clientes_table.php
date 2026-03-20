@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('clientes', function (Blueprint $table) {
+        Schema::table('ia_clientes', function (Blueprint $table) {
             $table->string('estado')->nullable()->default('activo');
         });
     }
@@ -21,7 +21,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('clientes', function (Blueprint $table) {
+        Schema::table('ia_clientes', function (Blueprint $table) {
             //
         });
     }

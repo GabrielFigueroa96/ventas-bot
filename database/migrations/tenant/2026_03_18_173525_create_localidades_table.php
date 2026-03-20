@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('localidades', function (Blueprint $table) {
+        Schema::create('ia_localidades', function (Blueprint $table) {
             $table->id();
             $table->string('nombre', 100)->unique();
             $table->json('dias_reparto')->nullable()->comment('[0=dom,1=lun,...,6=sab]. Null = usa los días globales.');
@@ -26,6 +26,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('localidades');
+        Schema::dropIfExists('ia_localidades');
     }
 };

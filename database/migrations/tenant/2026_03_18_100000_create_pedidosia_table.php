@@ -8,11 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('pedidosia', function (Blueprint $table) {
+        Schema::create('ia_pedidosia', function (Blueprint $table) {
             $table->id();
             $table->unsignedInteger('nro')->unique();           // vincula con pedidos.nro
             $table->string('codcli', 50);                      // código de cuenta
-            $table->foreignId('idcliente')->constrained('clientes')->cascadeOnDelete();
+            $table->foreignId('idcliente')->constrained('ia_clientes')->cascadeOnDelete();
             $table->string('nomcli', 100);
             $table->date('fecha');                             // fecha de entrega
             $table->enum('tipo_entrega', ['envio', 'retiro']);
@@ -27,6 +27,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('pedidosia');
+        Schema::dropIfExists('ia_pedidosia');
     }
 };

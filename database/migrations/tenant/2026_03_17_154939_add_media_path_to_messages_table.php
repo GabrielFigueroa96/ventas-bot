@@ -11,14 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('messages', function (Blueprint $table) {
+        Schema::table('ia_messages', function (Blueprint $table) {
             $table->string('media_path')->nullable()->after('wamid');
         });
     }
 
     public function down(): void
     {
-        Schema::table('messages', function (Blueprint $table) {
+        Schema::table('ia_messages', function (Blueprint $table) {
             $table->dropColumn('media_path');
         });
     }

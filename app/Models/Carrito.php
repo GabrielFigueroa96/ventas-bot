@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Carrito extends Model
 {
+    protected $table = 'ia_carritos';
+
     protected $fillable = [
         'cliente_id',
         'items',

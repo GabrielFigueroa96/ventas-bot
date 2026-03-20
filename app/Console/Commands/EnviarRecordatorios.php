@@ -18,7 +18,7 @@ class EnviarRecordatorios extends Command
 
     public function handle(): void
     {
-        $tenants = DB::connection('mysql')->table('tenants')->where('activo', true)->get();
+        $tenants = DB::connection('mysql')->table('ia_tenants')->where('activo', true)->get();
         foreach ($tenants as $tenant) {
             app(TenantManager::class)->loadById($tenant->id);
             $this->procesarTenant(app(BotService::class));

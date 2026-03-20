@@ -29,7 +29,7 @@ class AdminController extends Controller
             'gpt-4o-mini'  => ['input' => 0.15, 'output' => 0.60],
         ];
 
-        $filasPorModelo = DB::table('token_usos')
+        $filasPorModelo = DB::table('ia_token_usos')
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
             ->selectRaw('modelo, SUM(prompt_tokens) as input, SUM(completion_tokens) as output, SUM(total_tokens) as total')
@@ -54,7 +54,7 @@ class AdminController extends Controller
         // Costo WhatsApp: conversaciones únicas por cliente/día este mes
         $waCostoPorConv = (float) env('WA_COSTO_USD', 0.05);
         try {
-            $waConvMes = DB::table('messages')
+            $waConvMes = DB::table('ia_messages')
                 ->where('direction', 'outgoing')
                 ->whereMonth('created_at', now()->month)
                 ->whereYear('created_at', now()->year)
