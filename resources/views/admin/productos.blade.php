@@ -94,32 +94,25 @@
             </td>
             <td class="px-3 py-2 text-center">
                 @if($enCatalogo)
-                    <form method="POST" action="{{ route('admin.productos.catalogo.quitar', $producto->cod) }}"
-                          onsubmit="return confirm('¿Quitar del catálogo?')">
-                        @csrf @method('DELETE')
-                        <button type="submit" class="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 hover:bg-red-50 hover:text-red-600 px-2 py-0.5 rounded-full transition">
-                            ✓ Sí
-                        </button>
-                    </form>
+                    <button onclick="quitarCatalogo('{{ $producto->cod }}', this)"
+                        class="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 hover:bg-red-50 hover:text-red-600 px-2 py-0.5 rounded-full transition">
+                        ✓ Sí
+                    </button>
                 @else
-                    <form method="POST" action="{{ route('admin.productos.catalogo.agregar', $producto->cod) }}">
-                        @csrf
-                        <button type="submit" class="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-500 hover:bg-green-50 hover:text-green-600 px-2 py-0.5 rounded-full transition">
-                            + Agregar
-                        </button>
-                    </form>
+                    <button onclick="agregarCatalogo('{{ $producto->cod }}', this)"
+                        class="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-500 hover:bg-green-50 hover:text-green-600 px-2 py-0.5 rounded-full transition">
+                        + Agregar
+                    </button>
                 @endif
             </td>
             <td class="px-3 py-2 text-center">
                 @if($enCatalogo)
-                    <form method="POST" action="{{ route('admin.productos.disponible', $producto->cod) }}">
-                        @csrf @method('PATCH')
-                        <button type="submit"
-                            class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full transition
-                                {{ $ia->disponible ? 'bg-blue-100 text-blue-700 hover:bg-gray-100 hover:text-gray-500' : 'bg-gray-100 text-gray-400 hover:bg-blue-50 hover:text-blue-600' }}">
-                            {{ $ia->disponible ? '👁 Visible' : '🚫 Oculto' }}
-                        </button>
-                    </form>
+                    <button onclick="toggleDisponible('{{ $producto->cod }}', this)"
+                        data-disponible="{{ $ia->disponible ? '1' : '0' }}"
+                        class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full transition
+                            {{ $ia->disponible ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400' }}">
+                        {{ $ia->disponible ? '👁 Visible' : '🚫 Oculto' }}
+                    </button>
                 @else
                     <span class="text-gray-300 text-xs">—</span>
                 @endif
@@ -211,6 +204,44 @@ const csrfToken = document.querySelector('meta[name=csrf-token]').content;
 function toggleDetalle(id) {
     const row = document.getElementById(id);
     if (row) row.classList.toggle('hidden');
+}
+
+async function agregarCatalogo(cod, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    const res = await fetch(`/admin/productos/${cod}/catalogo`, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+    });
+    if (res.ok) window.location.reload();
+    else { btn.disabled = false; btn.textContent = '+ Agregar'; }
+}
+
+async function quitarCatalogo(cod, btn) {
+    if (!confirm('¿Quitar del catálogo del bot?')) return;
+    btn.disabled = true;
+    const res = await fetch(`/admin/productos/${cod}/catalogo`, {
+        method: 'DELETE',
+        headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+    });
+    if (res.ok) window.location.reload();
+    else btn.disabled = false;
+}
+
+async function toggleDisponible(cod, btn) {
+    btn.disabled = true;
+    const res = await fetch(`/admin/productos/${cod}/disponible`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+    });
+    if (res.ok) {
+        const data = await res.json();
+        const disp = data.disponible;
+        btn.dataset.disponible = disp ? '1' : '0';
+        btn.textContent = disp ? '👁 Visible' : '🚫 Oculto';
+        btn.className = `inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full transition ${disp ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`;
+    }
+    btn.disabled = false;
 }
 
 function autoSaveTextarea(selector, statusSelector, bodyKey) {

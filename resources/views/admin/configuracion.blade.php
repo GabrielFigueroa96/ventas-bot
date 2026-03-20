@@ -1,9 +1,9 @@
 @extends('admin.layout')
-@section('title', 'Configuración del bot')
+@section('title', 'Configuración')
 
 @section('content')
 <div class="max-w-2xl mx-auto space-y-6">
-    <h1 class="text-xl font-bold text-gray-800">Configuración del bot</h1>
+    <h1 class="text-xl font-bold text-gray-800">Configuración</h1>
 
     @if(session('ok'))
         <div class="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-lg">{{ session('ok') }}</div>
@@ -25,11 +25,11 @@
             </div>
 
             <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Teléfono del local (para pedidos)</label>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Teléfono de contacto</label>
                 <input type="text" name="telefono_pedidos" value="{{ old('telefono_pedidos', $config->telefono_pedidos) }}"
-                    placeholder="Ej: 341-555-0000"
+                    placeholder="Ej: 5493415550000 (con código de país, sin +)"
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
-                <p class="text-xs text-gray-400 mt-1">El bot puede informar este número si el cliente lo consulta.</p>
+                <p class="text-xs text-gray-400 mt-1">Se usa para recibir copia de pedidos por WhatsApp y para enviar el código de verificación al iniciar sesión.</p>
             </div>
         </div>
 
@@ -56,6 +56,68 @@
                 <input type="file" name="imagen_bienvenida" accept="image/*"
                     class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
                 <p class="text-xs text-gray-400 mt-1">JPG, PNG o WebP. Recomendado: hasta 5 MB.</p>
+            </div>
+        </div>
+
+        {{-- Comportamiento del bot --}}
+        <div class="bg-white rounded-xl shadow p-5 space-y-4">
+            <h2 class="text-sm font-semibold text-gray-700">Comportamiento del bot</h2>
+
+            {{-- Clientes nuevos --}}
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-2">Atención de clientes nuevos</label>
+                <div class="flex flex-col gap-2">
+                    <label class="flex items-start gap-2 text-sm cursor-pointer">
+                        <input type="radio" name="bot_atiende_nuevos" value="bot"
+                            {{ old('bot_atiende_nuevos', $config->bot_atiende_nuevos ?? 'bot') === 'bot' ? 'checked' : '' }}
+                            class="mt-0.5 accent-red-600">
+                        <span>
+                            <span class="font-medium text-gray-700">Bot</span>
+                            <span class="block text-xs text-gray-400">El bot registra al cliente y toma pedidos normalmente.</span>
+                        </span>
+                    </label>
+                    <label class="flex items-start gap-2 text-sm cursor-pointer">
+                        <input type="radio" name="bot_atiende_nuevos" value="humano"
+                            {{ old('bot_atiende_nuevos', $config->bot_atiende_nuevos ?? 'bot') === 'humano' ? 'checked' : '' }}
+                            class="mt-0.5 accent-red-600">
+                        <span>
+                            <span class="font-medium text-gray-700">Humano</span>
+                            <span class="block text-xs text-gray-400">El bot solo envía el mensaje de bienvenida. La atención queda a cargo de una persona.</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <hr class="border-gray-100">
+
+            <div class="flex items-start gap-3">
+                <input type="checkbox" name="bot_puede_pedir" value="1" id="bot_puede_pedir"
+                    {{ old('bot_puede_pedir', $config->bot_puede_pedir ?? true) ? 'checked' : '' }}
+                    class="mt-0.5 accent-red-600">
+                <label for="bot_puede_pedir" class="text-sm cursor-pointer">
+                    <span class="font-medium text-gray-700">Puede tomar pedidos</span>
+                    <span class="block text-xs text-gray-400">Si está desactivado, el bot solo informa precios. El cliente debe llamar o escribir al negocio para pedir.</span>
+                </label>
+            </div>
+
+            <div class="flex items-start gap-3">
+                <input type="checkbox" name="bot_puede_sugerir" value="1" id="bot_puede_sugerir"
+                    {{ old('bot_puede_sugerir', $config->bot_puede_sugerir ?? true) ? 'checked' : '' }}
+                    class="mt-0.5 accent-red-600">
+                <label for="bot_puede_sugerir" class="text-sm cursor-pointer">
+                    <span class="font-medium text-gray-700">Puede sugerir productos</span>
+                    <span class="block text-xs text-gray-400">El bot puede proponer productos al cliente de forma proactiva durante la conversación.</span>
+                </label>
+            </div>
+
+            <div class="flex items-start gap-3">
+                <input type="checkbox" name="bot_puede_mas_vendidos" value="1" id="bot_puede_mas_vendidos"
+                    {{ old('bot_puede_mas_vendidos', $config->bot_puede_mas_vendidos ?? false) ? 'checked' : '' }}
+                    class="mt-0.5 accent-red-600">
+                <label for="bot_puede_mas_vendidos" class="text-sm cursor-pointer">
+                    <span class="font-medium text-gray-700">Puede informar los más vendidos</span>
+                    <span class="block text-xs text-gray-400">El bot puede mencionar cuáles son los productos más pedidos del negocio.</span>
+                </label>
             </div>
         </div>
 

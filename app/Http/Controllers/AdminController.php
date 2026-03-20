@@ -248,9 +248,13 @@ class AdminController extends Controller
             'telefono_pedidos'   => $request->input('telefono_pedidos'),
             'bot_info'           => $request->input('bot_info'),
             'bot_instrucciones'  => $request->input('bot_instrucciones'),
-            'bot_permite_retiro' => $request->boolean('bot_permite_retiro'),
-            'bot_permite_envio'  => $request->boolean('bot_permite_envio'),
-            'bot_medios_pago'    => $request->has('bot_medios_pago') ? $request->input('bot_medios_pago') : null,
+            'bot_permite_retiro'     => $request->boolean('bot_permite_retiro'),
+            'bot_permite_envio'      => $request->boolean('bot_permite_envio'),
+            'bot_medios_pago'        => $request->has('bot_medios_pago') ? $request->input('bot_medios_pago') : null,
+            'bot_puede_pedir'        => $request->boolean('bot_puede_pedir'),
+            'bot_puede_sugerir'      => $request->boolean('bot_puede_sugerir'),
+            'bot_puede_mas_vendidos' => $request->boolean('bot_puede_mas_vendidos'),
+            'bot_atiende_nuevos'     => $request->input('bot_atiende_nuevos', 'bot'),
         ];
 
         if ($request->hasFile('imagen_bienvenida')) {

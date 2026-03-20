@@ -32,9 +32,18 @@ class BotService
         'gpt-4o-mini'  => ['input' => 0.15, 'output' => 0.60],
     ];
 
-    private function whatsappKey(): string   { return config('api.whatsapp.key'); }
-    private function openaiKey(): string     { return config('api.openai.key'); }
-    private function phoneNumberId(): string { return config('api.whatsapp.phone_number_id'); }
+    private function whatsappKey(): string
+    {
+        return config('api.whatsapp.key');
+    }
+    private function openaiKey(): string
+    {
+        return config('api.openai.key');
+    }
+    private function phoneNumberId(): string
+    {
+        return config('api.whatsapp.phone_number_id');
+    }
 
     // -------------------------------------------------------------------------
     // Punto de entrada principal
@@ -42,22 +51,38 @@ class BotService
 
     public function process($client, $message, ?array $image = null): string
     {
+        // Cliente en modo humano: no procesar con IA
+        if ($client->estado === 'humano') {
+            return '';
+        }
+
         // Registro inicial: nombre → localidad → provincia
         if (empty($client->name) || $client->estado === 'esperando_nombre') {
             if ($client->estado !== 'esperando_nombre') {
-                $client->update(['estado' => 'esperando_nombre']);
                 $config   = Cache::remember('bot_empresa_config', 300, fn() => IaEmpresa::first());
                 $nombreIa = trim($config?->nombre_ia ?? '');
+                $atiende  = $config?->bot_atiende_nuevos ?? 'bot';
+
+                // Imagen de bienvenida primero (siempre, independiente de quién atiende)
+                if (!empty($config?->imagen_bienvenida)) {
+                    $this->sendWhatsappImageByUrl($client->phone, url($config->imagen_bienvenida));
+                }
+
+                if ($atiende === 'humano') {
+                    // Solo saludo; no registramos ni derivamos al bot
+                    $saludo = $nombreIa
+                        ? "¡Hola! Soy {$nombreIa}. En breve alguien del equipo te va a atender. ¡Gracias por escribirnos!"
+                        : "¡Hola! En breve alguien del equipo te va a atender. ¡Gracias por escribirnos!";
+                    $client->update(['estado' => 'humano']);
+                    $this->sendWhatsapp($client->phone, $saludo);
+                    return $saludo;
+                }
+
+                $client->update(['estado' => 'esperando_nombre']);
                 $saludo   = $nombreIa ? "¡Hola! Soy {$nombreIa}, el asistente del negocio." : "¡Hola! Soy el asistente del negocio.";
                 $response = "{$saludo} ¿Cuál es tu nombre?";
-
-                // Imagen de bienvenida primero, luego el texto
-                if (!empty($config?->imagen_bienvenida)) {
-                    $imageUrl = url($config->imagen_bienvenida);
-                    $this->sendWhatsappImageByUrl($client->phone, $imageUrl);
-                    $this->sendWhatsapp($client->phone, $response);
-                    return $response;
-                }
+                $this->sendWhatsapp($client->phone, $response);
+                return $response;
             } else {
                 $nombre = ucfirst(strtolower(trim($message)));
                 $client->update(['name' => $nombre, 'estado' => 'esperando_localidad']);
@@ -236,8 +261,8 @@ class BotService
                 ->first();
             $ultimaDirTexto = $ultimaDir
                 ? "Última dirección de envío usada: {$ultimaDir->calle} {$ultimaDir->numero}"
-                  . ($ultimaDir->localidad  ? ", {$ultimaDir->localidad}"  : '')
-                  . ($ultimaDir->dato_extra ? " ({$ultimaDir->dato_extra})" : '')
+                . ($ultimaDir->localidad  ? ", {$ultimaDir->localidad}"  : '')
+                . ($ultimaDir->dato_extra ? " ({$ultimaDir->dato_extra})" : '')
                 : '';
         }
 
@@ -264,8 +289,8 @@ class BotService
             ? Localidad::find($cliente->localidad_id)
             : ($cliente->localidad
                 ? Localidad::where('activo', true)
-                    ->whereRaw('LOWER(nombre) = ?', [strtolower($cliente->localidad)])
-                    ->first()
+                ->whereRaw('LOWER(nombre) = ?', [strtolower($cliente->localidad)])
+                ->first()
                 : null);
 
         // Si encontró la localidad por nombre pero el cliente no tiene localidad_id, lo actualiza
@@ -285,7 +310,10 @@ class BotService
         }
 
         // Top 5 productos más vendidos globalmente
-        $masVendidosGlobal = Cache::remember('bot_mas_vendidos', 3600, fn() =>
+        $masVendidosGlobal = Cache::remember(
+            'bot_mas_vendidos',
+            3600,
+            fn() =>
             Pedido::selectRaw('descrip, COUNT(*) as veces')
                 ->groupBy('descrip')
                 ->orderByDesc('veces')
@@ -350,10 +378,17 @@ class BotService
             : '¿' . implode(' o ', array_map('ucfirst', $entregasOpciones)) . '?';
         $paso3Pago = '¿Cómo abonás? (' . implode(', ', $mediosOpciones) . ')';
 
+        $puedePedir       = $empresa?->bot_puede_pedir        ?? true;
+        $puedeSupgerir    = $empresa?->bot_puede_sugerir       ?? true;
+        $puedeMasVendidos = $empresa?->bot_puede_mas_vendidos  ?? false;
+
         $configNegocio = "\n{$entregasTexto}\n{$mediosTexto}";
-        if ($diasTexto)          $configNegocio .= "\n{$diasTexto}";
-        if ($todasLasZonas)      $configNegocio .= "\nZonas de entrega disponibles: {$todasLasZonas}";
-        if ($masVendidosGlobal)  $configNegocio .= "\nProductos más vendidos del negocio: {$masVendidosGlobal}";
+        if ($diasTexto)                       $configNegocio .= "\n{$diasTexto}";
+        if ($todasLasZonas)                   $configNegocio .= "\nZonas de entrega disponibles: {$todasLasZonas}";
+        if ($puedeMasVendidos && $masVendidosGlobal) $configNegocio .= "\nProductos más vendidos del negocio: {$masVendidosGlobal}";
+
+        if (!$puedePedir)    $configNegocio .= "\n\nIMPORTANTE: No podés tomar pedidos. Solo informás precios y describís productos. Si el cliente quiere pedir, indicale que contacte al negocio directamente.";
+        if (!$puedeSupgerir) $configNegocio .= "\nNo sugieras productos de forma proactiva. Solo respondé lo que el cliente consulte.";
 
         $costoExtra = $this->costoExtraCliente($cliente);
         if ($costoExtra > 0) {
@@ -518,6 +553,8 @@ Herramientas disponibles:
 
     private function tools($empresa = null): array
     {
+        $puedePedir = $empresa?->bot_puede_pedir ?? true;
+
         // Enums dinámicos según configuración
         $tiposEntrega = array_values(array_filter([
             ($empresa?->bot_permite_envio  ?? true) ? 'envio'  : null,
@@ -527,6 +564,18 @@ Herramientas disponibles:
 
         $mediosPago = $empresa?->bot_medios_pago ?? ['efectivo', 'transferencia', 'cuenta_corriente', 'otro'];
 
+        // Si no puede pedir, solo expone las tools de consulta
+        if (!$puedePedir) {
+            return array_values(array_filter($this->allTools($tiposEntrega, $mediosPago), function ($tool) {
+                return in_array($tool['function']['name'], ['ver_producto', 'lista_productos']);
+            }));
+        }
+
+        return $this->allTools($tiposEntrega, $mediosPago);
+    }
+
+    private function allTools(array $tiposEntrega, array $mediosPago): array
+    {
         return [
             [
                 'type'     => 'function',
@@ -947,7 +996,7 @@ Herramientas disponibles:
         if (str_contains($str, '.') && str_contains($str, ',')) {
             $str = str_replace('.', '', $str);
             $str = str_replace(',', '.', $str);
-        // Si solo tiene coma: puede ser decimal argentino → "2,5" = 2.5 o "1.500" (solo punto = miles)
+            // Si solo tiene coma: puede ser decimal argentino → "2,5" = 2.5 o "1.500" (solo punto = miles)
         } elseif (str_contains($str, ',')) {
             $str = str_replace(',', '.', $str);
         }
@@ -1135,7 +1184,8 @@ Herramientas disponibles:
 
             // Pedido pendiente: mostrar lo que pidió
             if ($first->estado != Pedido::ESTADO_FINALIZADO) {
-                $detalle = $items->map(fn($p) =>
+                $detalle = $items->map(
+                    fn($p) =>
                     $p->cant > 1 ? "{$p->cant}u {$p->descrip}" : "{$p->kilos}kg {$p->descrip}"
                 )->implode(', ');
                 return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}";
@@ -1148,14 +1198,16 @@ Herramientas disponibles:
             if ($lineas && $lineas->isNotEmpty()) {
                 $comprobante = $lineas->first()->fact . ' ' . str_pad($first->pv, 4, '0', STR_PAD_LEFT) . '-' . str_pad($first->venta, 8, '0', STR_PAD_LEFT);
                 $total = $lineas->sum('neto');
-                $detalle = $lineas->map(fn($f) =>
+                $detalle = $lineas->map(
+                    fn($f) =>
                     "{$f->descrip}: {$f->kilos}kg × $" . number_format($f->precio, 2, ',', '.') . " = $" . number_format($f->neto, 2, ',', '.')
                 )->implode(' | ');
                 return "Pedido #{$nro} ({$fecha}): {$estado}\nComprobante: {$comprobante}\nDetalle real: {$detalle}\nTotal: $" . number_format($total, 2, ',', '.');
             }
 
             // Finalizado pero sin factura aún
-            $detalle = $items->map(fn($p) =>
+            $detalle = $items->map(
+                fn($p) =>
                 $p->cant > 1 ? "{$p->cant}u {$p->descrip}" : "{$p->kilos}kg {$p->descrip}"
             )->implode(', ');
             return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado} (sin comprobante asociado aún)";
@@ -1393,7 +1445,7 @@ Herramientas disponibles:
             $output     = (int) $response['usage']['completion_tokens'];
             $costoUsd   = round(
                 ($input  / 1_000_000 * $precios['input']) +
-                ($output / 1_000_000 * $precios['output']),
+                    ($output / 1_000_000 * $precios['output']),
                 8
             );
             DB::table('ia_token_usos')->insert([

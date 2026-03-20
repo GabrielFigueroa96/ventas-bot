@@ -18,13 +18,20 @@ class IaEmpresa extends Model
         'bot_permite_retiro',
         'bot_permite_envio',
         'bot_medios_pago',
+        'bot_puede_pedir',
+        'bot_puede_sugerir',
+        'bot_puede_mas_vendidos',
+        'bot_atiende_nuevos',
     ];
 
     protected $casts = [
-        'bot_dias_reparto'   => 'array',
-        'bot_permite_retiro' => 'boolean',
-        'bot_permite_envio'  => 'boolean',
-        'bot_medios_pago'    => 'array',
+        'bot_dias_reparto'       => 'array',
+        'bot_permite_retiro'     => 'boolean',
+        'bot_permite_envio'      => 'boolean',
+        'bot_medios_pago'        => 'array',
+        'bot_puede_pedir'        => 'boolean',
+        'bot_puede_sugerir'      => 'boolean',
+        'bot_puede_mas_vendidos' => 'boolean',
     ];
 
     const DIAS_LABEL = [
