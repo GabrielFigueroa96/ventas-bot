@@ -13,7 +13,7 @@
         <div class="text-center mb-8">
             <div class="text-5xl mb-3">🔐</div>
             <h1 class="text-2xl font-bold text-gray-800">Verificación</h1>
-            <p class="text-gray-500 text-sm mt-1">Te enviamos un código por WhatsApp</p>
+            <p class="text-gray-500 text-sm mt-1">Te enviamos un código por WhatsApp al teléfono del negocio</p>
         </div>
 
         <div class="bg-white rounded-2xl shadow-md p-8">
@@ -21,7 +21,7 @@
                 @csrf
 
                 <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Código de 6 dígitos</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-2 text-center">Código de 6 dígitos</label>
                     <input type="text" name="codigo" inputmode="numeric" pattern="[0-9]{6}"
                            maxlength="6" autofocus autocomplete="one-time-code"
                            class="w-full border @error('codigo') border-red-400 @else border-gray-300 @enderror

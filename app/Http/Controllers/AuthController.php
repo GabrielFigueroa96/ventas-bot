@@ -3,11 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\IaEmpresa;
-use App\Services\BotService;
 use App\Services\TenantManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use App\Models\User;
 
 class AuthController extends Controller
@@ -32,14 +32,14 @@ class AuthController extends Controller
             ])->onlyInput('email');
         }
 
-        // Cargar el tenant para leer ia_empresa
+        // Cargar el tenant para obtener el teléfono de contacto
         $telefono = null;
         if ($user->tenant_id) {
             try {
-                app(TenantManager::class)->loadById($user->tenant_id);
+                app(TenantManager::class)->loadById((int) $user->tenant_id);
                 $telefono = IaEmpresa::first()?->telefono_pedidos;
             } catch (\Throwable $e) {
-                // Si falla la carga del tenant, continuar sin 2FA
+                //
             }
         }
 
@@ -60,14 +60,24 @@ class AuthController extends Controller
             'expires_at' => now()->addMinutes(10)->timestamp,
         ]);
 
-        // Enviar por WhatsApp
+        // Enviar código via plantilla WhatsApp "logint"
         try {
-            app(BotService::class)->sendWhatsapp(
-                $telefono,
-                "🔐 Código de verificación: *{$codigo}*\nVálido por 10 minutos."
-            );
+            Http::withToken(config('api.whatsapp.key'))
+                ->post('https://graph.facebook.com/v19.0/' . config('api.whatsapp.phone_number_id') . '/messages', [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $telefono,
+                    'type'              => 'template',
+                    'template'          => [
+                        'name'     => 'logint',
+                        'language' => ['code' => 'es_AR'],
+                        'components' => [[
+                            'type'       => 'body',
+                            'parameters' => [['type' => 'text', 'text' => $codigo]],
+                        ]],
+                    ],
+                ]);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("2FA sendWhatsapp error: " . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error("2FA template error: " . $e->getMessage());
         }
 
         return redirect()->route('login.verificar');
@@ -79,7 +89,11 @@ class AuthController extends Controller
             return redirect()->route('login');
         }
 
-        return view('admin.login-verificar');
+        $email = $request->session()->get('pending_2fa.email', '');
+        // Ocultar parte del email: ga***@ejemplo.com
+        $masked = preg_replace('/(?<=.{2}).(?=.*@)/u', '*', $email);
+
+        return view('admin.login-verificar', compact('masked'));
     }
 
     public function verificar(Request $request)
