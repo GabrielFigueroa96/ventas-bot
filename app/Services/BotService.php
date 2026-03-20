@@ -51,10 +51,12 @@ class BotService
                 $saludo   = $nombreIa ? "¡Hola! Soy {$nombreIa}, el asistente del negocio." : "¡Hola! Soy el asistente del negocio.";
                 $response = "{$saludo} ¿Cuál es tu nombre?";
 
-                // Enviar imagen de bienvenida si está configurada
+                // Imagen de bienvenida primero, luego el texto
                 if (!empty($config?->imagen_bienvenida)) {
                     $imageUrl = url($config->imagen_bienvenida);
                     $this->sendWhatsappImageByUrl($client->phone, $imageUrl);
+                    $this->sendWhatsapp($client->phone, $response);
+                    return $response;
                 }
             } else {
                 $nombre = ucfirst(strtolower(trim($message)));
@@ -167,9 +169,7 @@ class BotService
         // Lista cacheada 5 minutos — solo nombres, sin precios
         // Los precios se obtienen siempre frescos via tool ver_producto
         $lista = Cache::remember('productos_bot_lista', 300, function () {
-            $productos = Producto::where('PRE', '>', 0)
-                ->select('des', 'tipo', 'grupo', 'desgrupo', 'descripcion', 'notas_ia')
-                ->get();
+            $productos = Producto::paraBot()->get();
 
             $formatear = function ($p) {
                 $linea = $p->des;
@@ -730,7 +730,7 @@ Herramientas disponibles:
     {
         $registro   = $this->getCarrito($client);
         $carrito    = $registro ? $registro->items : [];
-        $productos  = Producto::where('PRE', '>', 0)->get(['cod', 'des', 'PRE', 'tipo', 'descripcion', 'notas_ia']);
+        $productos  = Producto::paraBot()->get();
         $costoExtra = $this->costoExtraCliente($client);
         $normalize  = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
         $errores    = [];
@@ -752,7 +752,7 @@ Herramientas disponibles:
             // notas_ia con "precio fijo" → se cobra por unidad aunque tipo sea Peso
             $precioFijo = !empty($match->notas_ia) && stripos($match->notas_ia, 'precio fijo') !== false;
             $esPeso     = $match->tipo !== 'Unidad' && !$precioFijo;
-            $precio     = (float) $match->PRE + $costoExtra;
+            $precio     = (float) $match->precio + $costoExtra;
 
             $cant  = 0;
             $kilos = 0;
@@ -905,8 +905,9 @@ Herramientas disponibles:
         }
 
         $codsEnCarrito = array_filter(array_column($carrito, 'cod'));
-        $productosActuales = Producto::whereIn('cod', $codsEnCarrito)
-            ->get(['cod', 'des', 'PRE'])
+        $productosActuales = Producto::paraBot()
+            ->whereIn('tablaplu.cod', $codsEnCarrito)
+            ->get()
             ->keyBy('cod');
 
         $alertas = [];
@@ -916,7 +917,7 @@ Herramientas disponibles:
                 continue;
             }
 
-            $preActual = (float) $productosActuales[$item['cod']]->PRE + $costoExtra;
+            $preActual = (float) $productosActuales[$item['cod']]->precio + $costoExtra;
             if (abs($preActual - $item['precio']) > 0.01) {
                 $precioViejo = $this->fmt($item['precio']);
                 $precioNuevo = $this->fmt($preActual);
@@ -981,8 +982,9 @@ Herramientas disponibles:
         $codcli = $client->cuenta ? $client->cuenta->cod : $client->id;
         $nomcli = $client->cuenta ? $client->cuenta->nom : $client->name;
 
-        $precioActual = Producto::whereIn('cod', array_column($carrito, 'cod'))
-            ->get(['cod', 'PRE'])
+        $precioActual = Producto::paraBot()
+            ->whereIn('tablaplu.cod', array_column($carrito, 'cod'))
+            ->get()
             ->keyBy('cod');
 
         $costoExtra = $this->costoExtraCliente($client);
@@ -1001,7 +1003,7 @@ Herramientas disponibles:
             }
 
             // Verificar si el precio base cambió desde que se armó el carrito
-            $preActual     = (float) $precioActual[$item['cod']]->PRE;
+            $preActual     = (float) $precioActual[$item['cod']]->precio;
             $preConExtra   = $preActual + $costoExtra;
             if (abs($preConExtra - $precio) > 0.01) {
                 $base   = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
@@ -1186,7 +1188,7 @@ Herramientas disponibles:
     private function verProducto($client, string $nombre, bool $solicitaPrecio = false): string
     {
         // Sin cache: siempre precio e imagen actualizados desde la BD
-        $productos    = Producto::where('PRE', '>', 0)->get(['des', 'PRE', 'tipo', 'imagen', 'descripcion', 'notas_ia']);
+        $productos    = Producto::paraBot()->get();
         $candidatos   = $this->buscarCandidatos($productos, $nombre);
 
         if ($candidatos->isEmpty()) {
@@ -1212,7 +1214,7 @@ Herramientas disponibles:
         }
         if ($solicitaPrecio) {
             $costoExtra = $this->costoExtraCliente($client);
-            $precio     = $this->fmt((float) $producto->PRE + $costoExtra);
+            $precio     = $this->fmt((float) $producto->precio + $costoExtra);
             $unidad     = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
             $caption   .= "\n\${$precio} ({$unidad})";
         }
@@ -1313,9 +1315,7 @@ Herramientas disponibles:
 
     private function priceList($client): string
     {
-        $productos = Producto::where('PRE', '>', 0)
-            ->select('des', 'PRE', 'tipo', 'desgrupo')
-            ->get();
+        $productos = Producto::paraBot()->get();
 
         if ($productos->isEmpty()) {
             return 'No hay productos disponibles en este momento.';
@@ -1336,7 +1336,7 @@ Herramientas disponibles:
             foreach ($grupos as $nombreGrupo => $items) {
                 $lineas[] = "_{$nombreGrupo}_";
                 foreach ($items as $p) {
-                    $precio   = $this->fmt((float) $p->PRE + $costoExtra);
+                    $precio   = $this->fmt((float) $p->precio + $costoExtra);
                     $unidad   = $tipo === 'Unidad' ? '/u' : '/kg';
                     $lineas[] = "• {$p->des}: \${$precio}{$unidad}";
                 }

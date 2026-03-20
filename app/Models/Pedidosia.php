@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Pedidosia extends Model
 {
-    protected $table = 'ia_pedidosia';
+    protected $table = 'ia_pedidos';
 
     protected $fillable = [
         'nro',

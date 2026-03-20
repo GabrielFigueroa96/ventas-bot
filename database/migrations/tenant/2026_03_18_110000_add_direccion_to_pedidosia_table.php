@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('ia_pedidosia', function (Blueprint $table) {
+        Schema::table('ia_pedidos', function (Blueprint $table) {
             $table->string('calle', 100)->nullable()->after('tipo_entrega');
             $table->string('numero', 20)->nullable()->after('calle');
             $table->string('localidad', 100)->nullable()->after('numero');
@@ -18,7 +18,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('ia_pedidosia', function (Blueprint $table) {
+        Schema::table('ia_pedidos', function (Blueprint $table) {
             $table->dropColumn(['calle', 'numero', 'localidad', 'dato_extra']);
         });
     }

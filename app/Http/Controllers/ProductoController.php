@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\IaProducto;
 use App\Models\Producto;
 use App\Services\TenantManager;
 use Illuminate\Http\Request;
@@ -15,6 +16,7 @@ class ProductoController extends Controller
         $search = $request->input('search');
 
         $productos = Producto::where('PRE', '>', 0)
+            ->with('iaProducto')
             ->when($search, fn($q) =>
                 $q->where('des', 'like', "%{$search}%")
             )
@@ -24,10 +26,70 @@ class ProductoController extends Controller
         return view('admin.productos', compact('productos'));
     }
 
-    public function uploadImagen(Request $request, int $id)
+    /** Agrega el producto al catálogo del bot (crea ia_productos si no existe). */
+    public function agregarCatalogo(Producto $producto)
     {
-        $producto  = Producto::findOrFail($id);
-        $tenantId  = app(TenantManager::class)->get()->id;
+        if (!$producto->iaProducto) {
+            IaProducto::create([
+                'tablaplu_id' => $producto->id,
+                'precio'      => (float) $producto->PRE,
+                'disponible'  => true,
+            ]);
+            Cache::forget('productos_bot_lista');
+        }
+        return back()->with('success', "{$producto->des} agregado al catálogo del bot.");
+    }
+
+    /** Quita el producto del catálogo del bot (elimina ia_productos). */
+    public function quitarCatalogo(Producto $producto)
+    {
+        if ($producto->iaProducto) {
+            // Borrar imagen si existe
+            $img = $producto->iaProducto->imagen;
+            if ($img && file_exists(public_path($img))) {
+                unlink(public_path($img));
+            }
+            $producto->iaProducto->delete();
+            Cache::forget('productos_bot_lista');
+            Cache::forget('productos_bot_precios');
+        }
+        return back()->with('success', "{$producto->des} quitado del catálogo.");
+    }
+
+    /** Activa / desactiva la visibilidad del producto para el bot. */
+    public function toggleDisponible(Producto $producto)
+    {
+        $ia = $producto->iaProducto;
+        if (!$ia) {
+            return back()->with('error', 'El producto no está en el catálogo del bot.');
+        }
+        $ia->update(['disponible' => !$ia->disponible]);
+        Cache::forget('productos_bot_lista');
+        return back();
+    }
+
+    public function updatePrecio(Request $request, Producto $producto)
+    {
+        $request->validate(['precio' => 'required|numeric|min:0']);
+
+        $ia = $producto->iaProducto;
+        if (!$ia) {
+            return response()->json(['ok' => false, 'error' => 'No en catálogo'], 422);
+        }
+        $ia->update(['precio' => $request->input('precio')]);
+        Cache::forget('productos_bot_lista');
+        Cache::forget('productos_bot_precios');
+
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true]);
+        }
+        return back()->with('success', "Precio de {$producto->des} actualizado.");
+    }
+
+    public function uploadImagen(Request $request, Producto $producto)
+    {
+        $ia = $this->getOrCreateIa($producto);
+        $tenantId = app(TenantManager::class)->get()->id;
         $request->validate(['imagen' => 'required|image|max:3072']);
 
         $dir = public_path("producto-images/{$tenantId}");
@@ -35,9 +97,8 @@ class ProductoController extends Controller
             mkdir($dir, 0755, true);
         }
 
-        // Borrar imagen anterior si existe
-        if ($producto->imagen && $producto->imagen !== 'sinimagen.webp') {
-            $anterior = public_path($producto->imagen);
+        if ($ia->imagen && $ia->imagen !== 'sinimagen.webp') {
+            $anterior = public_path($ia->imagen);
             if (file_exists($anterior)) {
                 unlink($anterior);
             }
@@ -45,10 +106,9 @@ class ProductoController extends Controller
 
         $file = $request->file('imagen');
         $slug = Str::slug($producto->des) . '-' . $producto->cod;
-
         $name = $this->optimizarImagen($file->getRealPath(), $file->getMimeType(), $slug, $tenantId);
 
-        $producto->update(['imagen' => $name]);
+        $ia->update(['imagen' => $name]);
 
         Cache::forget('productos_bot_lista');
         Cache::forget('productos_bot_precios');
@@ -56,12 +116,12 @@ class ProductoController extends Controller
         return back()->with('success', "Imagen de {$producto->des} actualizada.");
     }
 
-    public function updateDescripcion(Request $request, int $id)
+    public function updateDescripcion(Request $request, Producto $producto)
     {
-        $producto = Producto::findOrFail($id);
-        $request->validate(['descripcion' => 'nullable|string|max:255']);
+        $request->validate(['descripcion' => 'nullable|string|max:500']);
 
-        $producto->update(['descripcion' => $request->input('descripcion', '')]);
+        $ia = $this->getOrCreateIa($producto);
+        $ia->update(['descripcion' => $request->input('descripcion', '')]);
 
         Cache::forget('productos_bot_lista');
         Cache::forget('productos_bot_precios');
@@ -69,37 +129,34 @@ class ProductoController extends Controller
         if ($request->expectsJson()) {
             return response()->json(['ok' => true]);
         }
-
         return back()->with('success', "Descripción de {$producto->des} actualizada.");
     }
 
-    public function updateNotasIa(Request $request, int $id)
+    public function updateNotasIa(Request $request, Producto $producto)
     {
-        $producto = Producto::findOrFail($id);
         $request->validate(['notas_ia' => 'nullable|string|max:500']);
 
-        $producto->update(['notas_ia' => $request->input('notas_ia', '')]);
+        $ia = $this->getOrCreateIa($producto);
+        $ia->update(['notas_ia' => $request->input('notas_ia', '')]);
 
         Cache::forget('productos_bot_lista');
 
         if ($request->expectsJson()) {
             return response()->json(['ok' => true]);
         }
-
         return back()->with('success', "Notas IA de {$producto->des} actualizadas.");
     }
 
-    public function deleteImagen(int $id)
+    public function deleteImagen(Producto $producto)
     {
-        $producto = Producto::findOrFail($id);
-        if ($producto->imagen && $producto->imagen !== 'sinimagen.webp') {
-            $path = public_path($producto->imagen);
+        $ia = $producto->iaProducto;
+        if ($ia && $ia->imagen && $ia->imagen !== 'sinimagen.webp') {
+            $path = public_path($ia->imagen);
             if (file_exists($path)) {
                 unlink($path);
             }
+            $ia->update(['imagen' => null]);
         }
-
-        $producto->update(['imagen' => 'sinimagen.webp']);
 
         Cache::forget('productos_bot_lista');
         Cache::forget('productos_bot_precios');
@@ -107,10 +164,17 @@ class ProductoController extends Controller
         return back()->with('success', "Imagen eliminada.");
     }
 
-    /**
-     * Redimensiona y comprime la imagen a máx 800px, guardando como WebP (si GD lo soporta) o JPEG.
-     * Retorna la ruta relativa desde public/.
-     */
+    // -------------------------------------------------------------------
+
+    private function getOrCreateIa(Producto $producto): IaProducto
+    {
+        return $producto->iaProducto ?? IaProducto::create([
+            'tablaplu_id' => $producto->id,
+            'precio'      => (float) $producto->PRE,
+            'disponible'  => true,
+        ]);
+    }
+
     private function optimizarImagen(string $srcPath, string $mime, string $slug, int $tenantId): string
     {
         $maxWidth  = 800;
@@ -118,14 +182,12 @@ class ProductoController extends Controller
         $quality   = 80;
         $base      = "producto-images/{$tenantId}";
 
-        // Si GD no está disponible, guardar tal cual como JPEG
         if (!extension_loaded('gd')) {
             $name = "{$base}/{$slug}.jpg";
             copy($srcPath, public_path($name));
             return $name;
         }
 
-        // Crear imagen GD según MIME
         $src = match ($mime) {
             'image/jpeg', 'image/jpg' => imagecreatefromjpeg($srcPath),
             'image/png'               => imagecreatefrompng($srcPath),
@@ -141,21 +203,15 @@ class ProductoController extends Controller
         }
 
         [$origW, $origH] = [imagesx($src), imagesy($src)];
+        $ratio = min($maxWidth / $origW, $maxHeight / $origH, 1.0);
+        $newW  = (int) round($origW * $ratio);
+        $newH  = (int) round($origH * $ratio);
 
-        // Calcular nuevas dimensiones manteniendo proporción
-        $ratio  = min($maxWidth / $origW, $maxHeight / $origH, 1.0);
-        $newW   = (int) round($origW * $ratio);
-        $newH   = (int) round($origH * $ratio);
-
-        $dst = imagecreatetruecolor($newW, $newH);
-
-        // Fondo blanco (para PNGs con transparencia al convertir a JPEG)
+        $dst   = imagecreatetruecolor($newW, $newH);
         $white = imagecolorallocate($dst, 255, 255, 255);
         imagefill($dst, 0, 0, $white);
-
         imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
 
-        // Guardar siempre como JPEG calidad 80 (compatible con WhatsApp, liviano)
         $name = "{$base}/{$slug}.jpg";
         imagejpeg($dst, public_path($name), $quality);
 

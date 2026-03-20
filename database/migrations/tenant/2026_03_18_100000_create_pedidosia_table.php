@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('ia_pedidosia', function (Blueprint $table) {
+        Schema::create('ia_pedidos', function (Blueprint $table) {
             $table->id();
             $table->unsignedInteger('nro')->unique();           // vincula con pedidos.nro
             $table->string('codcli', 50);                      // código de cuenta
@@ -27,6 +27,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('ia_pedidosia');
+        Schema::dropIfExists('ia_pedidos');
     }
 };

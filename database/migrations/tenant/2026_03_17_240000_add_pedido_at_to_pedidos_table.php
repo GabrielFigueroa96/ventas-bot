@@ -8,6 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasColumn('pedidos', 'pedido_at')) return;
+
         Schema::table('pedidos', function (Blueprint $table) {
             $table->dateTime('pedido_at')->nullable()->after('obs');
         });

@@ -26,5 +26,31 @@ class Producto extends Model
         'notas_ia',
     ];
 
+    public function iaProducto()
+    {
+        return $this->hasOne(IaProducto::class, 'tablaplu_id', 'id');
+    }
 
+    /**
+     * Productos habilitados para el bot (registrados en ia_productos y disponibles).
+     * Selecciona precio, descripcion, imagen y notas_ia desde ia_productos.
+     */
+    public function scopeParaBot($query)
+    {
+        return $query
+            ->join('ia_productos', 'tablaplu.id', '=', 'ia_productos.tablaplu_id')
+            ->where('ia_productos.disponible', true)
+            ->select(
+                'tablaplu.id',
+                'tablaplu.cod',
+                'tablaplu.des',
+                'tablaplu.tipo',
+                'tablaplu.grupo',
+                'tablaplu.desgrupo',
+                'ia_productos.precio',
+                'ia_productos.descripcion',
+                'ia_productos.imagen',
+                'ia_productos.notas_ia',
+            );
+    }
 }

@@ -55,9 +55,13 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::post('/configuracion',  [AdminController::class, 'guardarConfiguracion'])->name('configuracion.save');
 
     // Productos
-    Route::get  ('/productos',                       [ProductoController::class, 'index'])->name('productos');
-    Route::post ('/productos/{producto}/imagen',     [ProductoController::class, 'uploadImagen'])->name('productos.imagen');
-    Route::delete('/productos/{producto}/imagen',    [ProductoController::class, 'deleteImagen'])->name('productos.imagen.delete');
-    Route::patch('/productos/{producto}/descripcion',[ProductoController::class, 'updateDescripcion'])->name('productos.descripcion');
-    Route::patch('/productos/{producto}/notas-ia',  [ProductoController::class, 'updateNotasIa'])->name('productos.notas_ia');
+    Route::get   ('/productos',                            [ProductoController::class, 'index'])->name('productos');
+    Route::post  ('/productos/{producto}/imagen',          [ProductoController::class, 'uploadImagen'])->name('productos.imagen');
+    Route::delete('/productos/{producto}/imagen',          [ProductoController::class, 'deleteImagen'])->name('productos.imagen.delete');
+    Route::patch ('/productos/{producto}/descripcion',     [ProductoController::class, 'updateDescripcion'])->name('productos.descripcion');
+    Route::patch ('/productos/{producto}/notas-ia',        [ProductoController::class, 'updateNotasIa'])->name('productos.notas_ia');
+    Route::patch ('/productos/{producto}/precio',          [ProductoController::class, 'updatePrecio'])->name('productos.precio');
+    Route::post  ('/productos/{producto}/catalogo',        [ProductoController::class, 'agregarCatalogo'])->name('productos.catalogo.agregar');
+    Route::delete('/productos/{producto}/catalogo',        [ProductoController::class, 'quitarCatalogo'])->name('productos.catalogo.quitar');
+    Route::patch ('/productos/{producto}/disponible',      [ProductoController::class, 'toggleDisponible'])->name('productos.disponible');
 });
