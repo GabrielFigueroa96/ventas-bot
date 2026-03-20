@@ -10,8 +10,7 @@ return new class extends Migration
     {
         Schema::create('ia_productos', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('tablaplu_id')->unique();
-            $table->foreign('tablaplu_id')->references('id')->on('tablaplu')->cascadeOnDelete();
+            $table->decimal('cod', 6)->unique(); // igual que tablaplu.cod
             $table->decimal('precio', 10, 2)->default(0);
             $table->text('descripcion')->nullable();
             $table->string('imagen', 255)->nullable();

@@ -26,9 +26,18 @@ class Producto extends Model
         'notas_ia',
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+        // Cascade: si se borra el producto de tablaplu, se borra su registro en ia_productos
+        static::deleting(function (self $producto) {
+            $producto->iaProducto?->delete();
+        });
+    }
+
     public function iaProducto()
     {
-        return $this->hasOne(IaProducto::class, 'tablaplu_id', 'id');
+        return $this->hasOne(IaProducto::class, 'cod', 'cod');
     }
 
     /**
@@ -38,10 +47,9 @@ class Producto extends Model
     public function scopeParaBot($query)
     {
         return $query
-            ->join('ia_productos', 'tablaplu.id', '=', 'ia_productos.tablaplu_id')
+            ->join('ia_productos', 'tablaplu.cod', '=', 'ia_productos.cod')
             ->where('ia_productos.disponible', true)
             ->select(
-                'tablaplu.id',
                 'tablaplu.cod',
                 'tablaplu.des',
                 'tablaplu.tipo',

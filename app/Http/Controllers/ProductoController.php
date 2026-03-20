@@ -31,9 +31,9 @@ class ProductoController extends Controller
     {
         if (!$producto->iaProducto) {
             IaProducto::create([
-                'tablaplu_id' => $producto->id,
-                'precio'      => (float) $producto->PRE,
-                'disponible'  => true,
+                'cod'        => $producto->cod,
+                'precio'     => (float) $producto->PRE,
+                'disponible' => true,
             ]);
             Cache::forget('productos_bot_lista');
         }

@@ -9,7 +9,7 @@ class IaProducto extends Model
     protected $table = 'ia_productos';
 
     protected $fillable = [
-        'tablaplu_id',
+        'cod',
         'precio',
         'descripcion',
         'imagen',
@@ -24,6 +24,6 @@ class IaProducto extends Model
 
     public function producto()
     {
-        return $this->belongsTo(Producto::class, 'tablaplu_id', 'id');
+        return $this->belongsTo(Producto::class, 'cod', 'cod');
     }
 }
