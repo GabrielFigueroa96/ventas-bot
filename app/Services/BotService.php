@@ -53,7 +53,7 @@ class BotService
 
                 // Enviar imagen de bienvenida si está configurada
                 if (!empty($config?->imagen_bienvenida)) {
-                    $imageUrl = Storage::disk('public')->url($config->imagen_bienvenida);
+                    $imageUrl = url($config->imagen_bienvenida);
                     $this->sendWhatsappImageByUrl($client->phone, $imageUrl);
                 }
             } else {
@@ -363,10 +363,8 @@ class BotService
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
         if ($instrucciones)      $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
 
-        $nombreIa       = trim($empresa?->nombre_ia ?? '');
-        $telefonoPedidos = trim($empresa?->telefono_pedidos ?? '');
-        $identidad      = $nombreIa ? "Te llamás {$nombreIa}." : '';
-        $telTexto       = $telefonoPedidos ? "\nTeléfono del local: {$telefonoPedidos}" : '';
+        $nombreIa  = trim($empresa?->nombre_ia ?? '');
+        $identidad = $nombreIa ? "Te llamás {$nombreIa}." : '';
 
         $messages[] = [
             'role'    => 'system',
@@ -378,7 +376,7 @@ Hoy es {$fecha}.
 Cliente: {$nombre}{$cuentaTexto}
 Último pedido: {$ultimoPedidoTexto}
 {$favoritosTexto}
-{$ultimaDirTexto}{$telTexto}{$configNegocio}
+{$ultimaDirTexto}{$configNegocio}
 
 Productos disponibles (solo nombres — para precios usá siempre ver_producto):
 {$lista}
@@ -1064,6 +1062,32 @@ Herramientas disponibles:
         ]);
 
         $registro?->delete();
+
+        // Notificar al local
+        $config = Cache::remember('bot_empresa_config', 300, fn() => IaEmpresa::first());
+        $telLocal = trim($config?->telefono_pedidos ?? '');
+        if ($telLocal) {
+            $entregaTexto = $tipoEntrega === 'envio'
+                ? "Envío: {$calle} {$numero}" . ($localidad ? ", {$localidad}" : '') . ($datoExtra ? " ({$datoExtra})" : '')
+                : 'Retiro en local';
+
+            $itemsTexto = implode("\n", array_map(
+                fn($item) => "  • " . ($item['cant'] > 0 ? "{$item['cant']}u" : "{$item['kilos']}kg") . " {$item['des']} — $" . $this->fmt($item['neto']),
+                array_filter($carrito, fn($i) => !in_array($i['des'], $omitidos))
+            ));
+
+            $notif = "🛒 *Pedido #{$nro}*\n"
+                . "👤 {$nomcli} | {$client->phone}\n"
+                . "📅 Entrega: {$fecha}\n"
+                . "📦 {$entregaTexto}\n"
+                . "💳 Pago: {$formaPago}\n\n"
+                . "{$itemsTexto}\n\n"
+                . "*Total: $" . $this->fmt($total) . "*";
+
+            if ($obs) $notif .= "\n📝 {$obs}";
+
+            $this->sendWhatsapp($telLocal, $notif);
+        }
 
         $msg = "Pedido #{$nro} registrado: {$resumen}.";
         if (!empty($extras)) {

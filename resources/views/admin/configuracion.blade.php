@@ -40,7 +40,7 @@
 
             @if($config->imagen_bienvenida)
                 <div class="flex items-center gap-4">
-                    <img src="{{ Storage::url($config->imagen_bienvenida) }}" alt="Imagen actual"
+                    <img src="{{ asset($config->imagen_bienvenida) }}" alt="Imagen actual"
                         class="w-24 h-24 object-cover rounded-lg border border-gray-200">
                     <div class="text-sm text-gray-500">
                         <p class="font-medium text-gray-700">Imagen actual</p>
