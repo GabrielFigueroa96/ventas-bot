@@ -99,15 +99,19 @@ class AdminChatController extends Controller
                 copy($file->getRealPath(), public_path($filename));
                 $mediaPath = $filename;
 
-                // Subir a WhatsApp y enviar
-                $mediaId = $bot->uploadMedia($file);
-                $bot->sendWhatsappMedia($cliente->phone, $mediaId, $isImage ? 'image' : 'document', $caption);
+                // Subir y enviar según canal
+                if (str_starts_with($cliente->phone, 'ig_') || str_starts_with($cliente->phone, 'fb_')) {
+                    $bot->sendReplyImage($cliente, url($filename), $caption);
+                } else {
+                    $mediaId = $bot->uploadMedia($file);
+                    $bot->sendWhatsappMedia($cliente->phone, $mediaId, $isImage ? 'image' : 'document', $caption);
+                }
 
                 $texto = $caption;
                 $tipo  = 'media';
             } else {
                 $texto = $request->input('mensaje', '');
-                $bot->sendWhatsapp($cliente->phone, $texto);
+                $bot->sendReply($cliente, $texto);
             }
         } catch (\Throwable $e) {
             Log::error("AdminChat enviar error: {$e->getMessage()}");
