@@ -193,6 +193,8 @@ class BotService
         $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
         $empresa = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
 
+        $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
+
         // Sin caché: siempre fresco para reflejar cambios del catálogo inmediatamente
         $productos = Producto::paraBot()->get();
 
