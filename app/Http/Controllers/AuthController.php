@@ -70,10 +70,18 @@ class AuthController extends Controller
                     'template'          => [
                         'name'     => 'logint',
                         'language' => ['code' => 'es_AR'],
-                        'components' => [[
-                            'type'       => 'body',
-                            'parameters' => [['type' => 'text', 'text' => $codigo]],
-                        ]],
+                        'components' => [
+                            [
+                                'type'       => 'body',
+                                'parameters' => [['type' => 'text', 'text' => $codigo]],
+                            ],
+                            [
+                                'type'       => 'button',
+                                'sub_type'   => 'url',
+                                'index'      => '0',
+                                'parameters' => [['type' => 'text', 'text' => $codigo]],
+                            ],
+                        ],
                     ],
                 ]);
         } catch (\Throwable $e) {
