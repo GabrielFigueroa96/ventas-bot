@@ -38,13 +38,16 @@ class AuthController extends Controller
             try {
                 app(TenantManager::class)->loadById((int) $user->tenant_id);
                 $telefono = IaEmpresa::first()?->telefono_pedidos;
+                \Illuminate\Support\Facades\Log::info("2FA: tenant={$user->tenant_id} telefono=" . ($telefono ?? 'NULL'));
             } catch (\Throwable $e) {
-                //
+                \Illuminate\Support\Facades\Log::error("2FA tenant error: " . $e->getMessage());
             }
+        } else {
+            \Illuminate\Support\Facades\Log::info("2FA: user {$user->id} sin tenant_id");
         }
 
         if (!$telefono) {
-            // Sin teléfono configurado: login directo sin 2FA
+            \Illuminate\Support\Facades\Log::info("2FA: sin teléfono, login directo");
             Auth::login($user, $request->boolean('remember'));
             $request->session()->regenerate();
             return redirect()->intended(route('admin.dashboard'));
@@ -61,8 +64,9 @@ class AuthController extends Controller
         ]);
 
         // Enviar código via plantilla WhatsApp "logint"
+        $debugInfo = ['telefono' => $telefono, 'codigo' => $codigo, 'api_status' => null, 'api_body' => null];
         try {
-            Http::withToken(config('api.whatsapp.key'))
+            $waRes = Http::withToken(config('api.whatsapp.key'))
                 ->post('https://graph.facebook.com/v19.0/' . config('api.whatsapp.phone_number_id') . '/messages', [
                     'messaging_product' => 'whatsapp',
                     'to'                => $telefono,
@@ -84,9 +88,12 @@ class AuthController extends Controller
                         ],
                     ],
                 ]);
+            $debugInfo['api_status'] = $waRes->status();
+            $debugInfo['api_body']   = $waRes->body();
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("2FA template error: " . $e->getMessage());
+            $debugInfo['api_body'] = $e->getMessage();
         }
+        $request->session()->put('pending_2fa_debug', $debugInfo);
 
         return redirect()->route('login.verificar');
     }

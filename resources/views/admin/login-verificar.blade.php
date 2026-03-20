@@ -14,6 +14,15 @@
             <div class="text-5xl mb-3">🔐</div>
             <h1 class="text-2xl font-bold text-gray-800">Verificación</h1>
             <p class="text-gray-500 text-sm mt-1">Te enviamos un código por WhatsApp al teléfono del negocio</p>
+        @if(session('pending_2fa_debug'))
+        @php $dbg = session('pending_2fa_debug'); @endphp
+        <div class="mt-2 text-xs bg-yellow-50 border border-yellow-200 rounded p-2 text-left text-yellow-800">
+            📱 Enviando a: <b>{{ $dbg['telefono'] }}</b><br>
+            🔑 Código: <b>{{ $dbg['codigo'] }}</b><br>
+            📡 API status: <b>{{ $dbg['api_status'] ?? 'sin respuesta' }}</b><br>
+            💬 Respuesta: {{ $dbg['api_body'] }}
+        </div>
+        @endif
         </div>
 
         <div class="bg-white rounded-2xl shadow-md p-8">
