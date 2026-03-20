@@ -180,7 +180,6 @@ class ProductoController extends Controller
     private function limpiarCacheProductos(): void
     {
         $tenantId = app(TenantManager::class)->get()?->id ?? 0;
-        Cache::forget('productos_bot_lista_' . $tenantId);
         Cache::forget('bot_mas_vendidos_' . $tenantId);
     }
 

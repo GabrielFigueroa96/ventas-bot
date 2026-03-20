@@ -193,42 +193,37 @@ class BotService
         $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
         $empresa = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
 
-        // Lista cacheada 5 minutos — solo nombres, sin precios
-        // Los precios se obtienen siempre frescos via tool ver_producto
-        $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
-        $lista = Cache::remember('productos_bot_lista_' . $tenantId, 300, function () {
-            $productos = Producto::paraBot()->get();
+        // Sin caché: siempre fresco para reflejar cambios del catálogo inmediatamente
+        $productos = Producto::paraBot()->get();
 
-            $formatear = function ($p) {
-                $linea = $p->des;
-                if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
-                    $linea .= " ({$p->descripcion})";
-                }
-                if (!empty($p->notas_ia)) {
-                    $linea .= " [IA: {$p->notas_ia}]";
-                }
-                return $linea;
-            };
-
-            $bloques = [];
-
-            foreach (['Unidad', 'Peso'] as $tipo) {
-                $tipoLabel = $tipo === 'Unidad' ? 'POR UNIDAD' : 'POR KILO';
-                $grupo = $productos->where('tipo', $tipo)
-                    ->groupBy(fn($p) => $p->desgrupo ?: 'Sin grupo');
-
-                if ($grupo->isEmpty()) continue;
-
-                $bloque = "[{$tipoLabel}]";
-                foreach ($grupo as $nombreGrupo => $items) {
-                    $bloque .= "\n  [{$nombreGrupo}]\n";
-                    $bloque .= $items->map(fn($p) => "  " . $formatear($p))->implode("\n");
-                }
-                $bloques[] = $bloque;
+        $formatear = function ($p) {
+            $linea = $p->des;
+            if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
+                $linea .= " ({$p->descripcion})";
             }
+            if (!empty($p->notas_ia)) {
+                $linea .= " [IA: {$p->notas_ia}]";
+            }
+            return $linea;
+        };
 
-            return implode("\n\n", $bloques);
-        });
+        $bloques = [];
+        foreach (['Unidad', 'Peso'] as $tipo) {
+            $tipoLabel = $tipo === 'Unidad' ? 'POR UNIDAD' : 'POR KILO';
+            $grupo = $productos->where('tipo', $tipo)
+                ->groupBy(fn($p) => $p->desgrupo ?: 'Sin grupo');
+
+            if ($grupo->isEmpty()) continue;
+
+            $bloque = "[{$tipoLabel}]";
+            foreach ($grupo as $nombreGrupo => $items) {
+                $bloque .= "\n  [{$nombreGrupo}]\n";
+                $bloque .= $items->map(fn($p) => "  " . $formatear($p))->implode("\n");
+            }
+            $bloques[] = $bloque;
+        }
+
+        $lista = implode("\n\n", $bloques);
 
         $ultimoPedido = Pedido::where('codcli', $codcli)->latest('reg')->first();
         $ultimoPedidoTexto = $ultimoPedido
