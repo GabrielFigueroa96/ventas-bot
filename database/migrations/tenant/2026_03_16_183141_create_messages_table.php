@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('ia_messages', function (Blueprint $table) {
             $table->id();
             $table->foreignId('cliente_id')
-                ->constrained()
+                ->constrained('ia_clientes')
                 ->cascadeOnDelete();
 
             $table->text('message');
