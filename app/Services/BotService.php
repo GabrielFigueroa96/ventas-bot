@@ -1648,12 +1648,16 @@ Herramientas disponibles:
         }
 
         try {
-            Http::withToken($pageToken)
+            $response = Http::withToken($pageToken)
                 ->timeout(10)
                 ->post("https://graph.facebook.com/v19.0/{$pageId}/messages", [
                     'recipient' => ['id' => $recipientId],
                     'message'   => ['text' => $message],
                 ]);
+
+            if (!$response->successful()) {
+                Log::error('sendMessenger API error: ' . $response->body());
+            }
         } catch (\Throwable $e) {
             Log::error('sendMessenger error: ' . $e->getMessage());
         }
