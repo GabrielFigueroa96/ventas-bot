@@ -40,7 +40,7 @@ class ProductoController extends Controller
                 'precio'     => (float) $producto->pre,
                 'disponible' => true,
             ]);
-            Cache::forget('productos_bot_lista');
+            $this->limpiarCacheProductos();
         }
         return response()->json(['ok' => true]);
     }
@@ -55,8 +55,8 @@ class ProductoController extends Controller
                 unlink(public_path($img));
             }
             $producto->iaProducto->delete();
-            Cache::forget('productos_bot_lista');
-            Cache::forget('productos_bot_precios');
+            $this->limpiarCacheProductos();
+            // productos_bot_precios ya cubierto por limpiarCacheProductos
         }
         return response()->json(['ok' => true]);
     }
@@ -70,7 +70,7 @@ class ProductoController extends Controller
             return response()->json(['ok' => false], 422);
         }
         $ia->update(['disponible' => !$ia->disponible]);
-        Cache::forget('productos_bot_lista');
+        $this->limpiarCacheProductos();
         return response()->json(['ok' => true, 'disponible' => $ia->disponible]);
     }
 
@@ -84,8 +84,8 @@ class ProductoController extends Controller
             return response()->json(['ok' => false, 'error' => 'No en catálogo'], 422);
         }
         $ia->update(['precio' => $request->input('precio')]);
-        Cache::forget('productos_bot_lista');
-        Cache::forget('productos_bot_precios');
+        $this->limpiarCacheProductos();
+        // productos_bot_precios ya cubierto por limpiarCacheProductos
 
         if ($request->expectsJson()) {
             return response()->json(['ok' => true]);
@@ -118,8 +118,8 @@ class ProductoController extends Controller
 
         $ia->update(['imagen' => $name]);
 
-        Cache::forget('productos_bot_lista');
-        Cache::forget('productos_bot_precios');
+        $this->limpiarCacheProductos();
+        // productos_bot_precios ya cubierto por limpiarCacheProductos
 
         return back()->with('success', "Imagen de {$producto->des} actualizada.");
     }
@@ -132,8 +132,8 @@ class ProductoController extends Controller
         $ia = $this->getOrCreateIa($producto);
         $ia->update(['descripcion' => $request->input('descripcion', '')]);
 
-        Cache::forget('productos_bot_lista');
-        Cache::forget('productos_bot_precios');
+        $this->limpiarCacheProductos();
+        // productos_bot_precios ya cubierto por limpiarCacheProductos
 
         if ($request->expectsJson()) {
             return response()->json(['ok' => true]);
@@ -149,7 +149,7 @@ class ProductoController extends Controller
         $ia = $this->getOrCreateIa($producto);
         $ia->update(['notas_ia' => $request->input('notas_ia', '')]);
 
-        Cache::forget('productos_bot_lista');
+        $this->limpiarCacheProductos();
 
         if ($request->expectsJson()) {
             return response()->json(['ok' => true]);
@@ -169,13 +169,20 @@ class ProductoController extends Controller
             $ia->update(['imagen' => null]);
         }
 
-        Cache::forget('productos_bot_lista');
-        Cache::forget('productos_bot_precios');
+        $this->limpiarCacheProductos();
+        // productos_bot_precios ya cubierto por limpiarCacheProductos
 
         return back()->with('success', "Imagen eliminada.");
     }
 
     // -------------------------------------------------------------------
+
+    private function limpiarCacheProductos(): void
+    {
+        $tenantId = app(TenantManager::class)->get()?->id ?? 0;
+        Cache::forget('productos_bot_lista_' . $tenantId);
+        Cache::forget('bot_mas_vendidos_' . $tenantId);
+    }
 
     private function getOrCreateIa(Producto $producto): IaProducto
     {

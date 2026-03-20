@@ -209,23 +209,45 @@ function toggleDetalle(id) {
 async function agregarCatalogo(cod, btn) {
     btn.disabled = true;
     btn.textContent = '...';
-    const res = await fetch(`/admin/productos/${cod}/catalogo`, {
-        method: 'POST',
-        headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-    });
-    if (res.ok) window.location.reload();
-    else { btn.disabled = false; btn.textContent = '+ Agregar'; }
+    try {
+        const res = await fetch(`/admin/productos/${cod}/catalogo`, {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+        });
+        if (res.ok) {
+            const data = await res.json();
+            alert(JSON.stringify(data, null, 2));
+            window.location.reload();
+        } else {
+            const text = await res.text();
+            alert(`Error ${res.status}: ${text.substring(0, 200)}`);
+            btn.disabled = false; btn.textContent = '+ Agregar';
+        }
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+        btn.disabled = false; btn.textContent = '+ Agregar';
+    }
 }
 
 async function quitarCatalogo(cod, btn) {
     if (!confirm('¿Quitar del catálogo del bot?')) return;
     btn.disabled = true;
-    const res = await fetch(`/admin/productos/${cod}/catalogo`, {
-        method: 'DELETE',
-        headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-    });
-    if (res.ok) window.location.reload();
-    else btn.disabled = false;
+    try {
+        const res = await fetch(`/admin/productos/${cod}/catalogo`, {
+            method: 'DELETE',
+            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+        });
+        if (res.ok) {
+            window.location.reload();
+        } else {
+            const text = await res.text();
+            alert(`Error ${res.status}: ${text.substring(0, 200)}`);
+            btn.disabled = false;
+        }
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+        btn.disabled = false;
+    }
 }
 
 async function toggleDisponible(cod, btn) {

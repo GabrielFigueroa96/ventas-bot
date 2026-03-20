@@ -27,6 +27,7 @@ class IaProducto extends Model
     ];
 
     protected $casts = [
+        'cod'        => 'float',
         'precio'     => 'float',
         'disponible' => 'boolean',
     ];

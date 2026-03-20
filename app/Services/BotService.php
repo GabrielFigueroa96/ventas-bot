@@ -175,7 +175,8 @@ class BotService
         $choice   = $response['choices'][0];
 
         if ($choice['finish_reason'] === 'tool_calls') {
-            return $this->handleToolCalls($choice, $messages, $cliente, $tools);
+            $puedePedir = $empresa?->bot_puede_pedir ?? true;
+            return $this->handleToolCalls($choice, $messages, $cliente, $tools, $puedePedir);
         }
 
         return $choice['message']['content'];
@@ -194,7 +195,8 @@ class BotService
 
         // Lista cacheada 5 minutos — solo nombres, sin precios
         // Los precios se obtienen siempre frescos via tool ver_producto
-        $lista = Cache::remember('productos_bot_lista', 300, function () {
+        $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
+        $lista = Cache::remember('productos_bot_lista_' . $tenantId, 300, function () {
             $productos = Producto::paraBot()->get();
 
             $formatear = function ($p) {
@@ -312,7 +314,7 @@ class BotService
 
         // Top 5 productos más vendidos globalmente
         $masVendidosGlobal = Cache::remember(
-            'bot_mas_vendidos',
+            'bot_mas_vendidos_' . $tenantId,
             3600,
             fn() =>
             Pedido::selectRaw('descrip, COUNT(*) as veces')
@@ -324,7 +326,7 @@ class BotService
         );
 
         // Todas las zonas de entrega activas con sus días
-        $todasLasZonas = Cache::remember('bot_zonas_entrega', 3600, function () use ($diasLabel) {
+        $todasLasZonas = Cache::remember('bot_zonas_entrega_' . $tenantId, 3600, function () use ($diasLabel) {
             return Localidad::where('activo', true)
                 ->get()
                 ->map(function ($l) use ($diasLabel) {
@@ -417,15 +419,15 @@ Cliente: {$nombre}{$cuentaTexto}
 Productos disponibles (solo nombres — para precios usá siempre ver_producto):
 {$lista}
 
-════════════════════════════════
+" . ($puedeSupgerir ? "════════════════════════════════
 FLUJO 1 — SUGERIR
 ════════════════════════════════
 Activar cuando: el cliente saluda, no sabe qué quiere, pide recomendación o menciona una ocasión (asado, cumpleaños, etc.).
 Pasos:
 1. Si menciona una ocasión, calculá cantidades según las porciones estándar y mostrá solo productos de la lista disponible.
-2. Si no menciona ocasión, sugerí sus favoritos o los más populares.
+2. Si no menciona ocasión, sugerí sus favoritos" . ($puedeMasVendidos ? " o los más populares" : "") . ".
 3. Ofrecé achuras cuando sea pertinente (una sola vez, sin insistir).
-4. Preguntá si agrega al carrito.
+" . ($puedePedir ? "4. Preguntá si agrega al carrito." : "4. Informá precios si el cliente los consulta. NO ofrezcas agregar al carrito ni procesar pedidos.") . "
 
 Porciones estándar por persona:
 - Por peso: asado de tira/vacío/costilla 0.500kg | entraña/colita 0.300kg | pollo 0.300kg | cerdo 0.300kg
@@ -438,8 +440,8 @@ Sugerencias por ocasión — usá SOLO productos que estén en la lista:
 - Disco de arado: paleta, roast beef, osobuco, chorizos.
 - Guiso/estofado: osobuco, paleta, roast beef, chorizos.
 - Milanesas: nalga, peceto, bola de lomo. (1 kg ≈ 6-8 milanesas)
-
-════════════════════════════════
+" : "") . "
+" . ($puedePedir ? "════════════════════════════════
 FLUJO 2 — TOMAR PEDIDO
 ════════════════════════════════
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
@@ -454,22 +456,29 @@ Pasos:
    - Confirmale la dirección antes de proceder.
 6. Cuando tenés todos los datos (fecha, tipo_entrega, forma_pago, dirección si aplica), llamá DIRECTAMENTE a crear_pedido sin enviar ningún mensaje previo.
    - Fecha en obs si el cliente dice horario o turno (no en fecha_entrega).
-7. Una vez creado el pedido (ves \'Pedido #X registrado\' en la respuesta del sistema), confirmáselo al cliente y no vuelvas a pedir confirmación. Si pregunta por el total o detalle, usá ver_pedidos.
+7. Una vez creado el pedido (ves 'Pedido #X registrado' en la respuesta del sistema), confirmáselo al cliente y no vuelvas a pedir confirmación. Si pregunta por el total o detalle, usá ver_pedidos.
 
 IMPORTANTE: Nunca calcules precios ni totales manualmente. Los precios pueden incluir recargos por zona que solo el sistema conoce. Siempre usá ver_carrito para mostrar importes.
 
 Reglas de cantidad para agregar_al_carrito:
-- Producto POR PESO: pasá siempre kg. \'3 vacío\' → 3 kg. \'medio kilo\' → 0.5.
+- Producto POR PESO: pasá siempre kg. '3 vacío' → 3 kg. 'medio kilo' → 0.5.
 - Producto POR UNIDAD: pasá cantidad entera de unidades.
-- Producto POR PESO pedido en unidades: convertí solo si la descripción del producto indica el peso unitario (ej: \'aprox. 0.15kg c/u\'). Calculá kg = unidades × peso e informale. Si no tiene ese dato, pedile que indique en kg.
+- Producto POR PESO pedido en unidades: convertí solo si la descripción del producto indica el peso unitario (ej: 'aprox. 0.15kg c/u'). Calculá kg = unidades × peso e informale. Si no tiene ese dato, pedile que indique en kg.
 - Producto POR UNIDAD pedido en kg: no convertís, indicale que se pide por unidad.
 - El total es siempre aproximado para productos por peso. Recordáselo.
-- Formato numérico argentino: el cliente puede escribir con punto para miles y coma para decimales. Interpretá correctamente: \'1.500\' = 1500 | \'2,5\' = 2.5 | \'0,750\' = 0.75 | \'1.200,50\' = 1200.5
+- Formato numérico argentino: el cliente puede escribir con punto para miles y coma para decimales. Interpretá correctamente: '1.500' = 1500 | '2,5' = 2.5 | '0,750' = 0.75 | '1.200,50' = 1200.5
 
 NUNCA menciones un producto fuera de la lista. NUNCA inventes ni estimes precios.
-Al llamar agregar_al_carrito, usá el nombre del producto EXACTAMENTE como aparece en la lista de productos disponibles. NUNCA inferas el nombre a partir del historial de conversación — el historial puede referenciar pedidos anteriores que no reflejan lo que el cliente pide ahora. Si el nombre que el cliente dice puede corresponder a varios productos de la lista, llamá ver_producto primero para que el cliente elija.
-
+Al llamar agregar_al_carrito, usá el nombre del producto EXACTAMENTE como aparece en la lista de productos disponibles. NUNCA inferas el nombre a partir del historial de conversación — el historial puede referenciar pedidos anteriores que no reflejan lo que el cliente pide ahora. Si el nombre que el cliente dice puede corresponder a varios productos de la lista, llamá ver_producto primero para que el cliente elija." : "════════════════════════════════
+FLUJO 2 — SOLO INFORMAR (NO SE TOMAN PEDIDOS)
 ════════════════════════════════
+El negocio NO acepta pedidos por este canal. Solo podés informar precios, describir productos y responder consultas.
+NUNCA preguntes cantidad, NUNCA ofrezcas agregar al carrito, NUNCA insinúes que podés procesar un pedido.
+Si el cliente quiere comprar, indicale amablemente que contacte al negocio directamente para hacer su pedido.") . "
+
+NUNCA menciones un producto fuera de la lista. NUNCA inventes ni estimes precios.
+
+" . ($puedePedir ? "════════════════════════════════
 FLUJO 3 — INFORMAR ESTADO
 ════════════════════════════════
 Activar cuando: el cliente pregunta por su pedido, estado, demora o si ya está listo.
@@ -477,19 +486,19 @@ Pasos:
 1. Usá ver_pedidos para obtener el historial y estado actual.
 2. Informá el estado de forma clara: pendiente (en preparación), finalizado (listo).
 3. Si el pedido está pendiente, decile que le avisaremos por WhatsApp cuando esté listo.
-4. Si quiere cancelar un pedido pendiente, usá cancelar_pedido.
+4. Si quiere cancelar un pedido pendiente, usá cancelar_pedido." : "") . "
 
 Herramientas disponibles:
-- agregar_al_carrito → agregar/modificar ítems del carrito
+" . ($puedePedir ? "- agregar_al_carrito → agregar/modificar ítems del carrito
 - ver_carrito → resumen con totales, tiempo restante y validación de precios. SIEMPRE usá esta herramienta cuando el cliente pregunta por el total, precio o detalle de su carrito; nunca calcules precios manualmente
 - vaciar_carrito → limpiar el carrito
 - crear_pedido → confirmar y registrar el pedido
 - ver_pedidos → historial y estado de pedidos
 - cancelar_pedido → cancelar un pedido pendiente
-- ver_precios → lista de precios actualizada (mostrala tal cual, sin reformatear)
-- ver_producto → detalle e imagen de un producto específico. Usá esta herramienta cuando el cliente pregunta por un producto (disponibilidad, precio, descripción, si hay X, cómo es el X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial pueden estar desactualizados — usá siempre ver_producto para el precio real. NO la volvás a llamar si el cliente solo está confirmando que quiere ese producto o pidiendo cantidad.
-- Cuando el cliente responde afirmativamente ('sí', 'dale', 'sí quiero', etc.) luego de que se le mostró un producto: NO llamés ver_producto. Preguntale directamente la cantidad y llamá agregar_al_carrito con lo que confirme. Si ya dijo la cantidad, llamá agregar_al_carrito directamente.
-- Si recibís una imagen, describila e intentá relacionarla con un pedido.",
+" : "") . "- ver_precios → lista de precios actualizada (mostrala tal cual, sin reformatear)
+- ver_producto → detalle e imagen de un producto específico. Usá esta herramienta cuando el cliente pregunta por un producto (disponibilidad, precio, descripción, si hay X, cómo es el X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial pueden estar desactualizados — usá siempre ver_producto para el precio real.
+" . ($puedePedir ? "- Cuando el cliente responde afirmativamente ('sí', 'dale', 'sí quiero', etc.) luego de que se le mostró un producto: NO llamés ver_producto. Preguntale directamente la cantidad y llamá agregar_al_carrito con lo que confirme. Si ya dijo la cantidad, llamá agregar_al_carrito directamente.
+" : "") . "- Si recibís una imagen, describila e intentá relacionarla con un pedido.",
         ];
 
         foreach ($history as $msg) {
@@ -717,7 +726,7 @@ Herramientas disponibles:
     // Ejecución de la función elegida por ChatGPT
     // -------------------------------------------------------------------------
 
-    private function handleToolCalls(array $choice, array $messages, $cliente, array $tools = []): string
+    private function handleToolCalls(array $choice, array $messages, $cliente, array $tools = [], bool $puedePedir = true): string
     {
         for ($round = 0; $round < 5; $round++) {
             // Agregar el mensaje del asistente con todos sus tool_calls
@@ -735,7 +744,7 @@ Herramientas disponibles:
                     'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['calle'] ?? '', $args['numero'] ?? '', $args['localidad'] ?? '', $args['dato_extra'] ?? '', $args['obs'] ?? ''),
                     'ver_pedidos'        => $this->orderStatus($cliente),
                     'ver_precios'        => $this->priceList($cliente),
-                    'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false)),
+                    'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false), $puedePedir),
                     'cancelar_pedido'    => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
                     default              => 'Función desconocida.',
                 };
@@ -1238,7 +1247,7 @@ Herramientas disponibles:
         return "Pedido #{$nro} cancelado correctamente.";
     }
 
-    private function verProducto($client, string $nombre, bool $solicitaPrecio = false): string
+    private function verProducto($client, string $nombre, bool $solicitaPrecio = false, bool $puedePedir = true): string
     {
         // Sin cache: siempre precio e imagen actualizados desde la BD
         $productos    = Producto::paraBot()->get();
@@ -1282,7 +1291,9 @@ Herramientas disponibles:
                     $mime    = $this->mimeFromPath($path);
                     $mediaId = $this->uploadMediaFromPath($path, $mime);
                     $this->sendWhatsappMedia($client->phone, $mediaId, 'image', $caption);
-                    return "IMAGEN_ENVIADA para {$producto->des}. El cliente ya recibió imagen, descripción y precio. Preguntale '¿Lo agregamos al carrito? ¿Cuánto querés?' (en un solo mensaje, sin repetir datos del producto). Si confirma con cantidad, llamá agregar_al_carrito. Si dice 'sí' sin cantidad, pedile solo la cantidad. NO volvás a llamar ver_producto para este mismo producto.";
+                    return $puedePedir
+                        ? "IMAGEN_ENVIADA para {$producto->des}. El cliente ya recibió imagen, descripción y precio. Preguntale '¿Lo agregamos al carrito? ¿Cuánto querés?' (en un solo mensaje, sin repetir datos del producto). Si confirma con cantidad, llamá agregar_al_carrito. Si dice 'sí' sin cantidad, pedile solo la cantidad. NO volvás a llamar ver_producto para este mismo producto."
+                        : "IMAGEN_ENVIADA para {$producto->des}. El cliente ya recibió imagen, descripción y precio. NO preguntes cantidad ni ofrezcas agregar al carrito. Si quiere comprar, indicale que contacte al negocio directamente.";
                 } catch (\Throwable $e) {
                     Log::error("verProducto upload error [{$producto->des}]: {$e->getMessage()}");
                 }
@@ -1291,7 +1302,9 @@ Herramientas disponibles:
 
         // Sin imagen: enviar el texto directo y decirle a GPT que no lo repita
         $this->sendWhatsapp($client->phone, $caption);
-        return "TEXTO_ENVIADO para {$producto->des}. El cliente ya recibió descripción y precio. Preguntale '¿Lo agregamos al carrito? ¿Cuánto querés?' (en un solo mensaje, sin repetir datos del producto). Si confirma con cantidad, llamá agregar_al_carrito. Si dice 'sí' sin cantidad, pedile solo la cantidad. NO volvás a llamar ver_producto para este mismo producto.";
+        return $puedePedir
+            ? "TEXTO_ENVIADO para {$producto->des}. El cliente ya recibió descripción y precio. Preguntale '¿Lo agregamos al carrito? ¿Cuánto querés?' (en un solo mensaje, sin repetir datos del producto). Si confirma con cantidad, llamá agregar_al_carrito. Si dice 'sí' sin cantidad, pedile solo la cantidad. NO volvás a llamar ver_producto para este mismo producto."
+            : "TEXTO_ENVIADO para {$producto->des}. El cliente ya recibió descripción y precio. NO preguntes cantidad ni ofrezcas agregar al carrito. Si quiere comprar, indicale que contacte al negocio directamente.";
     }
 
     private function mimeFromPath(string $path): string
