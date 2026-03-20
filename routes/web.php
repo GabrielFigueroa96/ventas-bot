@@ -47,6 +47,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::delete('/recordatorios/{rec}',    [RecordatorioController::class, 'destroy'])->name('recordatorios.destroy');
     Route::patch ('/recordatorios/{rec}/toggle',[RecordatorioController::class, 'toggle'])->name('recordatorios.toggle');
 
+    // Uso IA
+    Route::get('/uso-ia', [AdminController::class, 'usoIa'])->name('uso_ia');
+
     // Configuración del bot
     Route::get ('/configuracion',  [AdminController::class, 'configuracion'])->name('configuracion');
     Route::post('/configuracion',  [AdminController::class, 'guardarConfiguracion'])->name('configuracion.save');

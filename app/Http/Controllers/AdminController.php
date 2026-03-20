@@ -18,56 +18,6 @@ class AdminController extends Controller
     {
         $empresa = Empresa::first();
 
-        // Tipo de cambio — configurar en .env
-        $dolarArs = (float) env('DOLAR_ARS', 1300);
-
-        // Costo OpenAI: calcula desde tokens reales agrupados por modelo (funciona con datos viejos y nuevos)
-        $preciosModelos = [
-            'gpt-4.1'      => ['input' => 2.00, 'output' => 8.00],
-            'gpt-4.1-mini' => ['input' => 0.40, 'output' => 1.60],
-            'gpt-4o'       => ['input' => 2.50, 'output' => 10.00],
-            'gpt-4o-mini'  => ['input' => 0.15, 'output' => 0.60],
-        ];
-
-        $filasPorModelo = DB::table('ia_token_usos')
-            ->whereMonth('created_at', now()->month)
-            ->whereYear('created_at', now()->year)
-            ->selectRaw('modelo, SUM(prompt_tokens) as input, SUM(completion_tokens) as output, SUM(total_tokens) as total')
-            ->groupBy('modelo')
-            ->get();
-
-        $costoMesUsd  = 0;
-        $inputTokens  = 0;
-        $outputTokens = 0;
-        $totalTokens  = 0;
-
-        foreach ($filasPorModelo as $fila) {
-            $p            = $preciosModelos[$fila->modelo] ?? $preciosModelos['gpt-4.1'];
-            $costoMesUsd += ($fila->input  / 1_000_000 * $p['input'])
-                          + ($fila->output / 1_000_000 * $p['output']);
-            $inputTokens  += (int) $fila->input;
-            $outputTokens += (int) $fila->output;
-            $totalTokens  += (int) $fila->total;
-        }
-        $costoMesUsd = round($costoMesUsd, 6);
-
-        // Costo WhatsApp: conversaciones únicas por cliente/día este mes
-        $waCostoPorConv = (float) env('WA_COSTO_USD', 0.05);
-        try {
-            $waConvMes = DB::table('ia_messages')
-                ->where('direction', 'outgoing')
-                ->whereMonth('created_at', now()->month)
-                ->whereYear('created_at', now()->year)
-                ->selectRaw('COUNT(DISTINCT CONCAT(cliente_id, DATE(created_at))) as conversaciones')
-                ->value('conversaciones') ?? 0;
-        } catch (\Throwable $e) {
-            $waConvMes = 0;
-        }
-
-        $costoWaUsd    = round($waConvMes * $waCostoPorConv, 4);
-        $costoTotalUsd = round($costoMesUsd + $costoWaUsd, 4);
-        $costoMes      = $costoMesUsd;
-
         $seguimientos = Seguimiento::with('cliente')
             ->orderByDesc('enviado_at')
             ->take(10)
@@ -78,14 +28,6 @@ class AdminController extends Controller
             'pedidos_hoy'  => Pedido::whereDate('fecha', today())->distinct('nro')->count('nro'),
             'pedidos_pend' => Pedido::where('estado', Pedido::ESTADO_PENDIENTE)->distinct('nro')->count('nro'),
             'mensajes_hoy' => Message::whereDate('created_at', today())->count(),
-            'tokens_mes'      => number_format($totalTokens),
-            'costo_mes_usd'   => $costoMesUsd,
-            'costo_mes_ars'   => round($costoMesUsd * $dolarArs, 2),
-            'wa_conv_mes'     => (int) $waConvMes,
-            'wa_costo_usd'    => $costoWaUsd,
-            'wa_costo_ars'    => round($costoWaUsd * $dolarArs, 2),
-            'costo_total_usd' => $costoTotalUsd,
-            'costo_total_ars' => round($costoTotalUsd * $dolarArs, 2),
         ];
 
         $pedidos_recientes = Pedido::orderByDesc('reg')
@@ -214,6 +156,80 @@ class AdminController extends Controller
         $pedidosia  = $this->loadPedidosia($pedidosRaw);
 
         return view('admin.pedidos', compact('pedidos', 'factventas', 'pedidosia'));
+    }
+
+    public function usoIa()
+    {
+        // Tokens por modelo este mes
+        $filasMes = DB::table('ia_token_usos')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->selectRaw('modelo, SUM(prompt_tokens) as input, SUM(completion_tokens) as output, SUM(total_tokens) as total')
+            ->groupBy('modelo')
+            ->get();
+
+        $inputTokens  = 0;
+        $outputTokens = 0;
+        $totalTokens  = 0;
+        foreach ($filasMes as $fila) {
+            $inputTokens  += (int) $fila->input;
+            $outputTokens += (int) $fila->output;
+            $totalTokens  += (int) $fila->total;
+        }
+
+        // Tokens por día — últimos 14 días
+        $tokensporDiaRaw = DB::table('ia_token_usos')
+            ->where('created_at', '>=', now()->subDays(13)->startOfDay())
+            ->selectRaw('DATE(created_at) as dia, SUM(total_tokens) as total')
+            ->groupBy('dia')
+            ->pluck('total', 'dia');
+
+        $chartDias   = [];
+        $chartTokens = [];
+        for ($i = 13; $i >= 0; $i--) {
+            $d = now()->subDays($i)->format('Y-m-d');
+            $chartDias[]   = now()->subDays($i)->format('d/m');
+            $chartTokens[] = (int) ($tokensporDiaRaw[$d] ?? 0);
+        }
+
+        // Conversaciones WhatsApp este mes
+        try {
+            $waConvMes = DB::table('ia_messages')
+                ->where('direction', 'outgoing')
+                ->whereMonth('created_at', now()->month)
+                ->whereYear('created_at', now()->year)
+                ->selectRaw('COUNT(DISTINCT CONCAT(cliente_id, DATE(created_at))) as conversaciones')
+                ->value('conversaciones') ?? 0;
+        } catch (\Throwable $e) {
+            $waConvMes = 0;
+        }
+
+        // Mensajes WA por día — últimos 14 días
+        try {
+            $waPorDiaRaw = DB::table('ia_messages')
+                ->where('direction', 'outgoing')
+                ->where('created_at', '>=', now()->subDays(13)->startOfDay())
+                ->selectRaw('DATE(created_at) as dia, COUNT(*) as total')
+                ->groupBy('dia')
+                ->pluck('total', 'dia');
+        } catch (\Throwable $e) {
+            $waPorDiaRaw = collect();
+        }
+
+        $chartWaDias = [];
+        $chartWa     = [];
+        for ($i = 13; $i >= 0; $i--) {
+            $d = now()->subDays($i)->format('Y-m-d');
+            $chartWaDias[] = now()->subDays($i)->format('d/m');
+            $chartWa[]     = (int) ($waPorDiaRaw[$d] ?? 0);
+        }
+
+        return view('admin.uso', compact(
+            'filasMes', 'inputTokens', 'outputTokens', 'totalTokens',
+            'waConvMes',
+            'chartDias', 'chartTokens',
+            'chartWaDias', 'chartWa',
+        ));
     }
 
     public function configuracion()
