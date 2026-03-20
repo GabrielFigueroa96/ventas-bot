@@ -41,8 +41,26 @@ class Pedidosia extends Model
         'total'     => 'float',
     ];
 
-    const ESTADO_PENDIENTE  = 0;
-    const ESTADO_FINALIZADO = 1;
+    const ESTADO_PENDIENTE   = 0;
+    const ESTADO_CONFIRMADO  = 1;
+    const ESTADO_EN_CAMINO   = 2;
+    const ESTADO_ENTREGADO   = 3;
+
+    /** @deprecated */
+    const ESTADO_FINALIZADO  = 1;
+
+    const ESTADOS = [
+        0 => ['label' => 'Pendiente',   'css' => 'bg-yellow-100 text-yellow-700'],
+        1 => ['label' => 'Confirmado',  'css' => 'bg-blue-100 text-blue-700'],
+        2 => ['label' => 'En camino',   'css' => 'bg-orange-100 text-orange-700'],
+        3 => ['label' => 'Entregado',   'css' => 'bg-green-100 text-green-700'],
+    ];
+
+    const MENSAJES_ESTADO = [
+        1 => "✅ Tu pedido #{nro} fue *confirmado* y está siendo preparado. ¡Gracias!",
+        2 => "🚚 Tu pedido #{nro} está *en camino*. ¡Pronto lo recibirás!",
+        3 => "📦 Tu pedido #{nro} fue *entregado*. ¡Gracias por tu compra!",
+    ];
 
     public function cliente()
     {

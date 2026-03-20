@@ -53,10 +53,30 @@
                 <span class="text-xs px-2 py-0.5 rounded-full font-medium {{ $pagoLabel[1] }}">{{ $pagoLabel[0] }}</span>
             @endif
         </div>
+        @if($sia)
+        @php
+            $siaEstado = (int) $sia->estado;
+            $siaInfo   = \App\Models\Pedidosia::ESTADOS[$siaEstado] ?? ['label' => '?', 'css' => 'bg-gray-100 text-gray-500'];
+            $siaMax    = \App\Models\Pedidosia::ESTADO_ENTREGADO;
+        @endphp
+        <div class="flex items-center gap-2 shrink-0">
+            <span id="badge-sia-{{ $sia->id }}"
+                  class="text-xs px-2 py-0.5 rounded-full font-medium {{ $siaInfo['css'] }}">
+                {{ $siaInfo['label'] }}
+            </span>
+            @if($siaEstado < $siaMax)
+            <button onclick="avanzarEstado({{ $sia->id }}, this)"
+                class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full transition">
+                Avanzar ›
+            </button>
+            @endif
+        </div>
+        @else
         <span class="text-xs px-2 py-0.5 rounded-full font-medium shrink-0
             {{ $first->estado == 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700' }}">
             {{ $first->estado_texto }}
         </span>
+        @endif
     </div>
     <div class="px-5 py-3 space-y-2">
         {{-- Fecha + Obs --}}

@@ -8,6 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('ia_productos')) return;
+
         Schema::create('ia_productos', function (Blueprint $table) {
             $table->id();
             $table->decimal('cod', 6)->unique(); // igual que tablaplu.cod

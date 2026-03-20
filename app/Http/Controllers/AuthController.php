@@ -2,8 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\IaEmpresa;
+use App\Services\BotService;
+use App\Services\TenantManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use App\Models\User;
 
 class AuthController extends Controller
 {
@@ -14,19 +19,95 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
-        $credentials = $request->validate([
+        $request->validate([
             'email'    => 'required|email',
             'password' => 'required',
         ]);
 
-        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+        $user = User::where('email', $request->input('email'))->first();
+
+        if (!$user || !Hash::check($request->input('password'), $user->password)) {
+            return back()->withErrors([
+                'email' => 'Las credenciales no son correctas.',
+            ])->onlyInput('email');
+        }
+
+        // Cargar el tenant para leer ia_empresa
+        $telefono = null;
+        if ($user->tenant_id) {
+            try {
+                app(TenantManager::class)->loadById($user->tenant_id);
+                $telefono = IaEmpresa::first()?->telefono_pedidos;
+            } catch (\Throwable $e) {
+                // Si falla la carga del tenant, continuar sin 2FA
+            }
+        }
+
+        if (!$telefono) {
+            // Sin teléfono configurado: login directo sin 2FA
+            Auth::login($user, $request->boolean('remember'));
             $request->session()->regenerate();
             return redirect()->intended(route('admin.dashboard'));
         }
 
-        return back()->withErrors([
-            'email' => 'Las credenciales no son correctas.',
-        ])->onlyInput('email');
+        // Generar código de 6 dígitos
+        $codigo = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        $request->session()->put('pending_2fa', [
+            'user_id'    => $user->id,
+            'remember'   => $request->boolean('remember'),
+            'code'       => $codigo,
+            'expires_at' => now()->addMinutes(10)->timestamp,
+        ]);
+
+        // Enviar por WhatsApp
+        try {
+            app(BotService::class)->sendWhatsapp(
+                $telefono,
+                "🔐 Código de verificación: *{$codigo}*\nVálido por 10 minutos."
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("2FA sendWhatsapp error: " . $e->getMessage());
+        }
+
+        return redirect()->route('login.verificar');
+    }
+
+    public function showVerificar(Request $request)
+    {
+        if (!$request->session()->has('pending_2fa')) {
+            return redirect()->route('login');
+        }
+
+        return view('admin.login-verificar');
+    }
+
+    public function verificar(Request $request)
+    {
+        $request->validate(['codigo' => 'required|digits:6']);
+
+        $pending = $request->session()->get('pending_2fa');
+
+        if (!$pending) {
+            return redirect()->route('login');
+        }
+
+        if (now()->timestamp > $pending['expires_at']) {
+            $request->session()->forget('pending_2fa');
+            return redirect()->route('login')->withErrors([
+                'email' => 'El código expiró. Ingresá nuevamente.',
+            ]);
+        }
+
+        if ($request->input('codigo') !== $pending['code']) {
+            return back()->withErrors(['codigo' => 'Código incorrecto.']);
+        }
+
+        $request->session()->forget('pending_2fa');
+        Auth::loginUsingId($pending['user_id'], $pending['remember']);
+        $request->session()->regenerate();
+
+        return redirect()->intended(route('admin.dashboard'));
     }
 
     public function logout(Request $request)

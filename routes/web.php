@@ -11,16 +11,19 @@ use App\Http\Controllers\RecordatorioController;
 Route::get('/', fn() => view('welcome'));
 
 // Auth
-Route::get('/login',  [AuthController::class, 'showLogin'])->name('login')->middleware('guest');
-Route::post('/login', [AuthController::class, 'login'])->name('login.post')->middleware('guest');
-Route::post('/logout',[AuthController::class, 'logout'])->name('logout');
+Route::get ('/login',           [AuthController::class, 'showLogin'])->name('login')->middleware('guest');
+Route::post('/login',           [AuthController::class, 'login'])->name('login.post')->middleware('guest');
+Route::get ('/login/verificar', [AuthController::class, 'showVerificar'])->name('login.verificar')->middleware('guest');
+Route::post('/login/verificar', [AuthController::class, 'verificar'])->name('login.verificar.post')->middleware('guest');
+Route::post('/logout',          [AuthController::class, 'logout'])->name('logout');
 
 // Admin (protegido)
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->group(function () {
     Route::get('/',                   [AdminController::class, 'dashboard'])->name('dashboard');
     Route::get('/clientes',           [AdminController::class, 'clientes'])->name('clientes');
     Route::get('/clientes/{cliente}',          [AdminController::class,     'cliente'])->name('cliente');
-    Route::get('/pedidos',                     [AdminController::class,     'pedidos'])->name('pedidos');
+    Route::get  ('/pedidos',                             [AdminController::class, 'pedidos'])->name('pedidos');
+    Route::patch('/pedidos/ia/{id}/estado',              [AdminController::class, 'avanzarEstadoPedido'])->name('pedidos.ia.estado');
 
     // Control manual del chat
     Route::get ('/clientes/{cliente}/mensajes',      [AdminChatController::class, 'mensajesNuevos'])->name('chat.mensajes');

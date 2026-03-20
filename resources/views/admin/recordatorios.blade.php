@@ -54,6 +54,18 @@
                     placeholder="Ej: ¡Hola {nombre}! 🥩 Esta semana tenemos pollo con 10% de descuento. ¿Hacemos un pedido?">{{ old('mensaje', $editando?->mensaje) }}</textarea>
             </div>
 
+            <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">URL de imagen <span class="text-gray-400 font-normal">(opcional — se envía junto al mensaje)</span></label>
+                <input type="url" name="imagen_url" value="{{ old('imagen_url', $editando?->imagen_url) }}"
+                    placeholder="https://ejemplo.com/imagen.jpg"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none">
+                <p class="text-xs text-gray-400 mt-1">La URL debe ser pública y accesible por WhatsApp. JPG o PNG recomendado.</p>
+                @if(old('imagen_url', $editando?->imagen_url))
+                    <img src="{{ old('imagen_url', $editando?->imagen_url) }}" alt=""
+                         class="mt-2 h-20 rounded-lg border border-gray-200 object-cover">
+                @endif
+            </div>
+
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Hora de envío</label>
@@ -133,7 +145,12 @@
                         <span class="text-xs text-purple-600">🗺 {{ $rec->filtro_provincia }}</span>
                     @endif
                 </div>
-                <p class="text-sm text-gray-500 truncate">{{ $rec->mensaje }}</p>
+                <div class="flex items-start gap-2">
+                    @if($rec->imagen_url)
+                        <img src="{{ $rec->imagen_url }}" alt="" class="w-10 h-10 rounded object-cover border border-gray-200 shrink-0">
+                    @endif
+                    <p class="text-sm text-gray-500 truncate">{{ $rec->mensaje }}</p>
+                </div>
                 @if($rec->ultimo_envio_at)
                     <p class="text-xs text-gray-400">Último envío: {{ $rec->ultimo_envio_at->format('d/m/Y H:i') }}</p>
                 @endif

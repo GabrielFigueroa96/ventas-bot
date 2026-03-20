@@ -9,7 +9,7 @@ class Recordatorio extends Model
     protected $table = 'ia_recordatorios';
 
     protected $fillable = [
-        'nombre', 'mensaje', 'tipo',
+        'nombre', 'mensaje', 'imagen_url', 'tipo',
         'filtro_localidad', 'filtro_provincia',
         'dias', 'hora', 'activo', 'ultimo_envio_at',
     ];

@@ -10,6 +10,7 @@ use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Pedidosia;
 use App\Models\Seguimiento;
+use App\Services\BotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -285,6 +286,33 @@ class AdminController extends Controller
         \Illuminate\Support\Facades\Cache::forget('productos_bot_lista');
 
         return back()->with('ok', 'Configuración guardada.');
+    }
+
+    public function avanzarEstadoPedido(int $id, Request $request)
+    {
+        $sia = Pedidosia::findOrFail($id);
+
+        $nextEstado = $sia->estado + 1;
+        if ($nextEstado > Pedidosia::ESTADO_ENTREGADO) {
+            return response()->json(['error' => 'Ya está en el estado final.'], 422);
+        }
+
+        $sia->estado = $nextEstado;
+        $sia->save();
+
+        // Notificar al cliente por WhatsApp si hay un mensaje definido
+        $plantilla = Pedidosia::MENSAJES_ESTADO[$nextEstado] ?? null;
+        if ($plantilla && $sia->cliente?->phone) {
+            $mensaje = str_replace('{nro}', $sia->nro, $plantilla);
+            try {
+                app(BotService::class)->sendWhatsapp($sia->cliente->phone, $mensaje);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("avanzarEstadoPedido WA error: " . $e->getMessage());
+            }
+        }
+
+        $info = Pedidosia::ESTADOS[$nextEstado];
+        return response()->json(['estado' => $nextEstado, 'label' => $info['label'], 'css' => $info['css']]);
     }
 
     private function loadPedidosia($pedidos): \Illuminate\Support\Collection

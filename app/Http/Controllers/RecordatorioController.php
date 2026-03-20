@@ -22,6 +22,7 @@ class RecordatorioController extends Controller
         $data = $request->validate([
             'nombre'            => 'required|string|max:100',
             'mensaje'           => 'required|string',
+            'imagen_url'        => 'nullable|url|max:500',
             'tipo'              => 'required|in:libre,recomendacion,repetir_pedido',
             'filtro_localidad'  => 'nullable|string|max:100',
             'filtro_provincia'  => 'nullable|string|max:100',
@@ -55,6 +56,7 @@ class RecordatorioController extends Controller
         $data = $request->validate([
             'nombre'            => 'required|string|max:100',
             'mensaje'           => 'required|string',
+            'imagen_url'        => 'nullable|url|max:500',
             'tipo'              => 'required|in:libre,recomendacion,repetir_pedido',
             'filtro_localidad'  => 'nullable|string|max:100',
             'filtro_provincia'  => 'nullable|string|max:100',

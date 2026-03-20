@@ -27,3 +27,39 @@
     @include('admin.partials.pedidos', compact('pedidos', 'factventas', 'pedidosia'))
 </div>
 @endsection
+
+@section('scripts')
+<script>
+const csrfToken = document.querySelector('meta[name=csrf-token]').content;
+
+const siaEstados = @json(\App\Models\Pedidosia::ESTADOS);
+const siaMax     = {{ \App\Models\Pedidosia::ESTADO_ENTREGADO }};
+
+async function avanzarEstado(id, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+        const res  = await fetch(`/admin/pedidos/ia/${id}/estado`, {
+            method: 'PATCH',
+            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+        });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error ?? 'Error'); btn.disabled = false; btn.textContent = 'Avanzar ›'; return; }
+
+        const badge = document.getElementById(`badge-sia-${id}`);
+        if (badge) {
+            badge.textContent = data.label;
+            badge.className   = `text-xs px-2 py-0.5 rounded-full font-medium ${data.css}`;
+        }
+        if (data.estado >= siaMax) {
+            btn.remove();
+        } else {
+            btn.disabled    = false;
+            btn.textContent = 'Avanzar ›';
+        }
+    } catch (e) {
+        btn.disabled = false; btn.textContent = 'Avanzar ›';
+    }
+}
+</script>
+@endsection

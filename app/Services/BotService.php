@@ -65,7 +65,8 @@ class BotService
 
                 // Imagen de bienvenida primero (siempre, independiente de quién atiende)
                 if (!empty($config?->imagen_bienvenida)) {
-                    $this->sendWhatsappImageByUrl($client->phone, url($config->imagen_bienvenida));
+                    $imgTs = $config->updated_at ? $config->updated_at->timestamp : time();
+                    $this->sendWhatsappImageByUrl($client->phone, url($config->imagen_bienvenida) . '?v=' . $imgTs);
                 }
 
                 if ($atiende === 'humano') {
@@ -1257,7 +1258,7 @@ Herramientas disponibles:
 
         // Si la coincidencia no es exacta (fuzzy), confirmar antes de mostrar
         if ($normalize($producto->des) !== $normalize($nombre)) {
-            return "Encontré '{$producto->des}' como posible coincidencia para '{$nombre}'. Preguntale al cliente: '¿Te referís a {$producto->des}?' y si confirma llamá ver_producto con el nombre exacto '{$producto->des}'.";
+            return "Encontré '{$producto->des}' como posible coincidencia para '{$nombre}'. Preguntale al cliente: '¿Te referís a {$producto->des}?' — si confirma (dice sí, ese, dale, etc.) y da una cantidad, llamá DIRECTAMENTE agregar_al_carrito con nombre='{$producto->des}' y la cantidad indicada. Si confirma sin dar cantidad, pedile la cantidad y luego llamá agregar_al_carrito. NO volvás a llamar ver_producto para este mismo producto.";
         }
 
         $caption = "*{$producto->des}*";
