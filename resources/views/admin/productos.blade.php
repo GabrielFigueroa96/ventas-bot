@@ -215,8 +215,6 @@ async function agregarCatalogo(cod, btn) {
             headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
         });
         if (res.ok) {
-            const data = await res.json();
-            alert(JSON.stringify(data, null, 2));
             window.location.reload();
         } else {
             const text = await res.text();
