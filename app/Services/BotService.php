@@ -1074,22 +1074,27 @@ Herramientas disponibles:
             }
 
             Pedido::create([
-                'fecha'     => $fecha,
-                'nro'       => $nro,
-                'nomcli'    => $nomcli,
-                'codcli'    => $codcli,
-                'codigo'    => $item['cod'] ?? null,
-                'descrip'   => $item['des'],
-                'kilos'     => $item['kilos'],
-                'cant'      => $item['cant'],
-                'precio'    => $precio,
-                'neto'      => $neto,
-                'estado'    => Pedido::ESTADO_PENDIENTE,
-                'obs'       => $obs,
-                'pedido_at' => now(),
-                'venta'     => 0,
+                'fecha'      => $fecha,
+                'nro'        => $nro,
+                'nomcli'     => $nomcli,
+                'codcli'     => $codcli,
+                'codigo'     => $item['cod'] ?? null,
+                'descrip'    => $item['des'],
+                'kilos'      => $item['kilos'],
+                'cant'       => $item['cant'],
+                'precio'     => $precio,
+                'neto'       => $neto,
+                'estado'     => Pedido::ESTADO_PENDIENTE,
+                'obs'        => $obs,
+                'pedido_at'  => now(),
+                'updated_at' => now(),
+                'suc'        => '',
+                'venta'      => 0,
             ]);
         }
+
+        // Limpiar el carrito una vez que los ítems están guardados
+        $registro?->delete();
 
         $extras = [];
         if (!empty($omitidos)) {
@@ -1123,8 +1128,6 @@ Herramientas disponibles:
             'estado'       => Pedidosia::ESTADO_PENDIENTE,
             'pedido_at'    => now(),
         ]);
-
-        $registro?->delete();
 
         // Notificar al local
         $config = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
@@ -1173,6 +1176,10 @@ Herramientas disponibles:
             return 'El cliente no tiene pedidos registrados.';
         }
 
+        // Pre-cargar cabeceras de ia_pedidos (totales estimados)
+        $nros = $pedidos->keys()->toArray();
+        $cabeceras = Pedidosia::whereIn('nro', $nros)->get()->keyBy('nro');
+
         // Pre-cargar facturas de pedidos finalizados
         $pares = $pedidos->flatten()
             ->where('estado', Pedido::ESTADO_FINALIZADO)
@@ -1189,18 +1196,21 @@ Herramientas disponibles:
             $facturas = $rows->groupBy(fn($f) => "{$f->nro}-{$f->pv}");
         }
 
-        return $pedidos->map(function ($items, $nro) use ($facturas) {
-            $first  = $items->first();
-            $fecha  = $first->fecha;
-            $estado = $first->estado_texto;
+        return $pedidos->map(function ($items, $nro) use ($facturas, $cabeceras) {
+            $first     = $items->first();
+            $fecha     = $first->fecha;
+            $estado    = $first->estado_texto;
+            $cabecera  = $cabeceras->get($nro);
+            $totalEst  = $cabecera ? $cabecera->total : null;
 
-            // Pedido pendiente: mostrar lo que pidió
+            // Pedido pendiente: mostrar lo que pidió + total estimado
             if ($first->estado != Pedido::ESTADO_FINALIZADO) {
                 $detalle = $items->map(
                     fn($p) =>
                     $p->cant > 1 ? "{$p->cant}u {$p->descrip}" : "{$p->kilos}kg {$p->descrip}"
                 )->implode(', ');
-                return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}";
+                $totalTxt = $totalEst ? ' — Total aprox: $' . $this->fmt($totalEst) : '';
+                return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}{$totalTxt}";
             }
 
             // Pedido finalizado: mostrar factura real si existe
@@ -1217,12 +1227,13 @@ Herramientas disponibles:
                 return "Pedido #{$nro} ({$fecha}): {$estado}\nComprobante: {$comprobante}\nDetalle real: {$detalle}\nTotal: $" . number_format($total, 2, ',', '.');
             }
 
-            // Finalizado pero sin factura aún
+            // Finalizado pero sin factura: usar total estimado del pedido
             $detalle = $items->map(
                 fn($p) =>
                 $p->cant > 1 ? "{$p->cant}u {$p->descrip}" : "{$p->kilos}kg {$p->descrip}"
             )->implode(', ');
-            return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado} (sin comprobante asociado aún)";
+            $totalTxt = $totalEst ? "\nTotal estimado al pedido: $" . $this->fmt($totalEst) . " (el monto final puede variar según el peso real)" : '';
+            return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}{$totalTxt}";
         })->implode("\n\n");
     }
 
