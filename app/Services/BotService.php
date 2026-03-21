@@ -1202,15 +1202,17 @@ Herramientas disponibles:
             $estado    = $first->estado_texto;
             $cabecera  = $cabeceras->get($nro);
             $totalEst  = $cabecera ? $cabecera->total : null;
+            $entrega   = $cabecera ? ($cabecera->tipo_entrega === 'envio' ? 'Envío a domicilio' : 'Retiro en local') : null;
+            $entregaTxt = $entrega ? " | {$entrega}" : '';
 
-            // Pedido pendiente: mostrar lo que pidió + total estimado
+            // Pedido pendiente: mostrar lo que pidió + total estimado + tipo entrega
             if ($first->estado != Pedido::ESTADO_FINALIZADO) {
                 $detalle = $items->map(
                     fn($p) =>
                     $p->cant > 1 ? "{$p->cant}u {$p->descrip}" : "{$p->kilos}kg {$p->descrip}"
                 )->implode(', ');
                 $totalTxt = $totalEst ? ' — Total aprox: $' . $this->fmt($totalEst) : '';
-                return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}{$totalTxt}";
+                return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}{$totalTxt}{$entregaTxt}";
             }
 
             // Pedido finalizado: mostrar factura real si existe
@@ -1224,7 +1226,7 @@ Herramientas disponibles:
                     fn($f) =>
                     "{$f->descrip}: {$f->kilos}kg × $" . number_format($f->precio, 2, ',', '.') . " = $" . number_format($f->neto, 2, ',', '.')
                 )->implode(' | ');
-                return "Pedido #{$nro} ({$fecha}): {$estado}\nComprobante: {$comprobante}\nDetalle real: {$detalle}\nTotal: $" . number_format($total, 2, ',', '.');
+                return "Pedido #{$nro} ({$fecha}): {$estado}{$entregaTxt}\nComprobante: {$comprobante}\nDetalle real: {$detalle}\nTotal: $" . number_format($total, 2, ',', '.');
             }
 
             // Finalizado pero sin factura: usar total estimado del pedido
@@ -1233,7 +1235,7 @@ Herramientas disponibles:
                 $p->cant > 1 ? "{$p->cant}u {$p->descrip}" : "{$p->kilos}kg {$p->descrip}"
             )->implode(', ');
             $totalTxt = $totalEst ? "\nTotal estimado al pedido: $" . $this->fmt($totalEst) . " (el monto final puede variar según el peso real)" : '';
-            return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}{$totalTxt}";
+            return "Pedido #{$nro} ({$fecha}): {$detalle} — {$estado}{$entregaTxt}{$totalTxt}";
         })->implode("\n\n");
     }
 
