@@ -1639,7 +1639,7 @@ Herramientas disponibles:
      */
     public function sendMessenger(string $recipientId, string $message): void
     {
-        $pageId    = config('api.messenger.page_id');
+        $pageId    = config('api.messenger.fb_page_id') ?: config('api.messenger.page_id');
         $pageToken = config('api.messenger.token');
 
         if (!$pageId || !$pageToken) {
@@ -1650,7 +1650,7 @@ Herramientas disponibles:
         try {
             $response = Http::withToken($pageToken)
                 ->timeout(10)
-                ->post("https://graph.facebook.com/v19.0/{$pageId}/messages", [
+                ->post("https://graph.facebook.com/v24.0/{$pageId}/messages", [
                     'recipient' => ['id' => $recipientId],
                     'message'   => ['text' => $message],
                 ]);
@@ -1668,7 +1668,7 @@ Herramientas disponibles:
      */
     public function sendMessengerImage(string $recipientId, string $imageUrl, string $caption = ''): void
     {
-        $pageId    = config('api.messenger.page_id');
+        $pageId    = config('api.messenger.fb_page_id') ?: config('api.messenger.page_id');
         $pageToken = config('api.messenger.token');
 
         if (!$pageId || !$pageToken) {
@@ -1679,7 +1679,7 @@ Herramientas disponibles:
         try {
             Http::withToken($pageToken)
                 ->timeout(10)
-                ->post("https://graph.facebook.com/v19.0/{$pageId}/messages", [
+                ->post("https://graph.facebook.com/v24.0/{$pageId}/messages", [
                     'recipient' => ['id' => $recipientId],
                     'message'   => [
                         'attachment' => [
@@ -1694,7 +1694,7 @@ Herramientas disponibles:
                 // Messenger no soporta caption en attachment, enviar caption como mensaje separado
                 Http::withToken($pageToken)
                     ->timeout(10)
-                    ->post("https://graph.facebook.com/v19.0/{$pageId}/messages", [
+                    ->post("https://graph.facebook.com/v24.0/{$pageId}/messages", [
                         'recipient' => ['id' => $recipientId],
                         'message'   => ['text' => $caption],
                     ]);

@@ -134,6 +134,7 @@ class TenantManager
             'api.openai.key'               => $tenant->openai_api_key,
             'api.messenger.page_id'        => $tenant->page_id ?? null,
             'api.messenger.token'          => $tenant->messenger_token ?? null,
+            'api.messenger.fb_page_id'     => $tenant->messenger_page_id ?? $tenant->page_id ?? null,
         ]);
     }
 }
