@@ -734,17 +734,22 @@ Herramientas disponibles:
                 $funcName = $toolCall['function']['name'];
                 $args     = json_decode($toolCall['function']['arguments'], true) ?? [];
 
-                $result = match ($funcName) {
-                    'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
-                    'ver_carrito'        => $this->verCarrito($cliente),
-                    'vaciar_carrito'     => $this->vaciarCarrito($cliente),
-                    'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['calle'] ?? '', $args['numero'] ?? '', $args['localidad'] ?? '', $args['dato_extra'] ?? '', $args['obs'] ?? ''),
-                    'ver_pedidos'        => $this->orderStatus($cliente),
-                    'ver_precios'        => $this->priceList($cliente),
-                    'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false), $puedePedir),
-                    'cancelar_pedido'    => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
-                    default              => 'Función desconocida.',
-                };
+                try {
+                    $result = match ($funcName) {
+                        'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
+                        'ver_carrito'        => $this->verCarrito($cliente),
+                        'vaciar_carrito'     => $this->vaciarCarrito($cliente),
+                        'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['calle'] ?? '', $args['numero'] ?? '', $args['localidad'] ?? '', $args['dato_extra'] ?? '', $args['obs'] ?? ''),
+                        'ver_pedidos'        => $this->orderStatus($cliente),
+                        'ver_precios'        => $this->priceList($cliente),
+                        'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false), $puedePedir),
+                        'cancelar_pedido'    => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
+                        default              => 'Función desconocida.',
+                    };
+                } catch (\Throwable $e) {
+                    Log::error("handleToolCalls [{$funcName}] error: " . $e->getMessage());
+                    $result = 'Error interno al ejecutar la función. Informale al cliente que hubo un problema técnico y que intente nuevamente en unos minutos.';
+                }
 
                 $messages[] = [
                     'role'         => 'tool',
@@ -1456,23 +1461,27 @@ Herramientas disponibles:
 
         // Guardar uso de tokens
         if (isset($response['usage'])) {
-            $modelo     = $response['model'] ?? self::OPENAI_MODEL;
-            $precios    = self::PRECIOS_OPENAI[$modelo] ?? self::PRECIOS_OPENAI[self::OPENAI_MODEL] ?? ['input' => 0, 'output' => 0];
-            $input      = (int) $response['usage']['prompt_tokens'];
-            $output     = (int) $response['usage']['completion_tokens'];
-            $costoUsd   = round(
-                ($input  / 1_000_000 * $precios['input']) +
-                    ($output / 1_000_000 * $precios['output']),
-                8
-            );
-            DB::table('ia_token_usos')->insert([
-                'modelo'            => $modelo,
-                'prompt_tokens'     => $input,
-                'completion_tokens' => $output,
-                'total_tokens'      => $input + $output,
-                'costo_usd'         => $costoUsd,
-                'created_at'        => now(),
-            ]);
+            try {
+                $modelo     = $response['model'] ?? self::OPENAI_MODEL;
+                $precios    = self::PRECIOS_OPENAI[$modelo] ?? self::PRECIOS_OPENAI[self::OPENAI_MODEL] ?? ['input' => 0, 'output' => 0];
+                $input      = (int) $response['usage']['prompt_tokens'];
+                $output     = (int) $response['usage']['completion_tokens'];
+                $costoUsd   = round(
+                    ($input  / 1_000_000 * $precios['input']) +
+                        ($output / 1_000_000 * $precios['output']),
+                    8
+                );
+                DB::table('ia_token_usos')->insert([
+                    'modelo'            => $modelo,
+                    'prompt_tokens'     => $input,
+                    'completion_tokens' => $output,
+                    'total_tokens'      => $input + $output,
+                    'costo_usd'         => $costoUsd,
+                    'created_at'        => now(),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('ia_token_usos insert error: ' . $e->getMessage());
+            }
         }
 
         return $response;
