@@ -31,6 +31,24 @@
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
                 <p class="text-xs text-gray-400 mt-1">Se usa para recibir copia de pedidos por WhatsApp y para enviar el código de verificación al iniciar sesión.</p>
             </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Sucursal</label>
+                <input type="text" name="suc" value="{{ old('suc', $config->suc) }}"
+                    placeholder="Ej: 001"
+                    maxlength="10"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                <p class="text-xs text-gray-400 mt-1">Código de sucursal que se asignará a todos los pedidos generados por el bot.</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Punto de venta</label>
+                <input type="text" name="pv" value="{{ old('pv', $config->pv) }}"
+                    placeholder="Ej: 0001"
+                    maxlength="10"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                <p class="text-xs text-gray-400 mt-1">Punto de venta que se asignará a todos los pedidos generados por el bot.</p>
+            </div>
         </div>
 
         {{-- Imagen de bienvenida --}}

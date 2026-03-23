@@ -1042,6 +1042,9 @@ Herramientas disponibles:
         $fecha  = $fechaEntrega ?: now()->format('Y-m-d');
         $codcli = $client->cuenta ? $client->cuenta->cod : $client->id;
         $nomcli = $client->cuenta ? $client->cuenta->nom : $client->name;
+        $config = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
+        $suc    = $config?->suc ?? '';
+        $pv     = $config?->pv ?? '';
 
         $precioActual = Producto::paraBot()
             ->whereIn('tablaplu.cod', array_column($carrito, 'cod'))
@@ -1088,7 +1091,8 @@ Herramientas disponibles:
                 'obs'        => $obs,
                 'pedido_at'  => now(),
                 'updated_at' => now(),
-                'suc'        => '',
+                'suc'        => $suc,
+                'pv'         => $pv,
                 'venta'      => 0,
             ]);
         }
@@ -1670,11 +1674,11 @@ Herramientas disponibles:
         }
 
         try {
-            $response = Http::withToken($pageToken)
-                ->timeout(10)
-                ->post("https://graph.facebook.com/v24.0/{$pageId}/messages", [
-                    'recipient' => ['id' => $recipientId],
-                    'message'   => ['text' => $message],
+            $response = Http::timeout(10)
+                ->post("https://graph.facebook.com/v21.0/me/messages?access_token={$pageToken}", [
+                    'recipient'      => ['id' => $recipientId],
+                    'message'        => ['text' => $message],
+                    'messaging_type' => 'RESPONSE',
                 ]);
 
             if (!$response->successful()) {
@@ -1699,26 +1703,25 @@ Herramientas disponibles:
         }
 
         try {
-            Http::withToken($pageToken)
-                ->timeout(10)
-                ->post("https://graph.facebook.com/v24.0/{$pageId}/messages", [
-                    'recipient' => ['id' => $recipientId],
-                    'message'   => [
+            Http::timeout(10)
+                ->post("https://graph.facebook.com/v21.0/me/messages?access_token={$pageToken}", [
+                    'recipient'      => ['id' => $recipientId],
+                    'message'        => [
                         'attachment' => [
                             'type'    => 'image',
                             'payload' => ['url' => $imageUrl, 'is_reusable' => true],
                         ],
-                        'text' => $caption ?: null,
                     ],
+                    'messaging_type' => 'RESPONSE',
                 ]);
 
             if ($caption) {
                 // Messenger no soporta caption en attachment, enviar caption como mensaje separado
-                Http::withToken($pageToken)
-                    ->timeout(10)
-                    ->post("https://graph.facebook.com/v24.0/{$pageId}/messages", [
-                        'recipient' => ['id' => $recipientId],
-                        'message'   => ['text' => $caption],
+                Http::timeout(10)
+                    ->post("https://graph.facebook.com/v21.0/me/messages?access_token={$pageToken}", [
+                        'recipient'      => ['id' => $recipientId],
+                        'message'        => ['text' => $caption],
+                        'messaging_type' => 'RESPONSE',
                     ]);
             }
         } catch (\Throwable $e) {

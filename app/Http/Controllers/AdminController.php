@@ -256,6 +256,8 @@ class AdminController extends Controller
             'bot_puede_sugerir'      => $request->boolean('bot_puede_sugerir'),
             'bot_puede_mas_vendidos' => $request->boolean('bot_puede_mas_vendidos'),
             'bot_atiende_nuevos'     => $request->input('bot_atiende_nuevos', 'bot'),
+            'suc'                    => $request->input('suc'),
+            'pv'                     => $request->input('pv'),
         ];
 
         if ($request->hasFile('imagen_bienvenida')) {
