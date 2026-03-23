@@ -492,6 +492,7 @@ Herramientas disponibles:
 - crear_pedido → confirmar y registrar el pedido
 - ver_pedidos → historial y estado de pedidos
 - cancelar_pedido → cancelar un pedido pendiente
+- editar_pedido → cargar los ítems de un pedido pendiente al carrito para modificarlo; luego confirmar con crear_pedido
 " : "") . "- ver_precios → lista de precios actualizada (mostrala tal cual, sin reformatear)
 - ver_producto → detalle e imagen de un producto específico. Usá esta herramienta cuando el cliente pregunta por un producto (disponibilidad, precio, descripción, si hay X, cómo es el X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial pueden estar desactualizados — usá siempre ver_producto para el precio real.
 " . ($puedePedir ? "- Cuando el cliente responde afirmativamente ('sí', 'dale', 'sí quiero', etc.) luego de que se le mostró un producto: NO llamés ver_producto. Preguntale directamente la cantidad y llamá agregar_al_carrito con lo que confirme. Si ya dijo la cantidad, llamá agregar_al_carrito directamente.
@@ -716,6 +717,20 @@ Herramientas disponibles:
                     ],
                 ],
             ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'editar_pedido',
+                    'description' => 'Carga los ítems de un pedido pendiente al carrito para que el cliente pueda agregar, quitar o modificar productos. Usá esta herramienta cuando el cliente quiera modificar o agregar algo a un pedido que ya hizo. Luego el cliente puede ajustar el carrito y confirmar con crear_pedido, que reemplazará el pedido original.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'nro' => ['type' => 'integer', 'description' => 'Número de pedido pendiente a editar.'],
+                        ],
+                        'required' => ['nro'],
+                    ],
+                ],
+            ],
         ];
     }
 
@@ -744,6 +759,7 @@ Herramientas disponibles:
                         'ver_precios'        => $this->priceList($cliente),
                         'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false), $puedePedir),
                         'cancelar_pedido'    => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
+                        'editar_pedido'      => $this->editOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
                         default              => 'Función desconocida.',
                     };
                 } catch (\Throwable $e) {
@@ -1044,7 +1060,16 @@ Herramientas disponibles:
             return 'El carrito está vacío. Agregá productos antes de confirmar el pedido.';
         }
 
-        $nro    = (Pedido::max('nro') ?? 0) + 1;
+        // Si el carrito viene de editar_pedido, reutilizar el nro original
+        $pedidoNroOriginal = $registro?->pedido_nro ?? null;
+        if ($pedidoNroOriginal) {
+            $codcliCheck = $client->cuenta ? $client->cuenta->cod : $client->id;
+            Pedido::where('nro', $pedidoNroOriginal)->where('codcli', $codcliCheck)->delete();
+            Pedidosia::where('nro', $pedidoNroOriginal)->delete();
+            $nro = $pedidoNroOriginal;
+        } else {
+            $nro = (Pedido::max('nro') ?? 0) + 1;
+        }
         $fecha  = $fechaEntrega ?: now()->format('Y-m-d');
         $codcli = $client->cuenta ? $client->cuenta->cod : $client->id;
         $nomcli = $client->cuenta ? $client->cuenta->nom : $client->name;
@@ -1279,6 +1304,52 @@ Herramientas disponibles:
 
         return "Pedido #{$nro} cancelado correctamente.";
     }
+
+    private function editOrder($client, int $nro): string
+    {
+        if ($nro <= 0) {
+            return 'Número de pedido inválido.';
+        }
+
+        $codcli = $client->cuenta ? $client->cuenta->cod : $client->id;
+        $items  = Pedido::where('codcli', $codcli)
+            ->where('nro', $nro)
+            ->where('estado', Pedido::ESTADO_PENDIENTE)
+            ->get();
+
+        if ($items->isEmpty()) {
+            return "No encontré el pedido #{$nro} pendiente para este cliente.";
+        }
+
+        // Convertir los ítems del pedido al formato del carrito
+        $carritoItems = [];
+        foreach ($items as $item) {
+            $key = mb_strtolower($item->descrip);
+            $esPeso = ($item->kilos ?? 0) > 0;
+            $carritoItems[$key] = [
+                'cod'    => $item->codigo,
+                'des'    => $item->descrip,
+                'cant'   => (float) $item->cant,
+                'kilos'  => (float) $item->kilos,
+                'precio' => (float) $item->precio,
+                'neto'   => (float) $item->neto,
+                'tipo'   => $esPeso ? 'Peso' : 'Unidad',
+            ];
+        }
+
+        // Guardar en carrito marcando el pedido original
+        Carrito::where('cliente_id', $client->id)->delete();
+        Carrito::create([
+            'cliente_id' => $client->id,
+            'items'      => $carritoItems,
+            'pedido_nro' => $nro,
+            'expires_at' => now()->addMinutes(15),
+        ]);
+
+        $count = count($carritoItems);
+        return "Cargué los {$count} ítems del pedido #{$nro} al carrito. El cliente puede agregar, quitar o modificar productos y luego confirmar con crear_pedido — el pedido #{$nro} será reemplazado.";
+    }
+
 
     private function verProducto($client, string $nombre, bool $solicitaPrecio = false, bool $puedePedir = true): string
     {

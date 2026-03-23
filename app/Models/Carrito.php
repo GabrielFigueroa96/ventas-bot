@@ -11,6 +11,7 @@ class Carrito extends Model
     protected $fillable = [
         'cliente_id',
         'items',
+        'pedido_nro',
         'expires_at',
     ];
 

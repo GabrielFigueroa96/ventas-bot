@@ -319,6 +319,24 @@ class AdminController extends Controller
             $data['imagen_bienvenida'] = null;
         }
 
+        if ($request->hasFile('imagen_tienda')) {
+            if ($config->imagen_tienda) {
+                $anterior = public_path($config->imagen_tienda);
+                if (file_exists($anterior)) unlink($anterior);
+            }
+            $tenantId = app(\App\Services\TenantManager::class)->get()->id;
+            $dir = public_path("ia-imagenes/{$tenantId}");
+            if (!is_dir($dir)) mkdir($dir, 0755, true);
+            $request->file('imagen_tienda')->move($dir, 'logo-tienda.jpg');
+            $data['imagen_tienda'] = "ia-imagenes/{$tenantId}/logo-tienda.jpg";
+        }
+
+        if ($request->boolean('eliminar_imagen_tienda') && $config->imagen_tienda) {
+            $anterior = public_path($config->imagen_tienda);
+            if (file_exists($anterior)) unlink($anterior);
+            $data['imagen_tienda'] = null;
+        }
+
         $config->fill($data)->save();
 
         $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
