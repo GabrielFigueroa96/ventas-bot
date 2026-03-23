@@ -12,6 +12,7 @@ class IaEmpresa extends Model
         'nombre_ia',
         'telefono_pedidos',
         'imagen_bienvenida',
+        'imagen_tienda',
         'bot_info',
         'bot_instrucciones',
         'bot_dias_reparto',
@@ -25,6 +26,11 @@ class IaEmpresa extends Model
         'suc',
         'pv',
         'slug',
+        'pedido_minimo',
+        'tienda_ocultar_precios',
+        'tienda_facebook',
+        'tienda_instagram',
+        'tienda_tiktok',
     ];
 
     protected $casts = [
@@ -35,6 +41,8 @@ class IaEmpresa extends Model
         'bot_puede_pedir'        => 'boolean',
         'bot_puede_sugerir'      => 'boolean',
         'bot_puede_mas_vendidos' => 'boolean',
+        'tienda_ocultar_precios' => 'boolean',
+        'pedido_minimo'          => 'float',
     ];
 
     const DIAS_LABEL = [

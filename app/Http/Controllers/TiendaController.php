@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Carrito;
 use App\Models\Cliente;
+use App\Models\Empresa;
 use App\Models\IaEmpresa;
 use App\Models\Localidad;
 use App\Models\Pedido;
@@ -11,7 +12,6 @@ use App\Models\Pedidosia;
 use App\Models\Producto;
 use App\Services\BotService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Session;
 
 class TiendaController extends Controller
 {
@@ -28,6 +28,15 @@ class TiendaController extends Controller
     private function getEmpresa(): IaEmpresa
     {
         return IaEmpresa::first() ?? new IaEmpresa();
+    }
+
+    private function getEmpresaNombre(): string
+    {
+        try {
+            return Empresa::first()?->nombre ?? '';
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     private function getCarrito(?int $clienteId): ?Carrito
@@ -55,25 +64,19 @@ class TiendaController extends Controller
 
     private function normalizePhone(string $phone): string
     {
-        // Quitar todo lo que no sea dígito
         $phone = preg_replace('/\D/', '', $phone);
 
-        // Si empieza con 0, quitarlo
         if (str_starts_with($phone, '0')) {
             $phone = ltrim($phone, '0');
         }
 
-        // Si no tiene código de país (menos de 11 dígitos) agregar 54
         if (strlen($phone) <= 10) {
             $phone = '54' . $phone;
         }
 
-        // WhatsApp Argentina: 549 + 10 dígitos (quitar el 15 si lo tiene)
-        // Si tiene 5491X con X = 15..., normalizar
         if (str_starts_with($phone, '549') && strlen($phone) == 13) {
-            // tiene 549 + 10 dígitos => ok
+            // ok
         } elseif (str_starts_with($phone, '54') && strlen($phone) == 12) {
-            // 54 + 10 dígitos, agregar 9 después del 54
             $phone = '549' . substr($phone, 2);
         }
 
@@ -86,26 +89,48 @@ class TiendaController extends Controller
 
     public function index(string $slug)
     {
-        $empresa    = $this->getEmpresa();
-        $clienteId  = $this->getClienteId($slug);
-        $cliente    = $clienteId ? Cliente::find($clienteId) : null;
-        $carrito    = $this->getCarrito($clienteId);
+        $empresa       = $this->getEmpresa();
+        $empresaNombre = $this->getEmpresaNombre() ?: ($empresa->nombre_ia ?? 'Tienda');
+        $clienteId     = $this->getClienteId($slug);
+        $cliente       = $clienteId ? Cliente::find($clienteId) : null;
+        $carrito       = $this->getCarrito($clienteId);
 
-        $productos  = Producto::paraBot()->orderBy('tablaplu.desgrupo')->orderBy('tablaplu.des')->get();
-        $grupos     = $productos->groupBy('desgrupo');
+        $productos   = Producto::paraBot()->orderBy('tablaplu.desgrupo')->orderBy('tablaplu.des')->get();
+        $grupos      = $productos->groupBy('desgrupo');
         $carritoData = $this->carritoJson($carrito);
 
-        return view('tienda.index', compact('slug', 'empresa', 'cliente', 'grupos', 'carritoData', 'carrito'));
+        // Sugeridos: productos que el cliente ya compró antes
+        $sugeridos = collect();
+        if ($clienteId) {
+            $nrosPrevios   = Pedidosia::where('idcliente', $clienteId)->pluck('nro');
+            $codigosPrevios = Pedido::whereIn('nro', $nrosPrevios)->distinct()->pluck('codigo');
+            if ($codigosPrevios->isNotEmpty()) {
+                $sugeridos = Producto::paraBot()
+                    ->whereIn('tablaplu.cod', $codigosPrevios)
+                    ->limit(6)
+                    ->get();
+            }
+        }
+
+        $pedidoMinimo      = (float) ($empresa->pedido_minimo ?? 0);
+        $ocultarPrecios    = (bool) ($empresa->tienda_ocultar_precios ?? false);
+        $mostrarPrecios    = !$ocultarPrecios || $clienteId !== null;
+
+        return view('tienda.index', compact(
+            'slug', 'empresa', 'empresaNombre', 'cliente', 'grupos',
+            'carritoData', 'carrito', 'sugeridos', 'pedidoMinimo', 'mostrarPrecios'
+        ));
     }
 
     // -------------------------------------------------------------------------
-    // Autenticación: Login
+    // Autenticación
     // -------------------------------------------------------------------------
 
     public function showLogin(string $slug)
     {
-        $empresa = $this->getEmpresa();
-        return view('tienda.login', compact('slug', 'empresa'));
+        $empresa       = $this->getEmpresa();
+        $empresaNombre = $this->getEmpresaNombre() ?: ($empresa->nombre_ia ?? 'Tienda');
+        return view('tienda.login', compact('slug', 'empresa', 'empresaNombre'));
     }
 
     public function postLogin(Request $request, string $slug)
@@ -120,23 +145,20 @@ class TiendaController extends Controller
         $phoneRaw = $request->input('phone');
         $phone    = $this->normalizePhone($phoneRaw);
 
-        // Buscar o crear cliente
         $cliente = Cliente::firstOrCreate(
             ['phone' => $phone],
             ['name' => '', 'estado' => 'activo', 'modo' => 'bot']
         );
 
-        // Generar código de 4 dígitos
         $code      = str_pad(random_int(0, 9999), 4, '0', STR_PAD_LEFT);
         $expiresAt = now()->addMinutes(10)->timestamp;
 
         session([
-            "tienda_{$slug}_code"       => $code,
-            "tienda_{$slug}_phone"      => $phone,
-            "tienda_{$slug}_code_exp"   => $expiresAt,
+            "tienda_{$slug}_code"     => $code,
+            "tienda_{$slug}_phone"    => $phone,
+            "tienda_{$slug}_code_exp" => $expiresAt,
         ]);
 
-        // Enviar código por WhatsApp
         try {
             app(BotService::class)->sendWhatsapp($phone, "Tu código de acceso para la tienda es: *{$code}*\n\nVálido por 10 minutos.");
         } catch (\Throwable $e) {
@@ -146,29 +168,26 @@ class TiendaController extends Controller
         return redirect()->route('tienda.verificar', ['slug' => $slug]);
     }
 
-    // -------------------------------------------------------------------------
-    // Autenticación: Verificar código
-    // -------------------------------------------------------------------------
-
     public function showVerificar(string $slug)
     {
-        $empresa = $this->getEmpresa();
-        $phone   = session("tienda_{$slug}_phone");
+        $empresa       = $this->getEmpresa();
+        $empresaNombre = $this->getEmpresaNombre() ?: ($empresa->nombre_ia ?? 'Tienda');
+        $phone         = session("tienda_{$slug}_phone");
 
         if (!$phone) {
             return redirect()->route('tienda.login', ['slug' => $slug]);
         }
 
-        return view('tienda.verificar', compact('slug', 'empresa', 'phone'));
+        return view('tienda.verificar', compact('slug', 'empresa', 'empresaNombre', 'phone'));
     }
 
     public function postVerificar(Request $request, string $slug)
     {
         $request->validate(['code' => 'required|string|size:4']);
 
-        $sessionCode   = session("tienda_{$slug}_code");
-        $sessionExp    = session("tienda_{$slug}_code_exp");
-        $sessionPhone  = session("tienda_{$slug}_phone");
+        $sessionCode  = session("tienda_{$slug}_code");
+        $sessionExp   = session("tienda_{$slug}_code_exp");
+        $sessionPhone = session("tienda_{$slug}_phone");
 
         if (!$sessionCode || !$sessionPhone) {
             return redirect()->route('tienda.login', ['slug' => $slug])
@@ -183,26 +202,17 @@ class TiendaController extends Controller
             return back()->withErrors(['code' => 'El código ingresado no es correcto.']);
         }
 
-        // Código correcto: guardar cliente en session
         $cliente = Cliente::where('phone', $sessionPhone)->first();
         if (!$cliente) {
             return redirect()->route('tienda.login', ['slug' => $slug])
                 ->withErrors(['code' => 'No se encontró el cliente. Intentá de nuevo.']);
         }
 
-        session([
-            "tienda_{$slug}_cliente_id" => $cliente->id,
-        ]);
-
-        // Limpiar datos de verificación
+        session(["tienda_{$slug}_cliente_id" => $cliente->id]);
         session()->forget(["tienda_{$slug}_code", "tienda_{$slug}_code_exp"]);
 
         return redirect()->route('tienda.index', ['slug' => $slug]);
     }
-
-    // -------------------------------------------------------------------------
-    // Logout
-    // -------------------------------------------------------------------------
 
     public function logout(string $slug)
     {
@@ -214,6 +224,37 @@ class TiendaController extends Controller
         ]);
 
         return redirect()->route('tienda.index', ['slug' => $slug]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Mis pedidos
+    // -------------------------------------------------------------------------
+
+    public function misPedidos(string $slug)
+    {
+        $clienteId = $this->getClienteId($slug);
+        if (!$clienteId) {
+            return redirect()->route('tienda.login', ['slug' => $slug]);
+        }
+
+        $empresa       = $this->getEmpresa();
+        $empresaNombre = $this->getEmpresaNombre() ?: ($empresa->nombre_ia ?? 'Tienda');
+        $cliente       = Cliente::find($clienteId);
+        $carritoData   = $this->carritoJson($this->getCarrito($clienteId));
+
+        $pedidos = Pedidosia::where('idcliente', $clienteId)
+            ->orderByDesc('pedido_at')
+            ->get();
+
+        // Cargar los ítems de cada pedido
+        $nros = $pedidos->pluck('nro')->unique()->filter()->values();
+        $itemsPorNro = $nros->isNotEmpty()
+            ? Pedido::whereIn('nro', $nros)->get()->groupBy('nro')
+            : collect();
+
+        return view('tienda.pedidos', compact(
+            'slug', 'empresa', 'empresaNombre', 'cliente', 'carritoData', 'pedidos', 'itemsPorNro'
+        ));
     }
 
     // -------------------------------------------------------------------------
@@ -242,15 +283,24 @@ class TiendaController extends Controller
             return response()->json(['error' => 'Producto no encontrado.'], 404);
         }
 
+        // Validar: unidades deben ser enteras
+        $esPorKilo = strtolower($producto->tipo ?? '') !== 'unidad';
+        if (!$esPorKilo && floor($cantidad) != $cantidad) {
+            return response()->json(['error' => 'La cantidad debe ser un número entero.'], 422);
+        }
+        // Validar: peso en múltiplos de 0.5
+        if ($esPorKilo && (fmod($cantidad * 2, 1) != 0)) {
+            return response()->json(['error' => 'El peso debe ser múltiplo de 0,5 kg.'], 422);
+        }
+
         $carrito = Carrito::firstOrCreate(
             ['cliente_id' => $clienteId],
             ['items' => [], 'expires_at' => now()->addDays(7)]
         );
 
         $items = $carrito->items ?? [];
-
-        // Buscar si ya está el producto
         $found = false;
+
         foreach ($items as &$item) {
             if ((string) $item['cod'] === (string) $cod) {
                 $item['cantidad'] = $cantidad;
@@ -267,7 +317,7 @@ class TiendaController extends Controller
                 'des'      => $producto->des,
                 'precio'   => (float) $producto->precio,
                 'cantidad' => $cantidad,
-                'kilos'    => strtolower($producto->tipo ?? '') !== 'unidad' ? $cantidad : 0,
+                'kilos'    => $esPorKilo ? $cantidad : 0,
                 'neto'     => round($producto->precio * $cantidad, 2),
                 'tipo'     => $producto->tipo,
             ];
@@ -331,7 +381,6 @@ class TiendaController extends Controller
         $items = $carrito->items ?? [];
 
         if ($cantidad <= 0) {
-            // Quitar el item
             $items = array_values(array_filter($items, fn($i) => (string) $i['cod'] !== (string) $cod));
         } else {
             foreach ($items as &$item) {
@@ -362,21 +411,29 @@ class TiendaController extends Controller
             return redirect()->route('tienda.login', ['slug' => $slug]);
         }
 
-        $empresa    = $this->getEmpresa();
-        $cliente    = Cliente::find($clienteId);
-        $carrito    = Carrito::where('cliente_id', $clienteId)->first();
-        $carritoData = $this->carritoJson($carrito);
+        $empresa       = $this->getEmpresa();
+        $empresaNombre = $this->getEmpresaNombre() ?: ($empresa->nombre_ia ?? 'Tienda');
+        $cliente       = Cliente::find($clienteId);
+        $carrito       = Carrito::where('cliente_id', $clienteId)->first();
+        $carritoData   = $this->carritoJson($carrito);
 
         if (empty($carritoData['items'])) {
             return redirect()->route('tienda.index', ['slug' => $slug])
                 ->with('info', 'Tu carrito está vacío.');
         }
 
+        $pedidoMinimo = (float) ($empresa->pedido_minimo ?? 0);
+        if ($pedidoMinimo > 0 && $carritoData['total'] < $pedidoMinimo) {
+            return redirect()->route('tienda.index', ['slug' => $slug])
+                ->with('info', "El pedido mínimo es $" . number_format($pedidoMinimo, 2, ',', '.') . ". Agregá más productos.");
+        }
+
         $localidades = Localidad::where('activo', true)->orderBy('nombre')->get();
         $mediosPago  = $empresa->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
 
         return view('tienda.checkout', compact(
-            'slug', 'empresa', 'cliente', 'carrito', 'carritoData', 'localidades', 'mediosPago'
+            'slug', 'empresa', 'empresaNombre', 'cliente', 'carrito', 'carritoData',
+            'localidades', 'mediosPago', 'pedidoMinimo'
         ));
     }
 
@@ -407,15 +464,19 @@ class TiendaController extends Controller
         $obs         = $request->input('obs', '');
         $fecFin      = $request->input('fecha_deseada', null);
         $localidadId = null;
+        $costoExtra  = 0.0;
 
-        // Dirección si es envío
         if ($tipoEntrega === 'envio') {
             $localidadId = $request->input('localidad_id');
             $calle       = $request->input('calle', '');
             $numero      = $request->input('numero', '');
             $datoExtra   = $request->input('dato_extra', '');
 
-            // Actualizar datos del cliente
+            if ($localidadId) {
+                $localidadObj = Localidad::find($localidadId);
+                $costoExtra   = (float) ($localidadObj?->costo_extra ?? 0);
+            }
+
             $updateData = [];
             if ($localidadId) $updateData['localidad_id'] = $localidadId;
             if ($calle)       $updateData['calle']        = $calle;
@@ -424,20 +485,25 @@ class TiendaController extends Controller
             if ($updateData)  $cliente->update($updateData);
         }
 
-        // Número de pedido
-        $nro = ((int) Pedido::max('nro') ?? 0) + 1;
-
-        $suc = $empresa->suc ?? '001';
-        $pv  = $empresa->pv  ?? '0001';
-
-        $fecha    = now()->format('Y-m-d');
-        $nomcli   = $cliente->name ?: $cliente->phone;
-
         $items    = $carrito->items ?? [];
-        $total    = array_sum(array_map(fn($i) => ($i['precio'] ?? 0) * ($i['cantidad'] ?? 0), $items));
+        $subtotal = array_sum(array_map(fn($i) => ($i['precio'] ?? 0) * ($i['cantidad'] ?? 0), $items));
+        $total    = $subtotal + $costoExtra;
+
+        // Validar pedido mínimo
+        $pedidoMinimo = (float) ($empresa->pedido_minimo ?? 0);
+        if ($pedidoMinimo > 0 && $subtotal < $pedidoMinimo) {
+            return redirect()->route('tienda.index', ['slug' => $slug])
+                ->with('info', "El pedido mínimo es $" . number_format($pedidoMinimo, 2, ',', '.') . ".");
+        }
+
+        $nro    = ((int) Pedido::max('nro') ?? 0) + 1;
+        $suc    = $empresa->suc ?? '001';
+        $pv     = $empresa->pv  ?? '0001';
+        $fecha  = now()->format('Y-m-d');
+        $nomcli = $cliente->name ?: $cliente->phone;
+
         $kilosTot = array_sum(array_map(fn($i) => ($i['kilos'] ?? 0), $items));
 
-        // Armar descripción del pedido
         $lineas = [];
         foreach ($items as $item) {
             $tipo = strtolower($item['tipo'] ?? '');
@@ -454,10 +520,8 @@ class TiendaController extends Controller
             ($obs ? " | " . $obs : '')
         );
 
-        // Crear los renglones del pedido (uno por item)
-        $createdPedidos = [];
         foreach ($items as $item) {
-            $pedido = Pedido::create([
+            Pedido::create([
                 'fecha'     => $fecha,
                 'nro'       => $nro,
                 'nomcli'    => $nomcli,
@@ -476,10 +540,31 @@ class TiendaController extends Controller
                 'pv'        => $pv,
                 'venta'     => null,
             ]);
-            $createdPedidos[] = $pedido;
         }
 
-        // También crear registro en pedidosia
+        // Si hay costo extra de envío, agregarlo como línea en pedidos
+        if ($costoExtra > 0) {
+            Pedido::create([
+                'fecha'     => $fecha,
+                'nro'       => $nro,
+                'nomcli'    => $nomcli,
+                'cant'      => 1,
+                'descrip'   => 'Costo de envío',
+                'kilos'     => 0,
+                'precio'    => $costoExtra,
+                'neto'      => $costoExtra,
+                'codigo'    => 0,
+                'codcli'    => $cliente->id,
+                'estado'    => Pedido::ESTADO_PENDIENTE,
+                'fecfin'    => $fecFin,
+                'obs'       => $obsCompleta,
+                'pedido_at' => now(),
+                'suc'       => $suc,
+                'pv'        => $pv,
+                'venta'     => null,
+            ]);
+        }
+
         try {
             $localNombre = '';
             if ($tipoEntrega === 'envio' && !empty($localidadId)) {
@@ -507,7 +592,6 @@ class TiendaController extends Controller
             \Illuminate\Support\Facades\Log::warning("TiendaController::confirmar pedidosia error: " . $e->getMessage());
         }
 
-        // Vaciar el carrito
         $carrito->items = [];
         $carrito->save();
 
@@ -516,13 +600,15 @@ class TiendaController extends Controller
             $resumen = "✅ *Pedido #{$nro} recibido*\n\n";
             foreach ($items as $item) {
                 $tipo = strtolower($item['tipo'] ?? '');
-                if ($tipo === 'unidad') {
-                    $resumen .= "• {$item['des']} x{$item['cantidad']}\n";
-                } else {
-                    $resumen .= "• {$item['des']} {$item['cantidad']}kg\n";
-                }
+                $resumen .= $tipo === 'unidad'
+                    ? "• {$item['des']} x{$item['cantidad']}\n"
+                    : "• {$item['des']} {$item['cantidad']}kg\n";
             }
-            $resumen .= "\n*Total: $" . number_format($total, 2, ',', '.') . "*";
+            $resumen .= "\n*Subtotal: $" . number_format($subtotal, 2, ',', '.') . "*";
+            if ($costoExtra > 0) {
+                $resumen .= "\nEnvío: $" . number_format($costoExtra, 2, ',', '.');
+                $resumen .= "\n*Total: $" . number_format($total, 2, ',', '.') . "*";
+            }
             $resumen .= "\n" . ($tipoEntrega === 'retiro' ? 'Retiro en local' : 'Envío a domicilio');
             $resumen .= "\nPago: " . (IaEmpresa::MEDIOS_PAGO[$medioPago] ?? $medioPago);
             app(BotService::class)->sendWhatsapp($cliente->phone, $resumen);
@@ -536,6 +622,7 @@ class TiendaController extends Controller
                 $notif = "🛒 *Nuevo pedido web #{$nro}*\n";
                 $notif .= "Cliente: {$nomcli} ({$cliente->phone})\n";
                 $notif .= $descripcion . "\n";
+                if ($costoExtra > 0) $notif .= "Envío: $" . number_format($costoExtra, 2, ',', '.') . "\n";
                 $notif .= "*Total: $" . number_format($total, 2, ',', '.') . "*\n";
                 $notif .= ($tipoEntrega === 'retiro' ? 'Retiro en local' : 'Envío');
                 $notif .= " | " . (IaEmpresa::MEDIOS_PAGO[$medioPago] ?? $medioPago);
@@ -545,6 +632,12 @@ class TiendaController extends Controller
             \Illuminate\Support\Facades\Log::error("TiendaController::confirmar WA negocio error: " . $e->getMessage());
         }
 
-        return view('tienda.confirmado', compact('slug', 'empresa', 'nro', 'items', 'total', 'tipoEntrega', 'medioPago'));
+        $empresaNombre = $this->getEmpresaNombre() ?: ($empresa->nombre_ia ?? 'Tienda');
+        $carritoData   = ['items' => [], 'count' => 0, 'total' => 0];
+
+        return view('tienda.confirmado', compact(
+            'slug', 'empresa', 'empresaNombre', 'carritoData',
+            'nro', 'items', 'total', 'subtotal', 'costoExtra', 'tipoEntrega', 'medioPago'
+        ));
     }
 }

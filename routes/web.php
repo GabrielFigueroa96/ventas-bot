@@ -58,6 +58,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::get ('/configuracion',  [AdminController::class, 'configuracion'])->name('configuracion');
     Route::post('/configuracion',  [AdminController::class, 'guardarConfiguracion'])->name('configuracion.save');
 
+    // Tienda online
+    Route::get ('/tienda-config',  [AdminController::class, 'tienda'])->name('tienda');
+    Route::post('/tienda-config',  [AdminController::class, 'guardarTienda'])->name('tienda.save');
+
     // Productos
     Route::get   ('/productos',                            [ProductoController::class, 'index'])->name('productos');
     Route::post  ('/productos/{cod}/imagen',          [ProductoController::class, 'uploadImagen'])->name('productos.imagen');
@@ -78,6 +82,7 @@ Route::prefix('tienda/{slug}')->name('tienda.')->middleware(['web', 'tienda.tena
     Route::get ('/verificar', [TiendaController::class, 'showVerificar'])->name('verificar');
     Route::post('/verificar', [TiendaController::class, 'postVerificar'])->name('verificar.post');
     Route::post('/logout',    [TiendaController::class, 'logout'])->name('logout');
+    Route::get ('/mis-pedidos', [TiendaController::class, 'misPedidos'])->name('mis_pedidos');
     Route::post('/carrito/agregar',   [TiendaController::class, 'agregarItem'])->name('carrito.agregar');
     Route::post('/carrito/quitar',    [TiendaController::class, 'quitarItem'])->name('carrito.quitar');
     Route::post('/carrito/cantidad',  [TiendaController::class, 'actualizarCantidad'])->name('carrito.cantidad');

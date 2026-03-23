@@ -50,16 +50,6 @@
                 <p class="text-xs text-gray-400 mt-1">Punto de venta que se asignará a todos los pedidos generados por el bot.</p>
             </div>
 
-            <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Slug de la tienda</label>
-                <div class="flex items-center gap-2">
-                    <span class="text-xs text-gray-400 whitespace-nowrap">{{ request()->getSchemeAndHttpHost() }}/tienda/</span>
-                    <input type="text" name="slug_tienda" value="{{ old('slug_tienda', $config->slug ?? '') }}"
-                        placeholder="mi-empresa"
-                        class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
-                </div>
-                <p class="text-xs text-gray-400 mt-1">URL pública de la tienda online. Usá solo letras, números y guiones.</p>
-            </div>
         </div>
 
         {{-- Imagen de bienvenida --}}
@@ -147,40 +137,6 @@
                     <span class="font-medium text-gray-700">Puede informar los más vendidos</span>
                     <span class="block text-xs text-gray-400">El bot puede mencionar cuáles son los productos más pedidos del negocio.</span>
                 </label>
-            </div>
-        </div>
-
-        {{-- Tipo de entrega --}}
-        <div class="bg-white rounded-xl shadow p-5 space-y-3">
-            <label class="block text-sm font-semibold text-gray-700">Tipos de entrega habilitados</label>
-            <div class="flex gap-6">
-                <label class="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" name="bot_permite_envio" value="1"
-                        {{ old('bot_permite_envio', $config->bot_permite_envio ?? true) ? 'checked' : '' }}
-                        class="accent-red-600">
-                    🚚 Envío
-                </label>
-                <label class="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" name="bot_permite_retiro" value="1"
-                        {{ old('bot_permite_retiro', $config->bot_permite_retiro ?? true) ? 'checked' : '' }}
-                        class="accent-red-600">
-                    🏪 Retiro en local
-                </label>
-            </div>
-        </div>
-
-        {{-- Medios de pago --}}
-        <div class="bg-white rounded-xl shadow p-5 space-y-3">
-            <label class="block text-sm font-semibold text-gray-700">Medios de pago habilitados</label>
-            <div class="flex flex-wrap gap-4">
-                @foreach(\App\Models\IaEmpresa::MEDIOS_PAGO as $key => $label)
-                    <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-                        <input type="checkbox" name="bot_medios_pago[]" value="{{ $key }}"
-                            {{ in_array($key, old('bot_medios_pago', $config->bot_medios_pago ?? array_keys(\App\Models\IaEmpresa::MEDIOS_PAGO))) ? 'checked' : '' }}
-                            class="accent-red-600">
-                        {{ $label }}
-                    </label>
-                @endforeach
             </div>
         </div>
 

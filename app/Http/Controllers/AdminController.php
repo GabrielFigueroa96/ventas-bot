@@ -311,6 +311,68 @@ class AdminController extends Controller
         return back()->with('ok', 'Configuración guardada.');
     }
 
+    public function tienda()
+    {
+        $config  = IaEmpresa::firstOrNew([]);
+        $tenant  = app(\App\Services\TenantManager::class)->get();
+        $tiendaActiva = (bool) ($tenant->tienda_activa ?? false);
+
+        return view('admin.tienda', compact('config', 'tiendaActiva'));
+    }
+
+    public function guardarTienda(Request $request)
+    {
+        $config   = IaEmpresa::firstOrNew([]);
+        $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
+
+        $data = [
+            'pedido_minimo'          => (float) $request->input('pedido_minimo', 0),
+            'tienda_ocultar_precios' => $request->boolean('tienda_ocultar_precios'),
+            'tienda_facebook'        => $request->input('tienda_facebook') ?: null,
+            'tienda_instagram'       => $request->input('tienda_instagram') ?: null,
+            'tienda_tiktok'          => $request->input('tienda_tiktok') ?: null,
+        ];
+
+        // Logo de la tienda
+        if ($request->hasFile('imagen_tienda')) {
+            if ($config->imagen_tienda) {
+                $anterior = public_path($config->imagen_tienda);
+                if (file_exists($anterior)) unlink($anterior);
+            }
+            $dir = public_path("ia-imagenes/{$tenantId}");
+            if (!is_dir($dir)) mkdir($dir, 0755, true);
+            $request->file('imagen_tienda')->move($dir, 'logo-tienda.jpg');
+            $data['imagen_tienda'] = "ia-imagenes/{$tenantId}/logo-tienda.jpg";
+        }
+
+        if ($request->boolean('eliminar_imagen_tienda') && $config->imagen_tienda) {
+            $anterior = public_path($config->imagen_tienda);
+            if (file_exists($anterior)) unlink($anterior);
+            $data['imagen_tienda'] = null;
+        }
+
+        $config->fill($data)->save();
+
+        \Illuminate\Support\Facades\Cache::forget('bot_empresa_config_' . $tenantId);
+
+        // Slug
+        $slugTienda = $request->input('slug_tienda');
+        if ($tenantId && $slugTienda !== null) {
+            $slugValue = $slugTienda !== '' ? preg_replace('/[^a-z0-9\-]/', '', strtolower(trim($slugTienda))) : null;
+            DB::connection('mysql')->table('ia_tenants')
+                ->where('id', $tenantId)
+                ->update(['slug' => $slugValue]);
+            \Illuminate\Support\Facades\Cache::forget('tenant_slug_' . ($slugValue ?? ''));
+            try {
+                $config->fill(['slug' => $slugValue])->save();
+            } catch (\Throwable $e) {
+                // ignorar si la columna no existe
+            }
+        }
+
+        return back()->with('ok', 'Configuración de la tienda guardada.');
+    }
+
     public function avanzarEstadoPedido(int $id, Request $request)
     {
         $sia = Pedidosia::findOrFail($id);
@@ -323,19 +385,23 @@ class AdminController extends Controller
         $sia->estado = $nextEstado;
         $sia->save();
 
-        // Notificar al cliente por WhatsApp si hay un mensaje definido
-        $plantilla = Pedidosia::MENSAJES_ESTADO[$nextEstado] ?? null;
-        if ($plantilla && $sia->cliente?->phone) {
-            $mensaje = str_replace('{nro}', $sia->nro, $plantilla);
-            try {
-                app(BotService::class)->sendWhatsapp($sia->cliente->phone, $mensaje);
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error("avanzarEstadoPedido WA error: " . $e->getMessage());
+        // Notificar al cliente por WhatsApp usando el mensaje contextual
+        if ($sia->cliente?->phone) {
+            $mensaje = $sia->mensajeParaEstado($nextEstado);
+            if ($mensaje) {
+                try {
+                    app(BotService::class)->sendWhatsapp($sia->cliente->phone, $mensaje);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error("avanzarEstadoPedido WA error: " . $e->getMessage());
+                }
             }
         }
 
-        $info = Pedidosia::ESTADOS[$nextEstado];
-        return response()->json(['estado' => $nextEstado, 'label' => $info['label'], 'css' => $info['css']]);
+        return response()->json([
+            'estado' => $nextEstado,
+            'label'  => $sia->estadoLabel(),
+            'css'    => $sia->estadoCss(),
+        ]);
     }
 
     private function loadPedidosia($pedidos): \Illuminate\Support\Collection

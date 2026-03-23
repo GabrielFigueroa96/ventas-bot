@@ -17,7 +17,7 @@ class LocalidadController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'nombre'         => 'required|string|max:100|unique:localidades,nombre',
+            'nombre'         => 'required|string|max:100|unique:ia_localidades,nombre',
             'provincia'      => 'nullable|string|max:100',
             'dias_reparto'   => 'nullable|array',
             'dias_reparto.*' => 'integer|between:0,6',
@@ -36,7 +36,7 @@ class LocalidadController extends Controller
     {
         $localidad = Localidad::findOrFail($id);
         $data = $request->validate([
-            'nombre'         => 'required|string|max:100|unique:localidades,nombre,' . $localidad->id,
+            'nombre'         => 'required|string|max:100|unique:ia_localidades,nombre,' . $localidad->id,
             'provincia'      => 'nullable|string|max:100',
             'dias_reparto'   => 'nullable|array',
             'dias_reparto.*' => 'integer|between:0,6',

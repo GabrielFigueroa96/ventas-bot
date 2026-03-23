@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(php artisan:*)"
+      "Bash(php artisan:*)",
+      "Bash(grep -r \"tienda_enabled\\\\|enabled.*tienda\" c:caflaravelprojectsventas-bot --include=*.php)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
