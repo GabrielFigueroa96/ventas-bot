@@ -351,11 +351,13 @@ class AdminController extends Controller
                 $anterior = public_path($config->imagen_tienda);
                 if (file_exists($anterior)) unlink($anterior);
             }
-            $tenantId = app(\App\Services\TenantManager::class)->get()->id;
-            $dir = public_path("ia-imagenes/{$tenantId}");
+            $tenantId  = app(\App\Services\TenantManager::class)->get()->id;
+            $dir       = public_path("ia-imagenes/{$tenantId}");
             if (!is_dir($dir)) mkdir($dir, 0755, true);
-            $request->file('imagen_tienda')->move($dir, 'logo-tienda.jpg');
-            $data['imagen_tienda'] = "ia-imagenes/{$tenantId}/logo-tienda.jpg";
+            $ext       = $request->file('imagen_tienda')->getClientOriginalExtension() ?: 'jpg';
+            $filename  = 'logo-tienda-' . time() . '.' . $ext;
+            $request->file('imagen_tienda')->move($dir, $filename);
+            $data['imagen_tienda'] = "ia-imagenes/{$tenantId}/{$filename}";
         }
 
         if ($request->boolean('eliminar_imagen_tienda') && $config->imagen_tienda) {
@@ -418,10 +420,12 @@ class AdminController extends Controller
                 $anterior = public_path($config->imagen_tienda);
                 if (file_exists($anterior)) unlink($anterior);
             }
-            $dir = public_path("ia-imagenes/{$tenantId}");
+            $dir      = public_path("ia-imagenes/{$tenantId}");
             if (!is_dir($dir)) mkdir($dir, 0755, true);
-            $request->file('imagen_tienda')->move($dir, 'logo-tienda.jpg');
-            $data['imagen_tienda'] = "ia-imagenes/{$tenantId}/logo-tienda.jpg";
+            $ext      = $request->file('imagen_tienda')->getClientOriginalExtension() ?: 'jpg';
+            $filename = 'logo-tienda-' . time() . '.' . $ext;
+            $request->file('imagen_tienda')->move($dir, $filename);
+            $data['imagen_tienda'] = "ia-imagenes/{$tenantId}/{$filename}";
         }
 
         if ($request->boolean('eliminar_imagen_tienda') && $config->imagen_tienda) {
