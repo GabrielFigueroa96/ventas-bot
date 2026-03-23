@@ -819,9 +819,10 @@ Herramientas disponibles:
             $kilos = 0;
 
             if ($esPeso) {
-                // Si la descripción tiene peso por unidad (ej: "aprox. 0.15kg c/u")
-                // y la cantidad es un entero, PHP convierte unidades → kg
-                $pesoUnitario = $this->parsePesoUnitario($match->descripcion ?? '');
+                // Si notas_ia o descripción tienen peso por unidad (ej: "10kg c/u")
+                // y la cantidad es un entero, convierte unidades → kg
+                $pesoUnitario = $this->parsePesoUnitario($match->notas_ia ?? '')
+                             ?? $this->parsePesoUnitario($match->descripcion ?? '');
                 if ($pesoUnitario && $cantidad >= 1 && floor($cantidad) === $cantidad) {
                     $cant  = (int) $cantidad;
                     $kilos = round($cantidad * $pesoUnitario, 3);
@@ -1020,10 +1021,15 @@ Herramientas disponibles:
         return (float) $str;
     }
 
-    // Extrae el peso por unidad de la descripción del producto (ej: "aprox. 0.15kg c/u" → 0.15)
-    private function parsePesoUnitario(string $descripcion): ?float
+    // Extrae el peso por unidad de un texto (ej: "10kg c/u", "aprox. 0.15kg c/u", "10 kg por unidad" → valor float)
+    private function parsePesoUnitario(string $texto): ?float
     {
-        if (preg_match('/aprox[.\s]*(\d+(?:[.,]\d+)?)\s*kg\s*c\//i', $descripcion, $m)) {
+        // "10kg c/u" | "10 kg c/u" | "aprox. 10kg c/u"
+        if (preg_match('/(?:aprox[.\s]*)?([\d]+(?:[.,]\d+)?)\s*kg\s*c\//i', $texto, $m)) {
+            return (float) str_replace(',', '.', $m[1]);
+        }
+        // "10kg por unidad" | "10 kg por unidad"
+        if (preg_match('/([\d]+(?:[.,]\d+)?)\s*kg\s+por\s+unidad/i', $texto, $m)) {
             return (float) str_replace(',', '.', $m[1]);
         }
         return null;
