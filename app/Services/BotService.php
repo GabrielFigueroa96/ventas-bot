@@ -1684,7 +1684,7 @@ Herramientas disponibles:
 
         try {
             $response = Http::timeout(10)
-                ->post("https://graph.facebook.com/v21.0/me/messages?access_token={$pageToken}", [
+                ->post("https://graph.facebook.com/v22.0/me/messages?access_token={$pageToken}", [
                     'recipient'      => ['id' => $recipientId],
                     'message'        => ['text' => $message],
                     'messaging_type' => 'RESPONSE',
@@ -1716,7 +1716,7 @@ Herramientas disponibles:
 
         try {
             $response = Http::timeout(10)
-                ->post("https://graph.facebook.com/v21.0/{$igAccountId}/messages?access_token={$pageToken}", [
+                ->post("https://graph.facebook.com/v22.0/{$igAccountId}/messages?access_token={$pageToken}", [
                     'recipient'      => ['id' => $recipientId],
                     'message'        => ['text' => $message],
                     'messaging_type' => 'RESPONSE',
@@ -1745,7 +1745,7 @@ Herramientas disponibles:
 
         try {
             Http::timeout(10)
-                ->post("https://graph.facebook.com/v21.0/me/messages?access_token={$pageToken}", [
+                ->post("https://graph.facebook.com/v22.0/me/messages?access_token={$pageToken}", [
                     'recipient'      => ['id' => $recipientId],
                     'message'        => [
                         'attachment' => [
@@ -1759,7 +1759,7 @@ Herramientas disponibles:
             if ($caption) {
                 // Messenger no soporta caption en attachment, enviar caption como mensaje separado
                 Http::timeout(10)
-                    ->post("https://graph.facebook.com/v21.0/me/messages?access_token={$pageToken}", [
+                    ->post("https://graph.facebook.com/v22.0/me/messages?access_token={$pageToken}", [
                         'recipient'      => ['id' => $recipientId],
                         'message'        => ['text' => $caption],
                         'messaging_type' => 'RESPONSE',
