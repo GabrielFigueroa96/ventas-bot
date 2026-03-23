@@ -52,17 +52,24 @@
                 @endif
             </div>
 
-            {{-- Estado + botón --}}
+            {{-- Estado + botones --}}
             @if($sia)
                 <div class="flex items-center gap-1.5 shrink-0">
                     <span id="badge-sia-{{ $sia->id }}"
                           class="text-xs px-2 py-0.5 rounded-full font-medium {{ $siaInfo['css'] }}">
                         {{ $siaInfo['label'] }}
                     </span>
-                    @if($siaEstado < $siaMax && $siaEstado !== \App\Models\Pedidosia::ESTADO_CANCELADO)
+                    @if($siaEstado < $sia->estadoMax() && $siaEstado !== \App\Models\Pedidosia::ESTADO_CANCELADO)
                         <button onclick="avanzarEstado({{ $sia->id }}, this)"
+                            data-max="{{ $sia->estadoMax() }}"
                             class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full transition shrink-0">
                             ›
+                        </button>
+                    @endif
+                    @if($siaEstado === \App\Models\Pedidosia::ESTADO_PENDIENTE)
+                        <button onclick="cancelarPedido({{ $sia->id }}, this)"
+                            class="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-2 py-0.5 rounded-full transition shrink-0">
+                            ✕
                         </button>
                     @endif
                 </div>

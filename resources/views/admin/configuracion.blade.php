@@ -162,6 +162,18 @@
                     <span class="block text-xs text-gray-400">El bot puede mencionar cuáles son los productos más pedidos del negocio.</span>
                 </label>
             </div>
+
+            <hr class="border-gray-100">
+
+            <div class="flex items-start gap-3">
+                <input type="checkbox" name="bot_notifica_estados" value="1" id="bot_notifica_estados"
+                    {{ old('bot_notifica_estados', $config->bot_notifica_estados ?? true) ? 'checked' : '' }}
+                    class="mt-0.5 accent-red-600">
+                <label for="bot_notifica_estados" class="text-sm cursor-pointer">
+                    <span class="font-medium text-gray-700">Notificar estados al cliente por WhatsApp</span>
+                    <span class="block text-xs text-gray-400">Cuando se avanza el estado de un pedido (confirmado, preparado, en camino, entregado), se envía un mensaje automático al cliente.</span>
+                </label>
+            </div>
         </div>
 
         {{-- Tipos de entrega --}}

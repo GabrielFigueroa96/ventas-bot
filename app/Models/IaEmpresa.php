@@ -23,6 +23,7 @@ class IaEmpresa extends Model
         'bot_puede_sugerir',
         'bot_puede_mas_vendidos',
         'bot_atiende_nuevos',
+        'bot_notifica_estados',
         'suc',
         'pv',
         'slug',
@@ -41,6 +42,7 @@ class IaEmpresa extends Model
         'bot_puede_pedir'        => 'boolean',
         'bot_puede_sugerir'      => 'boolean',
         'bot_puede_mas_vendidos' => 'boolean',
+        'bot_notifica_estados'   => 'boolean',
         'tienda_ocultar_precios' => 'boolean',
         'pedido_minimo'          => 'float',
     ];

@@ -319,6 +319,7 @@ class AdminController extends Controller
             'bot_puede_pedir'        => $request->boolean('bot_puede_pedir'),
             'bot_puede_sugerir'      => $request->boolean('bot_puede_sugerir'),
             'bot_puede_mas_vendidos' => $request->boolean('bot_puede_mas_vendidos'),
+            'bot_notifica_estados'   => $request->boolean('bot_notifica_estados'),
             'bot_atiende_nuevos'     => $request->input('bot_atiende_nuevos', 'bot'),
             'suc'                    => $request->input('suc'),
             'pv'                     => $request->input('pv'),
@@ -461,15 +462,16 @@ class AdminController extends Controller
         $sia = Pedidosia::findOrFail($id);
 
         $nextEstado = $sia->estado + 1;
-        if ($nextEstado > Pedidosia::ESTADO_ENTREGADO) {
+        if ($nextEstado > $sia->estadoMax()) {
             return response()->json(['error' => 'Ya está en el estado final.'], 422);
         }
 
         $sia->estado = $nextEstado;
         $sia->save();
 
-        // Notificar al cliente por WhatsApp usando el mensaje contextual
-        if ($sia->cliente?->phone) {
+        // Notificar al cliente por WhatsApp si está habilitado
+        $notifica = IaEmpresa::value('bot_notifica_estados') ?? true;
+        if ($notifica && $sia->cliente?->phone) {
             $mensaje = $sia->mensajeParaEstado($nextEstado);
             if ($mensaje) {
                 try {
@@ -484,6 +486,28 @@ class AdminController extends Controller
             'estado' => $nextEstado,
             'label'  => $sia->estadoLabel(),
             'css'    => $sia->estadoCss(),
+        ]);
+    }
+
+    public function cancelarPedido(int $id)
+    {
+        $sia = Pedidosia::findOrFail($id);
+
+        if ($sia->estado !== Pedidosia::ESTADO_PENDIENTE) {
+            return response()->json(['error' => 'Solo se pueden cancelar pedidos pendientes.'], 422);
+        }
+
+        $sia->estado = Pedidosia::ESTADO_CANCELADO;
+        $sia->save();
+
+        Pedido::where('nro', $sia->nro)->update(['estado' => Pedido::ESTADO_CANCELADO]);
+
+        $info = Pedidosia::ESTADOS[Pedidosia::ESTADO_CANCELADO];
+
+        return response()->json([
+            'estado' => Pedidosia::ESTADO_CANCELADO,
+            'label'  => $info['label'],
+            'css'    => $info['css'],
         ]);
     }
 

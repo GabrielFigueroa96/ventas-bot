@@ -33,10 +33,8 @@
 <script>
 const csrfToken = document.querySelector('meta[name=csrf-token]').content;
 
-const siaEstados = @json(\App\Models\Pedidosia::ESTADOS);
-const siaMax     = {{ \App\Models\Pedidosia::ESTADO_ENTREGADO }};
-
 async function avanzarEstado(id, btn) {
+    const max = parseInt(btn.dataset.max ?? 4);
     btn.disabled = true;
     btn.textContent = '...';
     try {
@@ -45,21 +43,51 @@ async function avanzarEstado(id, btn) {
             headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
         });
         const data = await res.json();
-        if (!res.ok) { alert(data.error ?? 'Error'); btn.disabled = false; btn.textContent = 'Avanzar ›'; return; }
+        if (!res.ok) { alert(data.error ?? 'Error'); btn.disabled = false; btn.textContent = '›'; return; }
 
         const badge = document.getElementById(`badge-sia-${id}`);
         if (badge) {
             badge.textContent = data.label;
             badge.className   = `text-xs px-2 py-0.5 rounded-full font-medium ${data.css}`;
         }
-        if (data.estado >= siaMax) {
+        // Si avanzó desde pendiente, quitar el botón cancelar
+        const cancelBtn = document.getElementById(`cancel-sia-${id}`);
+        if (cancelBtn) cancelBtn.remove();
+
+        if (data.estado >= max) {
             btn.remove();
         } else {
             btn.disabled    = false;
-            btn.textContent = 'Avanzar ›';
+            btn.textContent = '›';
         }
     } catch (e) {
-        btn.disabled = false; btn.textContent = 'Avanzar ›';
+        btn.disabled = false; btn.textContent = '›';
+    }
+}
+
+async function cancelarPedido(id, btn) {
+    if (!confirm('¿Cancelar este pedido?')) return;
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+        const res  = await fetch(`/admin/pedidos/ia/${id}/cancelar`, {
+            method: 'PATCH',
+            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+        });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error ?? 'Error'); btn.disabled = false; btn.textContent = '✕'; return; }
+
+        const badge = document.getElementById(`badge-sia-${id}`);
+        if (badge) {
+            badge.textContent = data.label;
+            badge.className   = `text-xs px-2 py-0.5 rounded-full font-medium ${data.css}`;
+        }
+        // Quitar ambos botones
+        btn.remove();
+        const avanzarBtn = document.querySelector(`[onclick="avanzarEstado(${id}, this)"]`);
+        if (avanzarBtn) avanzarBtn.remove();
+    } catch (e) {
+        btn.disabled = false; btn.textContent = '✕';
     }
 }
 </script>
