@@ -55,7 +55,7 @@
         {{-- Logo --}}
         <div class="bg-white rounded-xl shadow p-5 space-y-3">
             <h2 class="text-sm font-semibold text-gray-700">Logo</h2>
-            <p class="text-xs text-gray-400">Imagen que aparece en el encabezado de la tienda online y en el menú del panel de administración.</p>
+            <p class="text-xs text-gray-400">Imagen que aparece en el encabezado de la web y en el menú del panel de administración.</p>
 
             @if($config->imagen_tienda)
                 <div class="flex items-center gap-4">
@@ -173,6 +173,22 @@
                     <span class="font-medium text-gray-700">Notificar estados al cliente por WhatsApp</span>
                     <span class="block text-xs text-gray-400">Cuando se avanza el estado de un pedido (confirmado, preparado, en camino, entregado), se envía un mensaje automático al cliente.</span>
                 </label>
+            </div>
+        </div>
+
+        {{-- Pedido mínimo --}}
+        <div class="bg-white rounded-xl shadow p-5 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-700">Pedido mínimo</h2>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Monto mínimo ($)</label>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-gray-400">$</span>
+                    <input type="number" name="pedido_minimo"
+                        value="{{ old('pedido_minimo', $config->pedido_minimo ?? 0) }}"
+                        min="0" step="0.01" placeholder="0"
+                        class="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+                <p class="text-xs text-gray-400 mt-1">Poner 0 para no exigir mínimo.</p>
             </div>
         </div>
 

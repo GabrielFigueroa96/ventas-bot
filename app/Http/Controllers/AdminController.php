@@ -316,6 +316,7 @@ class AdminController extends Controller
             'bot_permite_retiro'     => $request->boolean('bot_permite_retiro'),
             'bot_permite_envio'      => $request->boolean('bot_permite_envio'),
             'bot_medios_pago'        => $request->has('bot_medios_pago') ? $request->input('bot_medios_pago') : null,
+            'pedido_minimo'          => (float) $request->input('pedido_minimo', 0),
             'bot_puede_pedir'        => $request->boolean('bot_puede_pedir'),
             'bot_puede_sugerir'      => $request->boolean('bot_puede_sugerir'),
             'bot_puede_mas_vendidos' => $request->boolean('bot_puede_mas_vendidos'),
@@ -406,7 +407,6 @@ class AdminController extends Controller
         $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
 
         $data = [
-            'pedido_minimo'          => (float) $request->input('pedido_minimo', 0),
             'tienda_ocultar_precios' => $request->boolean('tienda_ocultar_precios'),
             'tienda_facebook'        => $request->input('tienda_facebook') ?: null,
             'tienda_instagram'       => $request->input('tienda_instagram') ?: null,

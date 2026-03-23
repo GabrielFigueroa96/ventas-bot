@@ -1,9 +1,9 @@
 @extends('admin.layout')
-@section('title', 'Tienda online')
+@section('title', 'Web')
 
 @section('content')
 <div class="max-w-2xl mx-auto space-y-6">
-    <h1 class="text-xl font-bold text-gray-800">Tienda online</h1>
+    <h1 class="text-xl font-bold text-gray-800">Web para visualizar productos y pedidos</h1>
 
     {{-- Estado de la tienda --}}
     @if($tiendaActiva)
@@ -11,7 +11,7 @@
             <svg class="w-5 h-5 text-green-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
-            <span><strong>Tienda habilitada.</strong> Los clientes pueden comprar desde la tienda online.</span>
+            <span><strong>Web habilitada.</strong> Los clientes pueden visualizar productos y realizar pedidos desde la web.</span>
         </div>
     @else
         <div class="flex items-start gap-3 bg-gray-50 border border-gray-200 text-gray-600 text-sm px-4 py-4 rounded-xl">
@@ -19,8 +19,8 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
             <div>
-                <p class="font-semibold text-gray-700 mb-1">Tienda no habilitada</p>
-                <p class="text-gray-500">La tienda online no está activada para esta cuenta. Contactá al soporte para habilitarla.</p>
+                <p class="font-semibold text-gray-700 mb-1">Web no habilitada</p>
+                <p class="text-gray-500">La web no está activada para esta cuenta. Contactá al soporte para habilitarla.</p>
             </div>
         </div>
     @endif
@@ -63,22 +63,6 @@
                         </span>
                     </div>
                 @endif
-            </div>
-
-            {{-- Pedido mínimo --}}
-            <div class="bg-white rounded-xl shadow p-5 space-y-3">
-                <h2 class="text-sm font-semibold text-gray-700">Pedido mínimo</h2>
-                <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1">Monto mínimo ($)</label>
-                    <div class="flex items-center gap-2">
-                        <span class="text-sm text-gray-400">$</span>
-                        <input type="number" name="pedido_minimo"
-                            value="{{ old('pedido_minimo', $config->pedido_minimo ?? 0) }}"
-                            min="0" step="0.01" placeholder="0"
-                            class="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
-                    </div>
-                    <p class="text-xs text-gray-400 mt-1">Poner 0 para no exigir mínimo.</p>
-                </div>
             </div>
 
             {{-- Redes sociales --}}
