@@ -54,14 +54,17 @@ class TenantManager
     }
 
     /**
-     * Activa el tenant a partir del page_id que llega en el webhook de Messenger/Instagram.
+     * Activa el tenant a partir del page_id (Messenger) o instagram_account_id (Instagram).
      */
     public function loadByPageId(string $pageId): bool
     {
         $tenant = Cache::remember("tenant_page_{$pageId}", 300, fn() =>
             DB::connection('mysql')
                 ->table('ia_tenants')
-                ->where('page_id', $pageId)
+                ->where(function ($q) use ($pageId) {
+                    $q->where('page_id', $pageId)
+                      ->orWhere('instagram_account_id', $pageId);
+                })
                 ->where('activo', true)
                 ->first()
         );
@@ -135,6 +138,7 @@ class TenantManager
             'api.messenger.page_id'        => $tenant->page_id ?? null,
             'api.messenger.token'          => $tenant->messenger_token ?? null,
             'api.messenger.fb_page_id'     => $tenant->messenger_page_id ?? $tenant->page_id ?? null,
+            'api.messenger.ig_account_id'  => $tenant->instagram_account_id ?? null,
         ]);
     }
 }

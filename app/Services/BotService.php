@@ -1704,7 +1704,7 @@ Herramientas disponibles:
      */
     public function sendInstagram(string $recipientId, string $message): void
     {
-        $igAccountId = config('api.messenger.page_id');
+        $igAccountId = config('api.messenger.ig_account_id');
         $pageToken   = config('api.messenger.token');
 
         if (!$igAccountId || !$pageToken) {
