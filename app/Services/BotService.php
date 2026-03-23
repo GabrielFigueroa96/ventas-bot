@@ -1637,7 +1637,10 @@ Herramientas disponibles:
     {
         $phone = $client->phone;
 
-        if (str_starts_with($phone, 'fb_') || str_starts_with($phone, 'ig_')) {
+        if (str_starts_with($phone, 'ig_')) {
+            $recipientId = substr($phone, 3);
+            $this->sendInstagram($recipientId, $message);
+        } elseif (str_starts_with($phone, 'fb_')) {
             $recipientId = substr($phone, 3);
             $this->sendMessenger($recipientId, $message);
         } else {
@@ -1652,7 +1655,11 @@ Herramientas disponibles:
     {
         $phone = $client->phone;
 
-        if (str_starts_with($phone, 'fb_') || str_starts_with($phone, 'ig_')) {
+        if (str_starts_with($phone, 'ig_')) {
+            $recipientId = substr($phone, 3);
+            $this->sendInstagram($recipientId, $imageUrl); // Instagram: imagen como URL en texto
+            if ($caption) $this->sendInstagram($recipientId, $caption);
+        } elseif (str_starts_with($phone, 'fb_')) {
             $recipientId = substr($phone, 3);
             $this->sendMessengerImage($recipientId, $imageUrl, $caption);
         } else {
@@ -1673,6 +1680,8 @@ Herramientas disponibles:
             return;
         }
 
+        Log::debug("sendMessenger → pageId={$pageId} recipientId={$recipientId} tokenLen=" . strlen($pageToken));
+
         try {
             $response = Http::timeout(10)
                 ->post("https://graph.facebook.com/v21.0/me/messages?access_token={$pageToken}", [
@@ -1686,6 +1695,38 @@ Herramientas disponibles:
             }
         } catch (\Throwable $e) {
             Log::error('sendMessenger error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Envía texto via Instagram Direct (Graph API).
+     * Usa el Instagram Business Account ID (page_id del tenant para Instagram).
+     */
+    public function sendInstagram(string $recipientId, string $message): void
+    {
+        $igAccountId = config('api.messenger.page_id');
+        $pageToken   = config('api.messenger.token');
+
+        if (!$igAccountId || !$pageToken) {
+            Log::error('sendInstagram: ig_account_id o token no configurados.');
+            return;
+        }
+
+        Log::debug("sendInstagram → igAccountId={$igAccountId} recipientId={$recipientId} tokenLen=" . strlen($pageToken));
+
+        try {
+            $response = Http::timeout(10)
+                ->post("https://graph.facebook.com/v21.0/{$igAccountId}/messages?access_token={$pageToken}", [
+                    'recipient'      => ['id' => $recipientId],
+                    'message'        => ['text' => $message],
+                    'messaging_type' => 'RESPONSE',
+                ]);
+
+            if (!$response->successful()) {
+                Log::error('sendInstagram API error: ' . $response->body());
+            }
+        } catch (\Throwable $e) {
+            Log::error('sendInstagram error: ' . $e->getMessage());
         }
     }
 
