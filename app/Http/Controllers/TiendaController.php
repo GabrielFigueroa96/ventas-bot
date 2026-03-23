@@ -50,11 +50,15 @@ class TiendaController extends Controller
         if (!$carrito) {
             return ['items' => [], 'count' => 0, 'total' => 0];
         }
-        $items = array_map(fn($i) => array_merge($i, [
-            'cantidad' => $i['cantidad'] ?? $i['cant'] ?? 0,
-        ]), $carrito->items ?? []);
+        // Normaliza ambos formatos: bot usa cant+kilos, tienda usaba cantidad
+        $items = array_map(function ($i) {
+            $cant  = $i['cant']  ?? 0;
+            $kilos = $i['kilos'] ?? 0;
+            $cantidad = $cant > 0 ? $cant : ($kilos > 0 ? $kilos : ($i['cantidad'] ?? 0));
+            return array_merge($i, ['cantidad' => $cantidad]);
+        }, $carrito->items ?? []);
         $count = array_sum(array_column($items, 'cantidad'));
-        $total = array_sum(array_map(fn($i) => ($i['precio'] ?? 0) * ($i['cantidad'] ?? 0), $items));
+        $total = array_sum(array_map(fn($i) => $i['neto'] ?? 0, $items));
         return [
             'items' => $items,
             'count' => $count,
@@ -93,27 +97,9 @@ class TiendaController extends Controller
         $empresaNombre = $this->getEmpresaNombre() ?: ($empresa->nombre_ia ?? 'Tienda');
         $clienteId     = $this->getClienteId($slug);
         $cliente       = $clienteId ? Cliente::find($clienteId) : null;
-        $carrito       = $this->getCarrito($clienteId);
 
-        $productos   = Producto::paraBot()->orderBy('tablaplu.desgrupo')->orderBy('tablaplu.des')->get();
-        $grupos      = $productos->groupBy('desgrupo');
-        $carritoData = $this->carritoJson($carrito);
-
-        // Sugeridos: productos que el cliente ya compró antes
-        $sugeridos = collect();
-        if ($clienteId) {
-            $nrosPrevios   = Pedidosia::where('idcliente', $clienteId)->pluck('nro');
-            $codigosPrevios = Pedido::whereIn('nro', $nrosPrevios)->distinct()->pluck('codigo');
-            if ($codigosPrevios->isNotEmpty()) {
-                $sugeridos = Producto::paraBot()
-                    ->whereIn('tablaplu.cod', $codigosPrevios)
-                    ->limit(6)
-                    ->get();
-            }
-        }
-
-        $pedidoMinimo   = (float) ($empresa->pedido_minimo ?? 0);
-        $mostrarPrecios = $clienteId !== null;
+        $productos = Producto::paraBot()->orderBy('tablaplu.desgrupo')->orderBy('tablaplu.des')->get();
+        $grupos    = $productos->groupBy('desgrupo');
 
         $costoExtra = 0.0;
         if ($cliente?->localidad_id) {
@@ -121,8 +107,7 @@ class TiendaController extends Controller
         }
 
         return view('tienda.index', compact(
-            'slug', 'empresa', 'empresaNombre', 'cliente', 'grupos',
-            'carritoData', 'carrito', 'sugeridos', 'pedidoMinimo', 'mostrarPrecios', 'costoExtra'
+            'slug', 'empresa', 'empresaNombre', 'cliente', 'grupos', 'costoExtra'
         ));
     }
 
@@ -313,11 +298,16 @@ class TiendaController extends Controller
         $items = $carrito->items ?? [];
         $found = false;
 
+        $cant  = $esPorKilo ? 0 : (int) $cantidad;
+        $kilos = $esPorKilo ? $cantidad : 0;
+        $base  = $esPorKilo ? $kilos : $cant;
+
         foreach ($items as &$item) {
             if ((string) $item['cod'] === (string) $cod) {
-                $item['cantidad'] = $cantidad;
-                $item['precio']   = $precio;
-                $item['neto']     = round($precio * $cantidad, 2);
+                $item['cant']   = $cant;
+                $item['kilos']  = $kilos;
+                $item['precio'] = $precio;
+                $item['neto']   = round($precio * $base, 2);
                 $found = true;
                 break;
             }
@@ -326,13 +316,13 @@ class TiendaController extends Controller
 
         if (!$found) {
             $items[] = [
-                'cod'      => $producto->cod,
-                'des'      => $producto->des,
-                'precio'   => $precio,
-                'cantidad' => $cantidad,
-                'kilos'    => $esPorKilo ? $cantidad : 0,
-                'neto'     => round($precio * $cantidad, 2),
-                'tipo'     => $producto->tipo,
+                'cod'    => $producto->cod,
+                'des'    => $producto->des,
+                'precio' => $precio,
+                'cant'   => $cant,
+                'kilos'  => $kilos,
+                'neto'   => round($precio * $base, 2),
+                'tipo'   => $producto->tipo,
             ];
         }
 
@@ -398,8 +388,11 @@ class TiendaController extends Controller
         } else {
             foreach ($items as &$item) {
                 if ((string) $item['cod'] === (string) $cod) {
-                    $item['cantidad'] = $cantidad;
-                    $item['neto']     = round($item['precio'] * $cantidad, 2);
+                    $esPeso        = strtolower($item['tipo'] ?? '') !== 'unidad';
+                    $item['cant']  = $esPeso ? 0 : (int) $cantidad;
+                    $item['kilos'] = $esPeso ? $cantidad : 0;
+                    $base          = $esPeso ? $cantidad : (int) $cantidad;
+                    $item['neto']  = round($item['precio'] * $base, 2);
                     break;
                 }
             }
