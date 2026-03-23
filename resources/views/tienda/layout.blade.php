@@ -24,10 +24,10 @@
         {{-- Logo / Nombre --}}
         <a href="{{ route('tienda.index', ['slug' => $slug]) }}" class="flex items-center gap-2.5 min-w-0">
             @if(!empty($empresa->imagen_tienda))
-                <img src="{{ asset($empresa->imagen_tienda) }}?v={{ $empresa->updated_at?->timestamp }}" alt="Logo"
+                <img src="{{ asset($empresa->imagen_tienda) }}" alt="Logo"
                     class="w-8 h-8 rounded-lg object-cover flex-shrink-0">
             @elseif(!empty($empresa->imagen_bienvenida))
-                <img src="{{ asset($empresa->imagen_bienvenida) }}?v={{ $empresa->updated_at?->timestamp }}" alt="Logo"
+                <img src="{{ asset($empresa->imagen_bienvenida) }}" alt="Logo"
                     class="w-8 h-8 rounded-lg object-cover flex-shrink-0">
             @else
                 <div class="w-8 h-8 rounded-lg bg-red-700 flex items-center justify-center flex-shrink-0">
