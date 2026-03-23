@@ -8,7 +8,7 @@
         {{-- Header --}}
         <div class="bg-gradient-to-br from-red-700 to-red-800 px-6 py-8 text-center">
             @if(!empty($empresa->imagen_tienda) || !empty($empresa->imagen_bienvenida))
-                <img src="{{ asset($empresa->imagen_tienda ?: $empresa->imagen_bienvenida) }}" alt="Logo"
+                <img src="{{ asset($empresa->imagen_tienda ?: $empresa->imagen_bienvenida) }}?v={{ $empresa->updated_at?->timestamp }}" alt="Logo"
                     class="w-16 h-16 rounded-2xl object-cover mx-auto mb-4 border-2 border-white/30 shadow-lg">
             @else
                 <div class="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center mx-auto mb-4">

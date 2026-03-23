@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Cliente;
 use App\Models\Empresa;
 use App\Models\Localidad;
+use App\Models\Recordatorio;
 use App\Models\Factventas;
 use App\Models\IaEmpresa;
 use App\Models\Message;
@@ -84,6 +85,31 @@ class AdminController extends Controller
             $chartClientes[] = (int) ($clientesPorSemana[$key] ?? 0);
         }
 
+        // Recordatorios de hoy
+        $hoy = (int) now()->format('w'); // 0=Dom … 6=Sáb
+        $recordatoriosHoy = Recordatorio::where('activo', true)->get()
+            ->filter(fn($r) => empty($r->dias) || in_array($hoy, $r->dias))
+            ->map(function ($r) {
+                $disparado = $r->ultimo_envio_at && $r->ultimo_envio_at->isToday();
+
+                $query = Cliente::whereNotNull('phone')->where('phone', '!=', '');
+                if ($r->filtro_localidad || $r->filtro_provincia) {
+                    $query->where(function ($q) use ($r) {
+                        $q->whereHas('localidadObj', function ($q2) use ($r) {
+                            if ($r->filtro_localidad) $q2->where('nombre', $r->filtro_localidad);
+                            if ($r->filtro_provincia) $q2->where('provincia', $r->filtro_provincia);
+                        })->orWhereHas('cuenta', function ($q2) use ($r) {
+                            if ($r->filtro_localidad) $q2->where('loca', 'like', "%{$r->filtro_localidad}%");
+                            if ($r->filtro_provincia) $q2->where('prov', 'like', "%{$r->filtro_provincia}%");
+                        });
+                    });
+                }
+
+                $r->clientes_count = $query->count();
+                $r->disparado      = $disparado;
+                return $r;
+            });
+
         return view('admin.dashboard', compact(
             'stats', 'pedidos_recientes',
             'empresa',
@@ -92,6 +118,7 @@ class AdminController extends Controller
             'chartArticulosLabels', 'chartArticulosData',
             'chartSemanas', 'chartClientes',
             'seguimientos',
+            'recordatoriosHoy',
         ));
     }
 

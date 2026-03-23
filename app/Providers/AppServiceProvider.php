@@ -24,12 +24,16 @@ class AppServiceProvider extends ServiceProvider
                 $nombre = 'Panel Admin';
             }
             try {
-                $logoTienda = IaEmpresa::value('imagen_tienda');
+                $iaEmpresa  = IaEmpresa::select('imagen_tienda', 'updated_at')->first();
+                $logoTienda = $iaEmpresa?->imagen_tienda;
+                $logoTs     = $iaEmpresa?->updated_at?->timestamp;
             } catch (\Throwable) {
                 $logoTienda = null;
+                $logoTs     = null;
             }
             $view->with('empresaNombre', $nombre);
             $view->with('logoTienda', $logoTienda);
+            $view->with('logoTs', $logoTs);
         });
     }
 }

@@ -76,6 +76,56 @@
     </div>
 </div>
 
+{{-- Recordatorios de hoy --}}
+@if($recordatoriosHoy->isNotEmpty())
+<div class="bg-white rounded-xl shadow overflow-hidden mb-6">
+    <div class="px-4 sm:px-6 py-4 border-b flex items-center justify-between">
+        <h2 class="font-semibold text-gray-700">Recordatorios de hoy</h2>
+        <a href="{{ route('admin.recordatorios') }}" class="text-xs text-red-600 hover:underline">Ver todos</a>
+    </div>
+    <div class="divide-y">
+        @foreach($recordatoriosHoy as $rec)
+        <div class="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+            <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-medium text-gray-800">{{ $rec->nombre }}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500">
+                        {{ $rec->hora }}
+                    </span>
+                    @if($rec->filtro_localidad || $rec->filtro_provincia)
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                            {{ $rec->filtro_localidad ?? $rec->filtro_provincia }}
+                        </span>
+                    @endif
+                </div>
+                <p class="text-xs text-gray-400 mt-0.5 truncate">{{ Str::limit($rec->mensaje, 80) }}</p>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+                <span class="text-xs font-semibold text-gray-600">
+                    👥 {{ $rec->clientes_count }}
+                </span>
+                @if($rec->disparado)
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Enviado {{ $rec->ultimo_envio_at->format('H:i') }}
+                    </span>
+                @else
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Pendiente
+                    </span>
+                @endif
+            </div>
+        </div>
+        @endforeach
+    </div>
+</div>
+@endif
+
 {{-- Seguimientos --}}
 @if($seguimientos->isNotEmpty())
 <div class="bg-white rounded-xl shadow overflow-hidden mb-6">

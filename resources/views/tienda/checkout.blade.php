@@ -76,8 +76,8 @@
                                     class="accent-red-600"
                                     onchange="toggleEntrega('envio')">
                                 <div class="flex-1">
-                                    <p class="text-sm font-semibold text-gray-800">Envío a domicilio</p>
-                                    <p class="text-xs text-gray-400">Te lo llevamos a tu casa</p>
+                                    <p class="text-sm font-semibold text-gray-800">Envío</p>
+                                    <p class="text-xs text-gray-400">Te lo llevamos</p>
                                 </div>
                                 <span class="text-xl">🚚</span>
                             </label>

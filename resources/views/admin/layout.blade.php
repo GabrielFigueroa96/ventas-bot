@@ -38,7 +38,7 @@
 <body class="bg-gray-100 min-h-screen lg:flex">
 
 @php
-    $empresaNombre = $empresaNombre ?? (isset($empresa) ? $empresa->nombre : 'Panel Admin');
+    $empresaNombre ??= isset($empresa) ? $empresa->nombre : 'Panel Admin';
     $userName = auth()->user()->name ?? '';
 
     $nav = [
@@ -64,7 +64,7 @@
     <div class="px-5 py-5 border-b border-white/10">
         <div class="flex items-center gap-3">
             @if(!empty($logoTienda))
-                <img src="{{ asset($logoTienda) }}" alt="{{ $empresaNombre }}"
+                <img src="{{ asset($logoTienda) }}?v={{ $logoTs }}" alt="{{ $empresaNombre }}"
                     class="w-9 h-9 rounded-xl object-cover shrink-0">
             @else
                 <div class="w-9 h-9 rounded-xl bg-red-600 flex items-center justify-center text-lg shrink-0">🥩</div>
