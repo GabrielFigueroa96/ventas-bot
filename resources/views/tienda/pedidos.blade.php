@@ -58,7 +58,13 @@
                                 <div class="flex-1 pr-3">
                                     <span class="text-gray-700 font-medium">{{ $item->descrip }}</span>
                                     <span class="text-gray-400 text-xs ml-1.5">
-                                        × {{ $item->cant }} {{ ($item->kilos ?? 0) > 0 ? 'kg' : 'u.' }}
+                                        @if($item->cant > 0 && $item->kilos > 0)
+                                            × {{ (int) $item->cant }} u · {{ number_format($item->kilos, 2, ',', '.') }} kg
+                                        @elseif($item->kilos > 0)
+                                            × {{ number_format($item->kilos, 3, ',', '.') }} kg
+                                        @else
+                                            × {{ (int) $item->cant }} u.
+                                        @endif
                                     </span>
                                 </div>
                                 <span class="text-gray-700 font-semibold whitespace-nowrap">
