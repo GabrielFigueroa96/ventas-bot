@@ -140,6 +140,40 @@
             </div>
         </div>
 
+        {{-- Tipos de entrega --}}
+        <div class="bg-white rounded-xl shadow p-5 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-700">Tipos de entrega</h2>
+            <div class="flex flex-col gap-2">
+                <label class="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" name="bot_permite_envio" value="1" id="bot_permite_envio"
+                        {{ old('bot_permite_envio', $config->bot_permite_envio ?? true) ? 'checked' : '' }}
+                        class="accent-red-600">
+                    <span class="font-medium text-gray-700">Envío a domicilio</span>
+                </label>
+                <label class="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" name="bot_permite_retiro" value="1" id="bot_permite_retiro"
+                        {{ old('bot_permite_retiro', $config->bot_permite_retiro ?? true) ? 'checked' : '' }}
+                        class="accent-red-600">
+                    <span class="font-medium text-gray-700">Retiro en local</span>
+                </label>
+            </div>
+        </div>
+
+        {{-- Medios de pago --}}
+        <div class="bg-white rounded-xl shadow p-5 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-700">Medios de pago</h2>
+            <div class="flex flex-col gap-2">
+                @foreach(\App\Models\IaEmpresa::MEDIOS_PAGO as $key => $label)
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" name="bot_medios_pago[]" value="{{ $key }}"
+                            {{ in_array($key, old('bot_medios_pago', $config->bot_medios_pago ?? array_keys(\App\Models\IaEmpresa::MEDIOS_PAGO))) ? 'checked' : '' }}
+                            class="accent-red-600">
+                        <span class="text-gray-700">{{ $label }}</span>
+                    </label>
+                @endforeach
+            </div>
+        </div>
+
         {{-- Info del negocio --}}
         <div class="bg-white rounded-xl shadow p-5 space-y-2">
             <label class="block text-sm font-semibold text-gray-700">Información del negocio</label>

@@ -112,13 +112,17 @@ class TiendaController extends Controller
             }
         }
 
-        $pedidoMinimo      = (float) ($empresa->pedido_minimo ?? 0);
-        $ocultarPrecios    = (bool) ($empresa->tienda_ocultar_precios ?? false);
-        $mostrarPrecios    = !$ocultarPrecios || $clienteId !== null;
+        $pedidoMinimo   = (float) ($empresa->pedido_minimo ?? 0);
+        $mostrarPrecios = $clienteId !== null;
+
+        $costoExtra = 0.0;
+        if ($cliente?->localidad_id) {
+            $costoExtra = (float) (Localidad::find($cliente->localidad_id)?->costo_extra ?? 0);
+        }
 
         return view('tienda.index', compact(
             'slug', 'empresa', 'empresaNombre', 'cliente', 'grupos',
-            'carritoData', 'carrito', 'sugeridos', 'pedidoMinimo', 'mostrarPrecios'
+            'carritoData', 'carrito', 'sugeridos', 'pedidoMinimo', 'mostrarPrecios', 'costoExtra'
         ));
     }
 
@@ -293,6 +297,14 @@ class TiendaController extends Controller
             return response()->json(['error' => 'El peso debe ser múltiplo de 0,5 kg.'], 422);
         }
 
+        // Costo extra por zona del cliente
+        $clienteObj = Cliente::find($clienteId);
+        $costoExtra = 0.0;
+        if ($clienteObj?->localidad_id) {
+            $costoExtra = (float) (Localidad::find($clienteObj->localidad_id)?->costo_extra ?? 0);
+        }
+        $precio = (float) $producto->precio + $costoExtra;
+
         $carrito = Carrito::firstOrCreate(
             ['cliente_id' => $clienteId],
             ['items' => [], 'expires_at' => now()->addDays(7)]
@@ -304,7 +316,8 @@ class TiendaController extends Controller
         foreach ($items as &$item) {
             if ((string) $item['cod'] === (string) $cod) {
                 $item['cantidad'] = $cantidad;
-                $item['neto']     = round($producto->precio * $cantidad, 2);
+                $item['precio']   = $precio;
+                $item['neto']     = round($precio * $cantidad, 2);
                 $found = true;
                 break;
             }
@@ -315,10 +328,10 @@ class TiendaController extends Controller
             $items[] = [
                 'cod'      => $producto->cod,
                 'des'      => $producto->des,
-                'precio'   => (float) $producto->precio,
+                'precio'   => $precio,
                 'cantidad' => $cantidad,
                 'kilos'    => $esPorKilo ? $cantidad : 0,
-                'neto'     => round($producto->precio * $cantidad, 2),
+                'neto'     => round($precio * $cantidad, 2),
                 'tipo'     => $producto->tipo,
             ];
         }
@@ -464,18 +477,12 @@ class TiendaController extends Controller
         $obs         = $request->input('obs', '');
         $fecFin      = $request->input('fecha_deseada', null);
         $localidadId = null;
-        $costoExtra  = 0.0;
 
         if ($tipoEntrega === 'envio') {
             $localidadId = $request->input('localidad_id');
             $calle       = $request->input('calle', '');
             $numero      = $request->input('numero', '');
             $datoExtra   = $request->input('dato_extra', '');
-
-            if ($localidadId) {
-                $localidadObj = Localidad::find($localidadId);
-                $costoExtra   = (float) ($localidadObj?->costo_extra ?? 0);
-            }
 
             $updateData = [];
             if ($localidadId) $updateData['localidad_id'] = $localidadId;
@@ -487,7 +494,7 @@ class TiendaController extends Controller
 
         $items    = $carrito->items ?? [];
         $subtotal = array_sum(array_map(fn($i) => ($i['precio'] ?? 0) * ($i['cantidad'] ?? 0), $items));
-        $total    = $subtotal + $costoExtra;
+        $total    = $subtotal;
 
         // Validar pedido mínimo
         $pedidoMinimo = (float) ($empresa->pedido_minimo ?? 0);
@@ -542,29 +549,6 @@ class TiendaController extends Controller
             ]);
         }
 
-        // Si hay costo extra de envío, agregarlo como línea en pedidos
-        if ($costoExtra > 0) {
-            Pedido::create([
-                'fecha'     => $fecha,
-                'nro'       => $nro,
-                'nomcli'    => $nomcli,
-                'cant'      => 1,
-                'descrip'   => 'Costo de envío',
-                'kilos'     => 0,
-                'precio'    => $costoExtra,
-                'neto'      => $costoExtra,
-                'codigo'    => 0,
-                'codcli'    => $cliente->id,
-                'estado'    => Pedido::ESTADO_PENDIENTE,
-                'fecfin'    => $fecFin,
-                'obs'       => $obsCompleta,
-                'pedido_at' => now(),
-                'suc'       => $suc,
-                'pv'        => $pv,
-                'venta'     => null,
-            ]);
-        }
-
         try {
             $localNombre = '';
             if ($tipoEntrega === 'envio' && !empty($localidadId)) {
@@ -604,11 +588,7 @@ class TiendaController extends Controller
                     ? "• {$item['des']} x{$item['cantidad']}\n"
                     : "• {$item['des']} {$item['cantidad']}kg\n";
             }
-            $resumen .= "\n*Subtotal: $" . number_format($subtotal, 2, ',', '.') . "*";
-            if ($costoExtra > 0) {
-                $resumen .= "\nEnvío: $" . number_format($costoExtra, 2, ',', '.');
-                $resumen .= "\n*Total: $" . number_format($total, 2, ',', '.') . "*";
-            }
+            $resumen .= "\n*Total: $" . number_format($total, 2, ',', '.') . "*";
             $resumen .= "\n" . ($tipoEntrega === 'retiro' ? 'Retiro en local' : 'Envío a domicilio');
             $resumen .= "\nPago: " . (IaEmpresa::MEDIOS_PAGO[$medioPago] ?? $medioPago);
             app(BotService::class)->sendWhatsapp($cliente->phone, $resumen);
@@ -622,7 +602,6 @@ class TiendaController extends Controller
                 $notif = "🛒 *Nuevo pedido web #{$nro}*\n";
                 $notif .= "Cliente: {$nomcli} ({$cliente->phone})\n";
                 $notif .= $descripcion . "\n";
-                if ($costoExtra > 0) $notif .= "Envío: $" . number_format($costoExtra, 2, ',', '.') . "\n";
                 $notif .= "*Total: $" . number_format($total, 2, ',', '.') . "*\n";
                 $notif .= ($tipoEntrega === 'retiro' ? 'Retiro en local' : 'Envío');
                 $notif .= " | " . (IaEmpresa::MEDIOS_PAGO[$medioPago] ?? $medioPago);
@@ -637,7 +616,7 @@ class TiendaController extends Controller
 
         return view('tienda.confirmado', compact(
             'slug', 'empresa', 'empresaNombre', 'carritoData',
-            'nro', 'items', 'total', 'subtotal', 'costoExtra', 'tipoEntrega', 'medioPago'
+            'nro', 'items', 'total', 'tipoEntrega', 'medioPago'
         ));
     }
 }
