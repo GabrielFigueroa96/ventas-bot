@@ -129,7 +129,10 @@ class AdminController extends Controller
         $pedidosia     = $this->loadPedidosia($pedidosRaw);
         $lastPedidoReg = (int) ($pedidosRaw->max('reg') ?? 0);
 
-        return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas', 'pedidosia', 'lastPedidoReg'));
+        $totalPedidos    = $pedidos->count();
+        $ultimoPedidoAt  = $pedidosRaw->max('pedido_at');
+
+        return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas', 'pedidosia', 'lastPedidoReg', 'totalPedidos', 'ultimoPedidoAt'));
     }
 
     public function pedidos(Request $request)
@@ -287,6 +290,23 @@ class AdminController extends Controller
         $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
         \Illuminate\Support\Facades\Cache::forget('bot_empresa_config_' . $tenantId);
         \Illuminate\Support\Facades\Cache::forget('productos_bot_lista_' . $tenantId);
+
+        // Actualizar slug en ia_tenants (conexión mysql) y en ia_empresa
+        $slugTienda = $request->input('slug_tienda');
+        if ($tenantId && $slugTienda !== null) {
+            $slugValue = $slugTienda !== '' ? preg_replace('/[^a-z0-9\-]/', '', strtolower(trim($slugTienda))) : null;
+            DB::connection('mysql')->table('ia_tenants')
+                ->where('id', $tenantId)
+                ->update(['slug' => $slugValue]);
+            // Limpiar la caché del slug anterior y del nuevo
+            \Illuminate\Support\Facades\Cache::forget('tenant_slug_' . ($slugValue ?? ''));
+            // También guardar en ia_empresa si tiene la columna
+            try {
+                $config->fill(['slug' => $slugValue])->save();
+            } catch (\Throwable $e) {
+                // Si no tiene la columna aún, ignorar
+            }
+        }
 
         return back()->with('ok', 'Configuración guardada.');
     }

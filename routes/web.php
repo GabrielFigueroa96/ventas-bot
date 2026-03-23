@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\LocalidadController;
 use App\Http\Controllers\RecordatorioController;
+use App\Http\Controllers\TiendaController;
 
 Route::get('/', fn() => view('welcome'));
 
@@ -67,4 +68,19 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::post  ('/productos/{cod}/catalogo',        [ProductoController::class, 'agregarCatalogo'])->name('productos.catalogo.agregar');
     Route::delete('/productos/{cod}/catalogo',        [ProductoController::class, 'quitarCatalogo'])->name('productos.catalogo.quitar');
     Route::patch ('/productos/{cod}/disponible',      [ProductoController::class, 'toggleDisponible'])->name('productos.disponible');
+});
+
+// Tienda online pública (multi-tenant por slug)
+Route::prefix('tienda/{slug}')->name('tienda.')->middleware(['web', 'tienda.tenant'])->group(function () {
+    Route::get ('/',          [TiendaController::class, 'index'])->name('index');
+    Route::get ('/login',     [TiendaController::class, 'showLogin'])->name('login');
+    Route::post('/login',     [TiendaController::class, 'postLogin'])->name('login.post');
+    Route::get ('/verificar', [TiendaController::class, 'showVerificar'])->name('verificar');
+    Route::post('/verificar', [TiendaController::class, 'postVerificar'])->name('verificar.post');
+    Route::post('/logout',    [TiendaController::class, 'logout'])->name('logout');
+    Route::post('/carrito/agregar',   [TiendaController::class, 'agregarItem'])->name('carrito.agregar');
+    Route::post('/carrito/quitar',    [TiendaController::class, 'quitarItem'])->name('carrito.quitar');
+    Route::post('/carrito/cantidad',  [TiendaController::class, 'actualizarCantidad'])->name('carrito.cantidad');
+    Route::get ('/checkout',  [TiendaController::class, 'checkout'])->name('checkout');
+    Route::post('/checkout',  [TiendaController::class, 'confirmar'])->name('confirmar');
 });

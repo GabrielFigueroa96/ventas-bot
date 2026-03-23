@@ -49,6 +49,17 @@
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
                 <p class="text-xs text-gray-400 mt-1">Punto de venta que se asignará a todos los pedidos generados por el bot.</p>
             </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Slug de la tienda</label>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 whitespace-nowrap">{{ request()->getSchemeAndHttpHost() }}/tienda/</span>
+                    <input type="text" name="slug_tienda" value="{{ old('slug_tienda', $config->slug ?? '') }}"
+                        placeholder="mi-empresa"
+                        class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+                <p class="text-xs text-gray-400 mt-1">URL pública de la tienda online. Usá solo letras, números y guiones.</p>
+            </div>
         </div>
 
         {{-- Imagen de bienvenida --}}

@@ -24,6 +24,7 @@ class IaEmpresa extends Model
         'bot_atiende_nuevos',
         'suc',
         'pv',
+        'slug',
     ];
 
     protected $casts = [

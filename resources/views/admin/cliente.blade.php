@@ -206,9 +206,64 @@
         @endif
     </div>
 
-    {{-- Pedidos (id para refresh dinámico) --}}
-    <div id="pedidos-panel" class="space-y-4">
-        @include('admin.partials.pedidos', compact('pedidos', 'factventas'))
+    {{-- Info del cliente + Pedidos --}}
+    <div class="space-y-4">
+
+        {{-- Tarjeta info --}}
+        <div class="bg-white rounded-xl shadow p-4 grid grid-cols-2 gap-3 text-sm">
+
+            {{-- Domicilio --}}
+            <div>
+                <p class="text-xs text-gray-400 font-medium mb-0.5">Domicilio</p>
+                @php
+                    $partes = array_filter([$cliente->calle, $cliente->numero, $cliente->dato_extra]);
+                @endphp
+                <p class="text-gray-700">{{ $partes ? implode(' ', $partes) : '—' }}</p>
+            </div>
+
+            {{-- Localidad --}}
+            <div>
+                <p class="text-xs text-gray-400 font-medium mb-0.5">Localidad</p>
+                <p class="text-gray-700">
+                    {{ $cliente->localidad ?: '—' }}
+                    @if($cliente->provincia)
+                        <span class="text-gray-400">({{ $cliente->provincia }})</span>
+                    @endif
+                </p>
+            </div>
+
+            {{-- Total pedidos --}}
+            <div>
+                <p class="text-xs text-gray-400 font-medium mb-0.5">Pedidos realizados</p>
+                <p class="text-gray-700 font-semibold">{{ $totalPedidos }}</p>
+            </div>
+
+            {{-- Último pedido --}}
+            <div>
+                <p class="text-xs text-gray-400 font-medium mb-0.5">Último pedido</p>
+                @if($ultimoPedidoAt)
+                    @php $dias = \Carbon\Carbon::parse($ultimoPedidoAt)->diffInDays(now()); @endphp
+                    <p class="text-gray-700">
+                        @if($dias === 0)
+                            <span class="text-green-600 font-medium">Hoy</span>
+                        @elseif($dias === 1)
+                            <span class="text-green-600 font-medium">Ayer</span>
+                        @else
+                            <span class="{{ $dias > 30 ? 'text-red-500' : 'text-gray-700' }} font-medium">hace {{ $dias }} días</span>
+                        @endif
+                    </p>
+                @else
+                    <p class="text-gray-400">—</p>
+                @endif
+            </div>
+
+        </div>
+
+        {{-- Pedidos (id para refresh dinámico) --}}
+        <div id="pedidos-panel" class="space-y-4">
+            @include('admin.partials.pedidos', compact('pedidos', 'factventas'))
+        </div>
+
     </div>
 
 </div>

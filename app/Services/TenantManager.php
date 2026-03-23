@@ -79,6 +79,28 @@ class TenantManager
     }
 
     /**
+     * Activa el tenant a partir del slug (usado por la tienda online pública).
+     */
+    public function loadBySlug(string $slug): bool
+    {
+        $tenant = Cache::remember("tenant_slug_{$slug}", 300, fn() =>
+            DB::connection('mysql')
+                ->table('ia_tenants')
+                ->where('slug', $slug)
+                ->where('activo', true)
+                ->first()
+        );
+
+        if (!$tenant) {
+            return false;
+        }
+
+        $this->switchConnection($tenant);
+        $this->tenant = $tenant;
+        return true;
+    }
+
+    /**
      * Activa el tenant a partir del ID (usado por el middleware del admin panel).
      */
     public function loadById(int $id): bool
@@ -140,6 +162,7 @@ class TenantManager
             'api.messenger.fb_page_id'     => $tenant->messenger_page_id ?? $tenant->page_id ?? null,
             'api.messenger.ig_account_id'  => $tenant->instagram_account_id ?? null,
             'api.messenger.ig_token'       => $tenant->instagram_token ?? $tenant->messenger_token ?? null,
+            'app.tenant_slug'              => $tenant->slug ?? null,
         ]);
     }
 }
