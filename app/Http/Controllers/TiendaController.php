@@ -101,13 +101,8 @@ class TiendaController extends Controller
         $productos = Producto::paraBot()->orderBy('tablaplu.desgrupo')->orderBy('tablaplu.des')->get();
         $grupos    = $productos->groupBy('desgrupo');
 
-        $costoExtra = 0.0;
-        if ($cliente?->localidad_id) {
-            $costoExtra = (float) (Localidad::find($cliente->localidad_id)?->costo_extra ?? 0);
-        }
-
         return view('tienda.index', compact(
-            'slug', 'empresa', 'empresaNombre', 'cliente', 'grupos', 'costoExtra'
+            'slug', 'empresa', 'empresaNombre', 'cliente', 'grupos'
         ));
     }
 
@@ -582,7 +577,7 @@ class TiendaController extends Controller
                     : "• {$item['des']} {$item['cantidad']}kg\n";
             }
             $resumen .= "\n*Total: $" . number_format($total, 2, ',', '.') . "*";
-            $resumen .= "\n" . ($tipoEntrega === 'retiro' ? 'Retiro en local' : 'Envío a domicilio');
+            $resumen .= "\n" . ($tipoEntrega === 'retiro' ? 'Retiro en local' : 'Envío');
             $resumen .= "\nPago: " . (IaEmpresa::MEDIOS_PAGO[$medioPago] ?? $medioPago);
             app(BotService::class)->sendWhatsapp($cliente->phone, $resumen);
         } catch (\Throwable $e) {

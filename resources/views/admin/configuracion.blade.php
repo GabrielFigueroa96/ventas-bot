@@ -52,6 +52,30 @@
 
         </div>
 
+        {{-- Logo --}}
+        <div class="bg-white rounded-xl shadow p-5 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-700">Logo</h2>
+            <p class="text-xs text-gray-400">Imagen que aparece en el encabezado de la tienda online y en el menú del panel de administración.</p>
+
+            @if($config->imagen_tienda)
+                <div class="flex items-center gap-4">
+                    <img src="{{ asset($config->imagen_tienda) }}?v={{ $config->updated_at?->timestamp }}"
+                        alt="Logo actual" class="w-20 h-20 object-cover rounded-xl border border-gray-200">
+                    <div>
+                        <p class="text-sm font-medium text-gray-700">Logo actual</p>
+                        <label class="flex items-center gap-1.5 mt-2 text-red-600 cursor-pointer text-xs">
+                            <input type="checkbox" name="eliminar_imagen_tienda" value="1" class="accent-red-600">
+                            Eliminar logo
+                        </label>
+                    </div>
+                </div>
+            @endif
+
+            <input type="file" name="imagen_tienda" accept="image/*"
+                class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
+            <p class="text-xs text-gray-400">JPG, PNG o WebP. Recomendado: cuadrado, hasta 2 MB.</p>
+        </div>
+
         {{-- Imagen de bienvenida --}}
         <div class="bg-white rounded-xl shadow p-5 space-y-3">
             <h2 class="text-sm font-semibold text-gray-700">Imagen de bienvenida</h2>

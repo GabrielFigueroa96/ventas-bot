@@ -53,14 +53,14 @@
                 <div class="text-2xl mb-1">{{ $tipoEntrega === 'retiro' ? '🏪' : '🚚' }}</div>
                 <p class="text-xs text-gray-400 mb-0.5">Entrega</p>
                 <p class="text-sm font-semibold text-gray-800">
-                    {{ $tipoEntrega === 'retiro' ? 'Retiro en local' : 'Envío a domicilio' }}
+                    {{ $tipoEntrega === 'retiro' ? 'Retiro en local' : 'Envío' }}
                 </p>
             </div>
             <div class="bg-white rounded-2xl border border-gray-100 p-4 text-center">
                 <div class="text-2xl mb-1">💳</div>
                 <p class="text-xs text-gray-400 mb-0.5">Pago</p>
                 <p class="text-sm font-semibold text-gray-800">
-                    {{ \App\Models\IaEmpresa::MEDIOS_PAGO[$medioPago] ?? $medioPago }}
+                    {{ \App\Models\IaEmpresa::MEDIOS_PAGO[(string) $medioPago] ?? $medioPago }}
                 </p>
             </div>
         </div>

@@ -76,7 +76,7 @@
                                 @if($pedido->tipo_entrega === 'retiro')
                                     <span>🏪</span> Retiro en local
                                 @else
-                                    <span>🚚</span> Envío a domicilio
+                                    <span>🚚</span> Envío
                                 @endif
                             </span>
                             @if($pedido->forma_pago)

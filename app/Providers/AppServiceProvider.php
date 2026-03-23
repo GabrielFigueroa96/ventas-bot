@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\Empresa;
+use App\Models\IaEmpresa;
 use App\Services\TenantManager;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -22,7 +23,13 @@ class AppServiceProvider extends ServiceProvider
             } catch (\Throwable) {
                 $nombre = 'Panel Admin';
             }
+            try {
+                $logoTienda = IaEmpresa::value('imagen_tienda');
+            } catch (\Throwable) {
+                $logoTienda = null;
+            }
             $view->with('empresaNombre', $nombre);
+            $view->with('logoTienda', $logoTienda);
         });
     }
 }

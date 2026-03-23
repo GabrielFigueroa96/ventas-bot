@@ -1043,6 +1043,14 @@ Herramientas disponibles:
         $codcli = $client->cuenta ? $client->cuenta->cod : $client->id;
         $nomcli = $client->cuenta ? $client->cuenta->nom : $client->name;
         $config = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
+
+        $pedidoMinimo = (float) ($config?->pedido_minimo ?? 0);
+        if ($pedidoMinimo > 0) {
+            $totalCarrito = array_sum(array_column($carrito, 'neto'));
+            if ($totalCarrito < $pedidoMinimo) {
+                return "El pedido mínimo es $" . $this->fmt($pedidoMinimo) . ". Tu carrito suma $" . $this->fmt($totalCarrito) . ". Agregá más productos para poder confirmar.";
+            }
+        }
         $suc    = $config?->suc ?? '';
         $pv     = $config?->pv ?? '';
 
@@ -1206,7 +1214,7 @@ Herramientas disponibles:
             $estado    = $first->estado_texto;
             $cabecera  = $cabeceras->get($nro);
             $totalEst  = $cabecera ? $cabecera->total : null;
-            $entrega   = $cabecera ? ($cabecera->tipo_entrega === 'envio' ? 'Envío a domicilio' : 'Retiro en local') : null;
+            $entrega   = $cabecera ? ($cabecera->tipo_entrega === 'envio' ? 'Envío' : 'Retiro en local') : null;
             $entregaTxt = $entrega ? " | {$entrega}" : '';
 
             // Pedido pendiente: mostrar lo que pidió + total estimado + tipo entrega

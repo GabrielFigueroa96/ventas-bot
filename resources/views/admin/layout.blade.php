@@ -48,7 +48,7 @@
         ['route' => 'admin.productos',     'label' => 'Productos',    'match' => 'admin.productos*',    'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>'],
         ['route' => 'admin.localidades',   'label' => 'Localidades',  'match' => 'admin.localidades*',  'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>'],
         ['route' => 'admin.recordatorios', 'label' => 'Recordatorios','match' => 'admin.recordatorios*','icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>'],
-        ['route' => 'admin.tienda',        'label' => 'Tienda',       'match' => 'admin.tienda*',       'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>'],
+        ['route' => 'admin.tienda',        'label' => 'Web',          'match' => 'admin.tienda*',       'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>'],
         ['route' => 'admin.configuracion', 'label' => 'Configuración',          'match' => 'admin.configuracion*','icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H4a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1"/>'],
         ['route' => 'admin.uso_ia',        'label' => 'Uso IA',       'match' => 'admin.uso_ia',        'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>'],
     ];
@@ -63,7 +63,12 @@
     {{-- Logo / Negocio --}}
     <div class="px-5 py-5 border-b border-white/10">
         <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-xl bg-red-600 flex items-center justify-center text-lg shrink-0">🥩</div>
+            @if(!empty($logoTienda))
+                <img src="{{ asset($logoTienda) }}" alt="{{ $empresaNombre }}"
+                    class="w-9 h-9 rounded-xl object-cover shrink-0">
+            @else
+                <div class="w-9 h-9 rounded-xl bg-red-600 flex items-center justify-center text-lg shrink-0">🥩</div>
+            @endif
             <div class="min-w-0">
                 <p class="text-white font-semibold text-sm leading-tight truncate">{{ $empresaNombre }}</p>
                 <p class="text-gray-500 text-xs mt-0.5">Panel de administración</p>
@@ -115,7 +120,11 @@
             </svg>
         </button>
         <div class="flex items-center gap-2">
-            <span class="text-base">🥩</span>
+            @if(!empty($logoTienda))
+                <img src="{{ asset($logoTienda) }}" alt="{{ $empresaNombre }}" class="w-6 h-6 rounded-lg object-cover">
+            @else
+                <span class="text-base">🥩</span>
+            @endif
             <span class="font-semibold text-gray-800 text-sm truncate max-w-[180px]">{{ $empresaNombre }}</span>
         </div>
         <div class="w-8"></div>{{-- espaciador para centrar --}}
