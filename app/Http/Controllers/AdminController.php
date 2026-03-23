@@ -110,6 +110,28 @@ class AdminController extends Controller
         return view('admin.clientes', compact('clientes'));
     }
 
+    public function storeCliente(Request $request)
+    {
+        $request->validate([
+            'phone' => 'required|string|max:20',
+            'name'  => 'nullable|string|max:255',
+        ]);
+
+        $phone = preg_replace('/\D/', '', $request->input('phone'));
+
+        if (Cliente::where('phone', $phone)->exists()) {
+            return back()->withErrors(['phone' => 'Ya existe un cliente con ese teléfono.'])->withInput();
+        }
+
+        $cliente = Cliente::create([
+            'phone'  => $phone,
+            'name'   => $request->input('name') ?: null,
+            'estado' => 'activo',
+        ]);
+
+        return redirect()->route('admin.cliente', $cliente)->with('ok', 'Cliente creado correctamente.');
+    }
+
     public function cliente(int $id)
     {
         $cliente = Cliente::findOrFail($id);

@@ -65,7 +65,7 @@
     </div>
     <div class="flex-1 min-w-0">
         <p class="text-sm font-semibold text-gray-800">Ver precios y mis pedidos</p>
-        <p class="text-xs text-gray-400 mt-0.5">Iniciá sesión para ver los precios y tu historial.</p>
+        <p class="text-xs text-gray-400 mt-0.5">Iniciá sesión para ver tu historial.</p>
     </div>
     <a href="{{ route('tienda.login', ['slug' => $slug]) }}"
         class="flex-shrink-0 bg-red-700 hover:bg-red-800 text-white text-xs font-semibold px-4 py-2 rounded-lg transition">

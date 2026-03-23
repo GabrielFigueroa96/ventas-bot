@@ -4,7 +4,64 @@
 @section('content')
 <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-bold text-gray-800">Clientes</h1>
-    <span class="text-sm text-gray-500">{{ $clientes->total() }} registrados</span>
+    <div class="flex items-center gap-3">
+        <span class="text-sm text-gray-500">{{ $clientes->total() }} registrados</span>
+        <button onclick="document.getElementById('modal-nuevo').classList.remove('hidden')"
+            class="flex items-center gap-1.5 bg-red-700 hover:bg-red-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+            </svg>
+            Nuevo cliente
+        </button>
+    </div>
+</div>
+
+{{-- Modal nuevo cliente --}}
+<div id="modal-nuevo" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div class="flex items-center justify-between mb-5">
+            <h2 class="text-base font-bold text-gray-800">Nuevo cliente</h2>
+            <button onclick="document.getElementById('modal-nuevo').classList.add('hidden')"
+                class="text-gray-400 hover:text-gray-600 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        @if($errors->any())
+        <div class="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
+            {{ $errors->first() }}
+        </div>
+        @endif
+
+        <form method="POST" action="{{ route('admin.clientes.store') }}" class="space-y-4">
+            @csrf
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Teléfono <span class="text-red-600">*</span></label>
+                <input type="text" name="phone" value="{{ old('phone') }}" required
+                    placeholder="Ej: 5493415550000"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                <p class="text-xs text-gray-400 mt-1">Con código de país, sin + ni espacios.</p>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Nombre</label>
+                <input type="text" name="name" value="{{ old('name') }}"
+                    placeholder="Nombre del cliente"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+            </div>
+            <div class="flex gap-3 pt-1">
+                <button type="submit"
+                    class="flex-1 bg-red-700 hover:bg-red-800 text-white text-sm font-semibold py-2.5 rounded-lg transition">
+                    Crear cliente
+                </button>
+                <button type="button" onclick="document.getElementById('modal-nuevo').classList.add('hidden')"
+                    class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold py-2.5 rounded-lg transition">
+                    Cancelar
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 
 {{-- Buscador --}}
@@ -104,4 +161,8 @@
 </div>
 
 <div class="mt-4">{{ $clientes->withQueryString()->links() }}</div>
+
+@if($errors->any() || old('phone'))
+<script>document.getElementById('modal-nuevo').classList.remove('hidden');</script>
+@endif
 @endsection
