@@ -139,6 +139,7 @@ class TenantManager
             'api.messenger.token'          => $tenant->messenger_token ?? null,
             'api.messenger.fb_page_id'     => $tenant->messenger_page_id ?? $tenant->page_id ?? null,
             'api.messenger.ig_account_id'  => $tenant->instagram_account_id ?? null,
+            'api.messenger.ig_token'       => $tenant->instagram_token ?? $tenant->messenger_token ?? null,
         ]);
     }
 }

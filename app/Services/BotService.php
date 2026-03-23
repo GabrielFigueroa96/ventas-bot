@@ -1705,7 +1705,7 @@ Herramientas disponibles:
     public function sendInstagram(string $recipientId, string $message): void
     {
         $igAccountId = config('api.messenger.ig_account_id');
-        $pageToken   = config('api.messenger.token');
+        $pageToken   = config('api.messenger.ig_token');
 
         if (!$igAccountId || !$pageToken) {
             Log::error('sendInstagram: ig_account_id o token no configurados.');
