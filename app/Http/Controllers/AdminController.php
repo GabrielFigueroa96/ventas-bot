@@ -326,7 +326,6 @@ class AdminController extends Controller
         ];
 
         if ($request->hasFile('imagen_bienvenida')) {
-            // Borra la imagen anterior si existe
             if ($config->imagen_bienvenida) {
                 $anterior = public_path($config->imagen_bienvenida);
                 if (file_exists($anterior)) unlink($anterior);
@@ -334,11 +333,10 @@ class AdminController extends Controller
             $tenantId = app(\App\Services\TenantManager::class)->get()->id;
             $dir = public_path("ia-imagenes/{$tenantId}");
             if (!is_dir($dir)) mkdir($dir, 0755, true);
-
-            $file = $request->file('imagen_bienvenida');
-            $name = "ia-imagenes/{$tenantId}/bienvenida.jpg";
-            $file->move($dir, 'bienvenida.jpg');
-            $data['imagen_bienvenida'] = $name;
+            $ext      = $request->file('imagen_bienvenida')->getClientOriginalExtension() ?: 'jpg';
+            $filename = 'bienvenida-' . time() . '.' . $ext;
+            $request->file('imagen_bienvenida')->move($dir, $filename);
+            $data['imagen_bienvenida'] = "ia-imagenes/{$tenantId}/{$filename}";
         }
 
         if ($request->boolean('eliminar_imagen') && $config->imagen_bienvenida) {
