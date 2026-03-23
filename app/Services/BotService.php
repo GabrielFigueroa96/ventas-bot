@@ -1300,7 +1300,8 @@ Herramientas disponibles:
             return "No encontré el pedido #{$nro} pendiente para este cliente. Puede que ya esté procesado o no exista.";
         }
 
-        $pedidos->each->delete();
+        Pedido::where('codcli', $codcli)->where('nro', $nro)->update(['estado' => Pedido::ESTADO_CANCELADO]);
+        Pedidosia::where('nro', $nro)->update(['estado' => Pedidosia::ESTADO_CANCELADO]);
 
         return "Pedido #{$nro} cancelado correctamente.";
     }

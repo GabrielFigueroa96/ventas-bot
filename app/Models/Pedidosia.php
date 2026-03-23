@@ -45,6 +45,7 @@ class Pedidosia extends Model
     const ESTADO_CONFIRMADO  = 1;
     const ESTADO_EN_CAMINO   = 2;
     const ESTADO_ENTREGADO   = 3;
+    const ESTADO_CANCELADO   = 9;
 
     /** @deprecated */
     const ESTADO_FINALIZADO  = 1;
@@ -54,6 +55,7 @@ class Pedidosia extends Model
         1 => ['label' => 'Confirmado',  'css' => 'bg-blue-100 text-blue-700'],
         2 => ['label' => 'Preparado',   'css' => 'bg-orange-100 text-orange-700'],
         3 => ['label' => 'Entregado',   'css' => 'bg-green-100 text-green-700'],
+        9 => ['label' => 'Cancelado',   'css' => 'bg-red-100 text-red-600'],
     ];
 
     const MENSAJES_ESTADO = [

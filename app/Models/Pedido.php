@@ -52,10 +52,15 @@ class Pedido extends Model
 
     public const ESTADO_PENDIENTE  = 0;
     public const ESTADO_FINALIZADO = 1;
+    public const ESTADO_CANCELADO  = 9;
 
     public function getEstadoTextoAttribute(): string
     {
-        return $this->getAttribute('estado') == self::ESTADO_FINALIZADO ? 'Finalizado' : 'Pendiente';
+        return match((int) $this->getAttribute('estado')) {
+            self::ESTADO_FINALIZADO => 'Finalizado',
+            self::ESTADO_CANCELADO  => 'Cancelado',
+            default                 => 'Pendiente',
+        };
     }
 
     public function cliente()
