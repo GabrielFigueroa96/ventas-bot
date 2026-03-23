@@ -199,7 +199,7 @@ class AdminController extends Controller
     public function pedidos(Request $request)
     {
         $estado = $request->input('estado');
-        $fecha  = $request->input('fecha');
+        $fecha  = $request->input('fecha', today()->format('Y-m-d'));
         $search = $request->input('search');
 
         $query = Pedido::orderByDesc('reg');
