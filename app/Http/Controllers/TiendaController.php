@@ -41,7 +41,9 @@ class TiendaController extends Controller
         if (!$carrito) {
             return ['items' => [], 'count' => 0, 'total' => 0];
         }
-        $items = $carrito->items ?? [];
+        $items = array_map(fn($i) => array_merge($i, [
+            'cantidad' => $i['cantidad'] ?? $i['cant'] ?? 0,
+        ]), $carrito->items ?? []);
         $count = array_sum(array_column($items, 'cantidad'));
         $total = array_sum(array_map(fn($i) => ($i['precio'] ?? 0) * ($i['cantidad'] ?? 0), $items));
         return [

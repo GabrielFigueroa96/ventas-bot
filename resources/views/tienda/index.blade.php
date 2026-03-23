@@ -41,7 +41,7 @@
                                 }
                             }
                         }
-                        $cantActual = $itemEnCarrito['cantidad'] ?? '';
+                        $cantActual = $itemEnCarrito['cantidad'] ?? $itemEnCarrito['cant'] ?? '';
                     @endphp
                     <div class="producto-card bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 flex flex-col"
                         data-grupo="{{ $grupo }}">
@@ -99,7 +99,7 @@
 
                                 @if($itemEnCarrito)
                                     <p class="text-xs text-green-600 font-medium" id="en-carrito-{{ $producto->cod }}">
-                                        En carrito: {{ $itemEnCarrito['cantidad'] }}
+                                        En carrito: {{ $itemEnCarrito['cantidad'] ?? $itemEnCarrito['cant'] ?? 0 }}
                                         {{ $esPorKilo ? 'kg' : 'u.' }}
                                     </p>
                                 @else
