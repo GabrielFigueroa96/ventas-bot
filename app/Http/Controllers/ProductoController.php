@@ -17,8 +17,7 @@ class ProductoController extends Controller
         $filtroCat  = $request->input('catalogo');   // 'si' | 'no' | null
         $filtroDisp = $request->input('disponible'); // 'si' | 'no' | null
 
-        $productos = Producto::where('PRE', '>', 0)
-            ->with('iaProducto')
+        $productos = Producto::with('iaProducto')
             ->when($search, fn($q) => $q->where('des', 'like', "%{$search}%"))
             ->when($filtroCat === 'si',  fn($q) => $q->whereHas('iaProducto'))
             ->when($filtroCat === 'no',  fn($q) => $q->whereDoesntHave('iaProducto'))
