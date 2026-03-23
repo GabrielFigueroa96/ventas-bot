@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Cliente;
 use App\Models\Empresa;
+use App\Models\Localidad;
 use App\Models\Factventas;
 use App\Models\IaEmpresa;
 use App\Models\Message;
@@ -107,7 +108,9 @@ class AdminController extends Controller
             ->latest()
             ->paginate(20);
 
-        return view('admin.clientes', compact('clientes'));
+        $localidades = Localidad::orderBy('nombre')->get();
+
+        return view('admin.clientes', compact('clientes', 'localidades'));
     }
 
     public function storeCliente(Request $request)
@@ -123,10 +126,19 @@ class AdminController extends Controller
             return back()->withErrors(['phone' => 'Ya existe un cliente con ese teléfono.'])->withInput();
         }
 
+        $localidadId = $request->input('localidad_id') ?: null;
+        $localidad   = $localidadId ? Localidad::find($localidadId) : null;
+
         $cliente = Cliente::create([
-            'phone'  => $phone,
-            'name'   => $request->input('name') ?: null,
-            'estado' => 'activo',
+            'phone'       => $phone,
+            'name'        => $request->input('name') ?: null,
+            'estado'      => 'activo',
+            'calle'       => $request->input('calle') ?: null,
+            'numero'      => $request->input('numero') ?: null,
+            'dato_extra'  => $request->input('dato_extra') ?: null,
+            'localidad_id'=> $localidadId,
+            'localidad'   => $localidad ? $localidad->nombre : ($request->input('localidad') ?: null),
+            'provincia'   => $localidad ? $localidad->provincia : ($request->input('provincia') ?: null),
         ]);
 
         return redirect()->route('admin.cliente', $cliente)->with('ok', 'Cliente creado correctamente.');

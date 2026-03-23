@@ -50,6 +50,50 @@
                     placeholder="Nombre del cliente"
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
             </div>
+
+            {{-- Dirección --}}
+            <div class="grid grid-cols-3 gap-2">
+                <div class="col-span-2">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Calle</label>
+                    <input type="text" name="calle" value="{{ old('calle') }}"
+                        placeholder="Ej: San Martín"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Número</label>
+                    <input type="text" name="numero" value="{{ old('numero') }}"
+                        placeholder="123"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Piso / Depto / Referencia</label>
+                <input type="text" name="dato_extra" value="{{ old('dato_extra') }}"
+                    placeholder="Ej: Piso 2 Dto B"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Localidad</label>
+                @if($localidades->isNotEmpty())
+                    <select name="localidad_id"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                        <option value="">— Sin localidad —</option>
+                        @foreach($localidades as $loc)
+                            <option value="{{ $loc->id }}" {{ old('localidad_id') == $loc->id ? 'selected' : '' }}>
+                                {{ $loc->nombre }}@if($loc->provincia) ({{ $loc->provincia }})@endif
+                            </option>
+                        @endforeach
+                    </select>
+                @else
+                    <input type="text" name="localidad" value="{{ old('localidad') }}"
+                        placeholder="Ej: Rosario"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                    <input type="text" name="provincia" value="{{ old('provincia') }}"
+                        placeholder="Provincia"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-red-300">
+                @endif
+            </div>
+
             <div class="flex gap-3 pt-1">
                 <button type="submit"
                     class="flex-1 bg-red-700 hover:bg-red-800 text-white text-sm font-semibold py-2.5 rounded-lg transition">
