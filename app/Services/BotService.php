@@ -1203,28 +1203,41 @@ Herramientas disponibles:
 
         // Notificar al local
         $config = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
-        $telLocal = trim($config?->telefono_pedidos ?? '');
-        if ($telLocal) {
-            $entregaTexto = $tipoEntrega === 'envio'
-                ? "Envío: {$calle} {$numero}" . ($localidad ? ", {$localidad}" : '') . ($datoExtra ? " ({$datoExtra})" : '')
-                : 'Retiro en local';
+        $telLocal    = trim($config?->telefono_pedidos ?? '');
+        $notifActiva = $config?->notif_negocio_enabled ?? true;
 
-            $itemsTexto = implode("\n", array_map(
-                fn($item) => "  • " . ($item['cant'] > 0 ? "{$item['cant']}u" : "{$item['kilos']}kg") . " {$item['des']} — $" . $this->fmt($item['neto']),
-                array_filter($carrito, fn($i) => !in_array($i['des'], $omitidos))
-            ));
+        Log::info("createOrder notif negocio", [
+            'tel'    => $telLocal ?: '(vacío)',
+            'activa' => $notifActiva,
+            'nro'    => $nro,
+        ]);
 
-            $notif = "🛒 *Pedido #{$nro}*\n"
-                . "👤 {$nomcli} | {$client->phone}\n"
-                . "📅 Entrega: {$fecha}\n"
-                . "📦 {$entregaTexto}\n"
-                . "💳 Pago: {$formaPago}\n\n"
-                . "{$itemsTexto}\n\n"
-                . "*Total: $" . $this->fmt($total) . "*";
+        if ($telLocal && $notifActiva) {
+            try {
+                $entregaTexto = $tipoEntrega === 'envio'
+                    ? "Envío: {$calle} {$numero}" . ($localidad ? ", {$localidad}" : '') . ($datoExtra ? " ({$datoExtra})" : '')
+                    : 'Retiro en local';
 
-            if ($obs) $notif .= "\n📝 {$obs}";
+                $itemsTexto = implode("\n", array_map(
+                    fn($item) => "  • " . ($item['cant'] > 0 ? "{$item['cant']}u" : "{$item['kilos']}kg") . " {$item['des']} — $" . $this->fmt($item['neto']),
+                    array_filter($carrito, fn($i) => !in_array($i['des'], $omitidos))
+                ));
 
-            $this->sendWhatsapp($telLocal, $notif);
+                $notif = "🛒 *Pedido #{$nro}*\n"
+                    . "👤 {$nomcli} | {$client->phone}\n"
+                    . "📅 Entrega: {$fecha}\n"
+                    . "📦 {$entregaTexto}\n"
+                    . "💳 Pago: {$formaPago}\n\n"
+                    . "{$itemsTexto}\n\n"
+                    . "*Total: $" . $this->fmt($total) . "*";
+
+                if ($obs) $notif .= "\n📝 {$obs}";
+
+                $this->sendWhatsapp($telLocal, $notif);
+                Log::info("createOrder notif negocio enviada a {$telLocal}");
+            } catch (\Throwable $e) {
+                Log::error("createOrder notif negocio error: " . $e->getMessage());
+            }
         }
 
         $msg = "Pedido #{$nro} registrado: {$resumen}.";
