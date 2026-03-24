@@ -315,7 +315,7 @@ class BotService
         if ($localidadObj && !$cliente->localidad_id) {
             $cliente->update(['localidad_id' => $localidadObj->id]);
         }
-        $diasReparto   = $localidadObj?->dias_reparto ?? [];
+        $diasReparto   = array_map('intval', $localidadObj?->dias_reparto ?? []);
         if (!empty($diasReparto)) {
             $diasNombres = implode(', ', array_map(fn($d) => $diasLabel[$d] ?? $d, $diasReparto));
             $diasTexto   = $localidad
@@ -1171,7 +1171,7 @@ Herramientas disponibles:
                         ->whereRaw('LOWER(nombre) = ?', [strtolower($client->localidad)])
                         ->first()
                     : null);
-            $dias = $localidadObj?->dias_reparto ?? [];
+            $dias = array_map('intval', $localidadObj?->dias_reparto ?? []);
         }
 
         // Si el cliente pidió una fecha específica, usarla si es válida
