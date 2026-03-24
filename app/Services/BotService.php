@@ -1202,42 +1202,24 @@ Herramientas disponibles:
         ]);
 
         // Notificar al local
-        $config = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
+        $config      = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
         $telLocal    = trim($config?->telefono_pedidos ?? '');
         $notifActiva = $config?->notif_negocio_enabled ?? true;
 
-        Log::info("createOrder notif negocio", [
-            'tel'    => $telLocal ?: '(vacío)',
-            'activa' => $notifActiva,
-            'nro'    => $nro,
-        ]);
-
         if ($telLocal && $notifActiva) {
-            try {
-                $entregaTexto = $tipoEntrega === 'envio'
-                    ? "Envío: {$calle} {$numero}" . ($localidad ? ", {$localidad}" : '') . ($datoExtra ? " ({$datoExtra})" : '')
-                    : 'Retiro en local';
+            $entregaTexto = $tipoEntrega === 'envio'
+                ? "Envío: {$calle} {$numero}" . ($localidad ? ", {$localidad}" : '') . ($datoExtra ? " ({$datoExtra})" : '')
+                : 'Retiro en local';
 
-                $itemsTexto = implode("\n", array_map(
-                    fn($item) => "  • " . ($item['cant'] > 0 ? "{$item['cant']}u" : "{$item['kilos']}kg") . " {$item['des']} — $" . $this->fmt($item['neto']),
-                    array_filter($carrito, fn($i) => !in_array($i['des'], $omitidos))
-                ));
+            $itemsTexto = implode("\n", array_map(
+                fn($item) => "  • " . ($item['cant'] > 0 ? "{$item['cant']}u" : "{$item['kilos']}kg") . " {$item['des']} — $" . $this->fmt($item['neto']),
+                array_filter($carrito, fn($i) => !in_array($i['des'], $omitidos))
+            ));
 
-                $notif = "🛒 *Pedido #{$nro}*\n"
-                    . "👤 {$nomcli} | {$client->phone}\n"
-                    . "📅 Entrega: {$fecha}\n"
-                    . "📦 {$entregaTexto}\n"
-                    . "💳 Pago: {$formaPago}\n\n"
-                    . "{$itemsTexto}\n\n"
-                    . "*Total: $" . $this->fmt($total) . "*";
+            $detalle = "👤 {$client->phone} | 📅 {$fecha} | 📦 {$entregaTexto} | 💳 {$formaPago}\n\n{$itemsTexto}";
+            if ($obs) $detalle .= "\n📝 {$obs}";
 
-                if ($obs) $notif .= "\n📝 {$obs}";
-
-                $this->sendWhatsapp($telLocal, $notif);
-                Log::info("createOrder notif negocio enviada a {$telLocal}");
-            } catch (\Throwable $e) {
-                Log::error("createOrder notif negocio error: " . $e->getMessage());
-            }
+            $this->enviarNotifPedido($telLocal, $nro, $nomcli, $detalle, $total);
         }
 
         $msg = "Pedido #{$nro} registrado: {$resumen}.";
@@ -1716,6 +1698,51 @@ Herramientas disponibles:
         }
     }
 
+    /**
+     * Envía la notificación de nuevo pedido al negocio.
+     * Si hay template configurado lo usa (sin restricción de ventana 24hs).
+     * Si no, envía texto libre (requiere que el número haya escrito en las últimas 24hs).
+     */
+    public function enviarNotifPedido(string $phone, int $nro, string $nomcli, string $detalle, float $total): void
+    {
+        $config   = IaEmpresa::first();
+        $template = trim($config?->notif_template_nombre ?? '');
+
+        if ($template) {
+            try {
+                $response = Http::withToken($this->whatsappKey())
+                    ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
+                        'messaging_product' => 'whatsapp',
+                        'to'                => $phone,
+                        'type'              => 'template',
+                        'template'          => [
+                            'name'       => $template,
+                            'language'   => ['code' => 'es_AR'],
+                            'components' => [[
+                                'type'       => 'body',
+                                'parameters' => [
+                                    ['type' => 'text', 'text' => (string) $nro],
+                                    ['type' => 'text', 'text' => $nomcli],
+                                    ['type' => 'text', 'text' => $detalle],
+                                    ['type' => 'text', 'text' => number_format($total, 2, ',', '.')],
+                                ],
+                            ]],
+                        ],
+                    ]);
+                if (!$response->successful()) {
+                    Log::error("enviarNotifPedido template error [{$phone}] HTTP {$response->status()}: " . $response->body());
+                } else {
+                    Log::info("enviarNotifPedido template enviada a {$phone} nro={$nro}");
+                }
+            } catch (\Throwable $e) {
+                Log::error("enviarNotifPedido template exception: " . $e->getMessage());
+            }
+        } else {
+            $texto = "🛒 *Pedido #{$nro}*\n👤 {$nomcli}\n\n{$detalle}\n\n*Total: $" . number_format($total, 2, ',', '.') . "*";
+            $this->sendWhatsapp($phone, $texto);
+        }
+    }
+
     public function sendWhatsapp(string $phone, string $message): void
     {
         try {
@@ -1727,6 +1754,9 @@ Herramientas disponibles:
                     'text'              => ['body' => $message],
                 ]);
             $this->lastOutgoingWamid = data_get($response->json(), 'messages.0.id');
+            if (!$response->successful()) {
+                Log::error("sendWhatsapp error [{$phone}] HTTP {$response->status()}: " . $response->body());
+            }
         } catch (\Throwable $e) {
             Log::error('sendWhatsapp error: ' . $e->getMessage());
         }

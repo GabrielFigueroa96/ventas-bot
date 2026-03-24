@@ -43,6 +43,26 @@
                 </label>
             </div>
 
+            <div id="div_template" {{ old('notif_negocio_enabled', $config->notif_negocio_enabled ?? true) ? '' : 'style=display:none' }}>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Nombre del template de WhatsApp <span class="text-gray-400 font-normal">(opcional)</span></label>
+                <input type="text" name="notif_template_nombre" value="{{ old('notif_template_nombre', $config->notif_template_nombre) }}"
+                    placeholder="Ej: notif_pedido_nuevo"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                <div class="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
+                    <p class="font-semibold">¿Por qué usar un template?</p>
+                    <p>WhatsApp solo permite enviar mensajes de texto libre si el destinatario escribió en las últimas 24hs. Los templates funcionan siempre.</p>
+                    <p class="font-semibold mt-1">Cómo crear el template en Meta Business Manager:</p>
+                    <ol class="list-decimal list-inside space-y-0.5 ml-1">
+                        <li>Ingresá a <strong>business.facebook.com → Configuración → Plantillas de mensajes</strong></li>
+                        <li>Creá una plantilla con categoría <strong>Utilidad</strong>, idioma <strong>Español (ARG)</strong></li>
+                        <li>Usá este cuerpo exacto:<br>
+                            <code class="block mt-1 bg-white border border-amber-200 rounded px-2 py-1 font-mono text-xs">Pedido #&#123;&#123;1&#125;&#125; de &#123;&#123;2&#125;&#125;&#10;&#123;&#123;3&#125;&#125;&#10;Total: $&#123;&#123;4&#125;&#125;</code>
+                        </li>
+                        <li>Una vez aprobada, ingresá el nombre de la plantilla arriba</li>
+                    </ol>
+                </div>
+            </div>
+
             <div class="flex items-start gap-3">
                 <input type="checkbox" name="two_factor_enabled" value="1" id="two_factor_enabled"
                     {{ old('two_factor_enabled', $config->two_factor_enabled ?? false) ? 'checked' : '' }}
@@ -273,4 +293,12 @@
         </div>
     </form>
 </div>
+@endsection
+
+@section('scripts')
+<script>
+document.getElementById('notif_negocio_enabled')?.addEventListener('change', function () {
+    document.getElementById('div_template').style.display = this.checked ? '' : 'none';
+});
+</script>
 @endsection

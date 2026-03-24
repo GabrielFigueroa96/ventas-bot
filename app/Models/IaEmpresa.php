@@ -34,6 +34,7 @@ class IaEmpresa extends Model
         'tienda_tiktok',
         'two_factor_enabled',
         'notif_negocio_enabled',
+        'notif_template_nombre',
     ];
 
     protected $casts = [
