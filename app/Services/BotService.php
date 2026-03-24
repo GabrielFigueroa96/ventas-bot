@@ -814,7 +814,7 @@ Herramientas disponibles:
         $carrito    = $registro ? $registro->items : [];
         $productos  = Producto::paraBot()->get();
         $costoExtra = $this->costoExtraCliente($client);
-        $normalize  = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
+        $normalize  = fn(string $s) => trim(strtolower(\Illuminate\Support\Str::ascii($s)));
         $errores    = [];
 
         Log::info('agregarAlCarrito items recibidos', ['items' => $items, 'cliente' => $client->id]);
