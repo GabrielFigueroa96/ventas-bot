@@ -253,6 +253,59 @@
             </div>
         </div>
 
+        {{-- Horario y calendario --}}
+        <div class="bg-white rounded-xl shadow p-5 space-y-4">
+            <h2 class="text-sm font-semibold text-gray-700">Horario y calendario del local</h2>
+            <p class="text-xs text-gray-400">El bot usará esta información para calcular fechas de entrega y responder consultas de horario.</p>
+
+            {{-- Días abierto --}}
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-2">Días en que el local está abierto</label>
+                <div class="flex flex-wrap gap-x-4 gap-y-2">
+                    @foreach(\App\Models\IaEmpresa::DIAS_LABEL as $num => $nombre)
+                        <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+                            <input type="checkbox" name="bot_dias_abierto[]" value="{{ $num }}"
+                                {{ in_array($num, old('bot_dias_abierto', $config->bot_dias_abierto ?? [1,2,3,4,5,6])) ? 'checked' : '' }}
+                                class="accent-red-600">
+                            <span class="text-gray-700">{{ $nombre }}</span>
+                        </label>
+                    @endforeach
+                </div>
+            </div>
+
+            {{-- Horario --}}
+            <div class="flex gap-4 items-end">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Abre</label>
+                    <input type="time" name="bot_horario_apertura"
+                        value="{{ old('bot_horario_apertura', $config->bot_horario_apertura ?? '08:00') }}"
+                        class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Cierra</label>
+                    <input type="time" name="bot_horario_cierre"
+                        value="{{ old('bot_horario_cierre', $config->bot_horario_cierre ?? '13:00') }}"
+                        class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+            </div>
+
+            {{-- Fechas cerradas --}}
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-2">Fechas cerradas (feriados, vacaciones, etc.)</label>
+                <div class="flex gap-2 mb-2">
+                    <input type="date" id="fecha-picker" min="{{ now()->format('Y-m-d') }}"
+                        class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                    <button type="button" onclick="agregarFecha()"
+                        class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg">
+                        + Agregar
+                    </button>
+                </div>
+                <div id="fechas-tags" class="flex flex-wrap gap-2 min-h-6"></div>
+                <input type="hidden" name="bot_fechas_cerrado" id="fechas-input"
+                    value="{{ implode(',', $config->bot_fechas_cerrado ?? []) }}">
+            </div>
+        </div>
+
         {{-- Medios de pago --}}
         <div class="bg-white rounded-xl shadow p-5 space-y-3">
             <h2 class="text-sm font-semibold text-gray-700">Medios de pago</h2>
@@ -300,5 +353,48 @@
 document.getElementById('notif_negocio_enabled')?.addEventListener('change', function () {
     document.getElementById('div_template').style.display = this.checked ? '' : 'none';
 });
+
+// Fechas cerradas
+const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+function fechasActuales() {
+    const val = document.getElementById('fechas-input').value.trim();
+    return val ? val.split(',').filter(f => f) : [];
+}
+
+function renderFechas() {
+    const fechas = fechasActuales();
+    const container = document.getElementById('fechas-tags');
+    container.innerHTML = fechas.map(f => {
+        const d = new Date(f + 'T00:00:00');
+        const label = `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
+        return `<span class="inline-flex items-center gap-1 bg-red-50 border border-red-200 text-red-700 text-xs rounded-full px-3 py-1">
+            ${label}
+            <button type="button" onclick="quitarFecha('${f}')" class="ml-1 hover:text-red-900 font-bold leading-none">&times;</button>
+        </span>`;
+    }).join('');
+}
+
+function agregarFecha() {
+    const picker = document.getElementById('fecha-picker');
+    const fecha  = picker.value;
+    if (!fecha) return;
+    const fechas = fechasActuales();
+    if (!fechas.includes(fecha)) {
+        fechas.push(fecha);
+        fechas.sort();
+        document.getElementById('fechas-input').value = fechas.join(',');
+        renderFechas();
+    }
+    picker.value = '';
+}
+
+function quitarFecha(fecha) {
+    const fechas = fechasActuales().filter(f => f !== fecha);
+    document.getElementById('fechas-input').value = fechas.join(',');
+    renderFechas();
+}
+
+renderFechas();
 </script>
 @endsection

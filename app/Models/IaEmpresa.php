@@ -35,10 +35,16 @@ class IaEmpresa extends Model
         'two_factor_enabled',
         'notif_negocio_enabled',
         'notif_template_nombre',
+        'bot_dias_abierto',
+        'bot_horario_apertura',
+        'bot_horario_cierre',
+        'bot_fechas_cerrado',
     ];
 
     protected $casts = [
         'bot_dias_reparto'       => 'array',
+        'bot_dias_abierto'       => 'array',
+        'bot_fechas_cerrado'     => 'array',
         'bot_permite_retiro'     => 'boolean',
         'bot_permite_envio'      => 'boolean',
         'bot_medios_pago'        => 'array',

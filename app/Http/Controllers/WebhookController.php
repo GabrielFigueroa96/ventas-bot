@@ -145,6 +145,50 @@ class WebhookController extends Controller
                 mkdir(public_path("chat-images/{$tenantId}"), 0755, true);
             }
             file_put_contents(public_path($imgPath), base64_decode($image['base64']));
+        } elseif ($type === 'interactive') {
+            $iType = $msg['interactive']['type'] ?? '';
+            if ($iType === 'button_reply') {
+                $buttonId = $msg['interactive']['button_reply']['id'] ?? '';
+                $message  = $msg['interactive']['button_reply']['title'] ?? '';
+
+                $client = Cliente::firstOrCreate(['phone' => $phone]);
+
+                try {
+                    Message::create(['cliente_id' => $client->id, 'message' => $message, 'direction' => 'incoming', 'type' => 'interactive', 'wamid' => $wamid]);
+                } catch (UniqueConstraintViolationException) {
+                    return response()->json(['status' => 'duplicate']);
+                }
+
+                if ($client->modo === 'humano') {
+                    return response()->json(['status' => 'human_mode']);
+                }
+
+                $reply = $bot->handleInteractiveResponse($client, $buttonId);
+                $this->saveOutgoingMessage($client->id, $reply, $bot->lastOutgoingWamid);
+                return response()->json(['status' => 'ok']);
+
+            } elseif ($iType === 'list_reply') {
+                $listId  = $msg['interactive']['list_reply']['id'] ?? '';
+                $message = $msg['interactive']['list_reply']['title'] ?? '';
+
+                $client = Cliente::firstOrCreate(['phone' => $phone]);
+
+                try {
+                    Message::create(['cliente_id' => $client->id, 'message' => $message, 'direction' => 'incoming', 'type' => 'interactive', 'wamid' => $wamid]);
+                } catch (UniqueConstraintViolationException) {
+                    return response()->json(['status' => 'duplicate']);
+                }
+
+                if ($client->modo === 'humano') {
+                    return response()->json(['status' => 'human_mode']);
+                }
+
+                $reply = $bot->handleInteractiveResponse($client, $listId);
+                $this->saveOutgoingMessage($client->id, $reply, $bot->lastOutgoingWamid);
+                return response()->json(['status' => 'ok']);
+            }
+
+            return response()->json(['status' => 'ignored']);
         } else {
             $client = Cliente::firstOrCreate(['phone' => $phone]);
             $bot->sendWhatsapp($phone, "Por ahora solo proceso texto, voz e imágenes. 😊");

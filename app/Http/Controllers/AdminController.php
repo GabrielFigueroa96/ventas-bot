@@ -363,6 +363,10 @@ class AdminController extends Controller
             'bot_atiende_nuevos'     => $request->input('bot_atiende_nuevos', 'bot'),
             'suc'                    => $request->input('suc'),
             'pv'                     => $request->input('pv'),
+            'bot_dias_abierto'       => $request->has('bot_dias_abierto') ? array_map('intval', $request->input('bot_dias_abierto')) : null,
+            'bot_horario_apertura'   => $request->input('bot_horario_apertura') ?: null,
+            'bot_horario_cierre'     => $request->input('bot_horario_cierre') ?: null,
+            'bot_fechas_cerrado'     => $this->parseFechasCerradas($request->input('bot_fechas_cerrado', '')),
         ];
 
         if ($request->hasFile('imagen_bienvenida')) {
@@ -429,6 +433,12 @@ class AdminController extends Controller
         }
 
         return back()->with('ok', 'Configuración guardada.');
+    }
+
+    private function parseFechasCerradas(string $raw): array
+    {
+        $fechas = array_filter(array_map('trim', explode(',', $raw)));
+        return array_values(array_filter($fechas, fn($f) => preg_match('/^\d{4}-\d{2}-\d{2}$/', $f)));
     }
 
     public function tienda()

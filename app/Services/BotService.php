@@ -56,6 +56,14 @@ class BotService
             return '';
         }
 
+        // Cliente en flujo de confirmación interactiva (esperando botones)
+        // Si escribe texto, cancelamos silenciosamente y procesamos el mensaje con IA normalmente
+        if (str_starts_with($client->estado ?? '', 'confirmando_')) {
+            Cache::forget('pedido_conf_' . $client->id);
+            $client->update(['estado' => 'activo']);
+            $client->refresh();
+        }
+
         // Registro inicial: nombre → localidad → provincia
         if (empty($client->name) || $client->estado === 'esperando_nombre') {
             if ($client->estado !== 'esperando_nombre') {
@@ -156,7 +164,9 @@ class BotService
         }
 
         $response = $this->askChatGPT($message, $client, $image);
-        $this->sendReply($client, $response);
+        if ($response !== '') {
+            $this->sendReply($client, $response);
+        }
         return $response;
     }
 
@@ -176,7 +186,15 @@ class BotService
 
         if ($choice['finish_reason'] === 'tool_calls') {
             $puedePedir = $empresa?->bot_puede_pedir ?? true;
-            return $this->handleToolCalls($choice, $messages, $cliente, $tools, $puedePedir);
+            $result = $this->handleToolCalls($choice, $messages, $cliente, $tools, $puedePedir);
+
+            // Si el cliente entró en flujo interactivo, los botones ya fueron enviados: no enviar texto adicional
+            $cliente->refresh();
+            if (str_starts_with($cliente->estado ?? '', 'confirmando_')) {
+                return '';
+            }
+
+            return $result;
         }
 
         return $choice['message']['content'];
@@ -351,12 +369,20 @@ class BotService
         $mediosLabel       = IaEmpresa::MEDIOS_PAGO;
         $mediosTexto       = 'Medios de pago aceptados: ' . implode(', ', array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados)) . '.';
 
-        // Próximo día de reparto disponible para este cliente
+        // Horario y calendario del local
+        $fechasCerradas     = $empresa?->bot_fechas_cerrado ?? [];
+        $diasAbierto        = $empresa?->bot_dias_abierto   ?? [1, 2, 3, 4, 5, 6];
+        $horarioApertura    = $empresa?->bot_horario_apertura ?? '';
+        $horarioCierre      = $empresa?->bot_horario_cierre   ?? '';
+
+        // Próximo día de reparto para este cliente (respeta fechas cerradas)
         $proximoRepartoTexto = '';
         if (!empty($diasReparto)) {
-            for ($i = 1; $i <= 7; $i++) {
+            for ($i = 1; $i <= 14; $i++) {
                 $candidato = now()->addDays($i);
-                if (in_array((int) $candidato->format('w'), $diasReparto)) {
+                $diaSemana = (int) $candidato->format('w');
+                $fechaStr  = $candidato->format('Y-m-d');
+                if (\in_array($diaSemana, $diasReparto, true) && !\in_array($fechaStr, $fechasCerradas, true)) {
                     $proximoRepartoTexto = $candidato->locale('es')->isoFormat('dddd D [de] MMMM');
                     break;
                 }
@@ -386,6 +412,22 @@ class BotService
         if ($diasTexto)                       $configNegocio .= "\n{$diasTexto}";
         if ($todasLasZonas)                   $configNegocio .= "\nZonas de entrega disponibles: {$todasLasZonas}";
         if ($puedeMasVendidos && $masVendidosGlobal) $configNegocio .= "\nProductos más vendidos del negocio: {$masVendidosGlobal}";
+
+        // Horario y calendario
+        if (!empty($diasAbierto)) {
+            $diasAbiertos = implode(', ', array_map(fn($d) => $diasLabel[$d] ?? $d, $diasAbierto));
+            $configNegocio .= "\nEl local abre para retiro los: {$diasAbiertos}.";
+        }
+        if ($horarioApertura && $horarioCierre) {
+            $configNegocio .= "\nHorario de atención: {$horarioApertura} a {$horarioCierre}hs.";
+        }
+        if (!empty($fechasCerradas)) {
+            $cerradasFmt = implode(', ', array_map(
+                fn($f) => \Carbon\Carbon::parse($f)->locale('es')->isoFormat('D [de] MMMM'),
+                $fechasCerradas
+            ));
+            $configNegocio .= "\nFechas en que el local estará cerrado (sin entregas ni retiros): {$cerradasFmt}.";
+        }
 
         if (!$puedePedir)    $configNegocio .= "\n\nIMPORTANTE: No podés tomar pedidos. Solo informás precios y describís productos. Si el cliente quiere pedir, indicale que contacte al negocio directamente.";
         if (!$puedeSupgerir) $configNegocio .= "\nNo sugieras productos de forma proactiva. Solo respondé lo que el cliente consulte.";
@@ -446,14 +488,9 @@ Pasos:
 1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación extra ni resumas antes. Si el cliente dice si, dale, esta bien o similar con una cantidad implícita o explícita → accioná.
 2. Podés agregar múltiples productos en una sola llamada a agregar_al_carrito.
 3. Mostrá el resumen con ver_carrito. Si hay alertas de precio (⚠️) o producto no disponible (❌), ofrecé actualizar o eliminar el ítem antes de continuar.
-4. Preguntá en un solo mensaje: {$paso3Fecha} | {$paso3Entrega} | {$paso3Pago}
-5. Si eligió ENVÍO:
-   - Si hay última dirección registrada, ofrecésela para confirmar o cambiar.
-   - Si no hay, pedí calle, número y localidad (dato extra como piso/depto es opcional).
-   - Confirmale la dirección antes de proceder.
-6. Cuando tenés todos los datos (fecha, tipo_entrega, forma_pago, dirección si aplica), llamá DIRECTAMENTE a crear_pedido sin enviar ningún mensaje previo.
-   - Fecha en obs si el cliente dice horario o turno (no en fecha_entrega).
-7. Una vez creado el pedido (ves 'Pedido #X registrado' en la respuesta del sistema), confirmáselo al cliente y no vuelvas a pedir confirmación. Si pregunta por el total o detalle, usá ver_pedidos.
+4. Cuando el carrito esté listo, preguntá si el cliente confirma. Podés mencionar la próxima fecha de entrega ({$paso3Fecha}). Luego llamá DIRECTAMENTE crear_pedido — el sistema pedirá entrega y forma de pago con un menú interactivo. No preguntes por tipo de entrega ni medio de pago vos.
+5. Una vez creado el pedido (ves 'Botones enviados' en la respuesta del sistema), no envíes ningún mensaje: el cliente ya está viendo los botones de confirmación.
+6. Si el cliente dice el horario o turno preferido, guardalo en obs (no en fecha_entrega).
 
 IMPORTANTE: Nunca calcules precios ni totales manualmente. Los precios pueden incluir recargos por zona que solo el sistema conoce. Siempre usá ver_carrito para mostrar importes.
 
@@ -756,7 +793,7 @@ Herramientas disponibles:
                         'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
                         'ver_carrito'        => $this->verCarrito($cliente),
                         'vaciar_carrito'     => $this->vaciarCarrito($cliente),
-                        'crear_pedido'       => $this->createOrder($cliente, $args['fecha_entrega'] ?? now()->addDay()->format('Y-m-d'), $args['tipo_entrega'] ?? 'retiro', $args['forma_pago'] ?? 'efectivo', $args['calle'] ?? '', $args['numero'] ?? '', $args['localidad'] ?? '', $args['dato_extra'] ?? '', $args['obs'] ?? ''),
+                        'crear_pedido'       => $this->iniciarConfirmacionPedido($cliente),
                         'ver_pedidos'        => $this->orderStatus($cliente),
                         'ver_precios'        => $this->priceList($cliente),
                         'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false), $puedePedir),
@@ -810,7 +847,13 @@ Herramientas disponibles:
 
     private function agregarAlCarrito($client, array $items): string
     {
-        $registro   = $this->getCarrito($client);
+        $registro = DB::transaction(fn() =>
+            Carrito::where('cliente_id', $client->id)
+                ->where('expires_at', '>', now())
+                ->latest()
+                ->lockForUpdate()
+                ->first()
+        );
         $carrito    = $registro ? $registro->items : [];
         $productos  = Producto::paraBot()->get();
         $costoExtra = $this->costoExtraCliente($client);
@@ -902,13 +945,13 @@ Herramientas disponibles:
         if ($registro) {
             $registro->update([
                 'items'      => $carrito,
-                'expires_at' => now()->addMinutes(15),
+                'expires_at' => now()->addMinutes(60),
             ]);
         } else {
             $registro = Carrito::create([
                 'cliente_id' => $client->id,
                 'items'      => $carrito,
-                'expires_at' => now()->addMinutes(15),
+                'expires_at' => now()->addMinutes(60),
             ]);
         }
 
@@ -1080,6 +1123,247 @@ Herramientas disponibles:
         return null;
     }
 
+    // -------------------------------------------------------------------------
+    // Flujo de confirmación interactiva (botones / listas)
+    // -------------------------------------------------------------------------
+
+    private function getProximaFechaValida($client, string $tipoEntrega, $empresa): string
+    {
+        $fechasCerradas = $empresa?->bot_fechas_cerrado ?? [];
+
+        if ($tipoEntrega === 'retiro') {
+            $dias = $empresa?->bot_dias_abierto ?? [1, 2, 3, 4, 5, 6]; // Lun–Sáb por defecto
+        } else {
+            $localidadObj = $client->localidadObj;
+            $dias = $localidadObj?->dias_reparto ?? $empresa?->bot_dias_reparto ?? [];
+        }
+
+        for ($i = 1; $i <= 14; $i++) {
+            $candidato = now()->addDays($i);
+            $diaSemana = (int) $candidato->format('w');
+            $fechaStr  = $candidato->format('Y-m-d');
+
+            if (empty($dias)) {
+                // Sin días configurados: cualquier día que no esté cerrado sirve
+                if (!\in_array($fechaStr, $fechasCerradas, true)) {
+                    return $fechaStr;
+                }
+            } elseif (\in_array($diaSemana, $dias, true) && !\in_array($fechaStr, $fechasCerradas, true)) {
+                return $fechaStr;
+            }
+        }
+
+        return now()->addDay()->format('Y-m-d');
+    }
+
+    public function iniciarConfirmacionPedido($client): string
+    {
+        $empresa       = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
+        $permiteEnvio  = $empresa?->bot_permite_envio  ?? true;
+        $permiteRetiro = $empresa?->bot_permite_retiro ?? true;
+
+        $carrito = $this->getCarrito($client);
+        $items   = $carrito ? $carrito->items : [];
+
+        if (empty($items)) {
+            return 'El carrito está vacío.';
+        }
+
+        $itemsText = implode("\n", array_map(
+            fn($item) => '• ' . ($item['cant'] > 0 ? "{$item['cant']}u" : "{$item['kilos']}kg") . " {$item['des']} — $" . $this->fmt($item['neto']),
+            $items
+        ));
+        $total = array_sum(array_column($items, 'neto'));
+
+        // Si solo hay una opción de entrega, saltear esa pantalla
+        if ($permiteEnvio && !$permiteRetiro) {
+            $fecha     = $this->getProximaFechaValida($client, 'envio', $empresa);
+            $fechaLabel = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
+            $client->update(['estado' => 'confirmando_pago']);
+            Cache::put('pedido_conf_' . $client->id, [
+                'tipo_entrega'  => 'envio',
+                'fecha_entrega' => $fecha,
+                'calle'         => $client->calle      ?? '',
+                'numero'        => $client->numero     ?? '',
+                'localidad'     => $client->localidad  ?? '',
+                'dato_extra'    => $client->dato_extra ?? '',
+            ], now()->addMinutes(30));
+            $this->enviarListaPago($client, $empresa, $itemsText, $total, "📍 Envío — {$fechaLabel}");
+            return 'Botones enviados';
+        }
+
+        if (!$permiteEnvio && $permiteRetiro) {
+            $fecha      = $this->getProximaFechaValida($client, 'retiro', $empresa);
+            $fechaLabel = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
+            $client->update(['estado' => 'confirmando_pago']);
+            Cache::put('pedido_conf_' . $client->id, [
+                'tipo_entrega'  => 'retiro',
+                'fecha_entrega' => $fecha,
+            ], now()->addMinutes(30));
+            $this->enviarListaPago($client, $empresa, $itemsText, $total, "🏪 Retiro en local — {$fechaLabel}");
+            return 'Botones enviados';
+        }
+
+        // Ambas opciones disponibles
+        $client->update(['estado' => 'confirmando_entrega']);
+        $this->sendInteractiveButtons(
+            $client->phone,
+            "{$itemsText}\n\n*Total: $" . $this->fmt($total) . '*',
+            '¿Cómo recibís tu pedido?',
+            [
+                ['id' => 'entrega_envio',  'title' => 'Envío a domicilio'],
+                ['id' => 'entrega_retiro', 'title' => 'Retiro en local'],
+            ]
+        );
+
+        return 'Botones enviados';
+    }
+
+    public function handleInteractiveResponse($client, string $id): string
+    {
+        $estado = $client->estado ?? '';
+
+        if ($estado === 'confirmando_entrega') {
+            return $this->handleEntregaSeleccionada($client, $id);
+        }
+
+        if ($estado === 'confirmando_pago') {
+            return $this->handlePagoSeleccionado($client, $id);
+        }
+
+        if ($estado === 'confirmando_final') {
+            return $this->handleConfirmacionFinal($client, $id);
+        }
+
+        return '';
+    }
+
+    private function handleEntregaSeleccionada($client, string $id): string
+    {
+        $tipoEntrega = ($id === 'entrega_envio') ? 'envio' : 'retiro';
+        $empresa     = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
+
+        $data = [
+            'tipo_entrega'   => $tipoEntrega,
+            'fecha_entrega'  => $this->getProximaFechaValida($client, $tipoEntrega, $empresa),
+        ];
+        if ($tipoEntrega === 'envio') {
+            $data['calle']      = $client->calle      ?? '';
+            $data['numero']     = $client->numero     ?? '';
+            $data['localidad']  = $client->localidad  ?? '';
+            $data['dato_extra'] = $client->dato_extra ?? '';
+        }
+        Cache::put('pedido_conf_' . $client->id, $data, now()->addMinutes(30));
+        $client->update(['estado' => 'confirmando_pago']);
+
+        $carrito   = $this->getCarrito($client);
+        $items     = $carrito ? $carrito->items : [];
+        $itemsText = implode("\n", array_map(
+            fn($item) => '• ' . ($item['cant'] > 0 ? "{$item['cant']}u" : "{$item['kilos']}kg") . " {$item['des']} — $" . $this->fmt($item['neto']),
+            $items
+        ));
+        $total     = array_sum(array_column($items, 'neto'));
+
+        $fechaLabel = \Carbon\Carbon::parse($data['fecha_entrega'])->locale('es')->isoFormat('dddd D [de] MMMM');
+        $tipoLabel  = $tipoEntrega === 'envio'
+            ? "📍 Envío — {$fechaLabel}"
+            : "🏪 Retiro en local — {$fechaLabel}";
+
+        $this->enviarListaPago($client, $empresa, $itemsText, $total, $tipoLabel);
+
+        return '';
+    }
+
+    private function enviarListaPago($client, $empresa, string $itemsText, float $total, string $entregaLabel): void
+    {
+        $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
+        $allMedios         = IaEmpresa::MEDIOS_PAGO;
+
+        $rows = [];
+        foreach ($mediosHabilitados as $key) {
+            if (isset($allMedios[$key])) {
+                $rows[] = ['id' => 'pago_' . $key, 'title' => $allMedios[$key]];
+            }
+        }
+
+        $body = "{$itemsText}\n\n*Total: $" . $this->fmt($total) . "*\n{$entregaLabel}";
+
+        $this->sendInteractiveList(
+            $client->phone,
+            $body,
+            'Ver opciones',
+            [['title' => 'Medios de pago', 'rows' => $rows]]
+        );
+    }
+
+    private function handlePagoSeleccionado($client, string $id): string
+    {
+        $medioPago = str_replace('pago_', '', $id);
+        $cacheKey  = 'pedido_conf_' . $client->id;
+        $data      = Cache::get($cacheKey, []);
+        $data['medio_pago'] = $medioPago;
+        Cache::put($cacheKey, $data, now()->addMinutes(30));
+        $client->update(['estado' => 'confirmando_final']);
+
+        $carrito   = $this->getCarrito($client);
+        $items     = $carrito ? $carrito->items : [];
+        $itemsText = implode("\n", array_map(
+            fn($item) => '• ' . ($item['cant'] > 0 ? "{$item['cant']}u" : "{$item['kilos']}kg") . " {$item['des']} — $" . $this->fmt($item['neto']),
+            $items
+        ));
+        $total     = array_sum(array_column($items, 'neto'));
+        $allMedios = IaEmpresa::MEDIOS_PAGO;
+        $medioLabel = $allMedios[$medioPago] ?? $medioPago;
+        $tipoLabel  = ($data['tipo_entrega'] ?? 'retiro') === 'envio' ? 'Envío a domicilio' : 'Retiro en local';
+
+        $body = "{$itemsText}\n\n"
+            . "📦 {$tipoLabel}\n"
+            . "💳 {$medioLabel}\n"
+            . "*Total: $" . $this->fmt($total) . '*';
+
+        $this->sendInteractiveButtons(
+            $client->phone,
+            $body,
+            'Confirmá tu pedido',
+            [
+                ['id' => 'confirmar_si', 'title' => 'Confirmar pedido'],
+                ['id' => 'confirmar_no', 'title' => 'Cancelar'],
+            ]
+        );
+
+        return '';
+    }
+
+    private function handleConfirmacionFinal($client, string $id): string
+    {
+        $cacheKey = 'pedido_conf_' . $client->id;
+        $data     = Cache::get($cacheKey, []);
+        $client->update(['estado' => 'activo']);
+        Cache::forget($cacheKey);
+
+        if ($id === 'confirmar_si') {
+            $result = $this->createOrder(
+                $client,
+                $data['fecha_entrega'] ?? now()->format('Y-m-d'),
+                $data['tipo_entrega'] ?? 'retiro',
+                $data['medio_pago']   ?? 'efectivo',
+                $data['calle']        ?? '',
+                $data['numero']       ?? '',
+                $data['localidad']    ?? '',
+                $data['dato_extra']   ?? '',
+                ''
+            );
+            $this->sendReply($client, $result);
+            return $result;
+        }
+
+        $msg = '👌 Pedido cancelado. ¿En qué más puedo ayudarte?';
+        $this->sendReply($client, $msg);
+        return $msg;
+    }
+
+    // -------------------------------------------------------------------------
+
     private function createOrder($client, string $fechaEntrega = '', string $tipoEntrega = 'retiro', string $formaPago = 'efectivo', string $calle = '', string $numero = '', string $localidad = '', string $datoExtra = '', string $obs = ''): string
     {
         $registro = $this->getCarrito($client);
@@ -1165,8 +1449,28 @@ Herramientas disponibles:
             ]);
         }
 
-        // Limpiar el carrito una vez que los ítems están guardados
-        $registro?->delete();
+        DB::transaction(function () use ($nro, $codcli, $client, $nomcli, $fecha, $tipoEntrega, $calle, $numero, $localidad, $datoExtra, $formaPago, $carrito, $obs, $registro) {
+            $total = array_sum(array_column($carrito, 'neto'));
+            Pedidosia::create([
+                'nro'          => $nro,
+                'codcli'       => $codcli,
+                'idcliente'    => $client->id,
+                'nomcli'       => $nomcli,
+                'fecha'        => $fecha,
+                'tipo_entrega' => $tipoEntrega,
+                'calle'        => $calle ?: null,
+                'numero'       => $numero ?: null,
+                'localidad'    => $localidad ?: null,
+                'dato_extra'   => $datoExtra ?: null,
+                'forma_pago'   => $formaPago,
+                'total'        => $total,
+                'obs'          => $obs ?: null,
+                'estado'       => Pedidosia::ESTADO_PENDIENTE,
+                'pedido_at'    => now(),
+            ]);
+            // Limpiar carrito dentro de la transacción
+            $registro?->delete();
+        });
 
         $extras = [];
         if (!empty($omitidos)) {
@@ -1182,24 +1486,6 @@ Herramientas disponibles:
         ));
 
         $total = array_sum(array_column($carrito, 'neto'));
-
-        Pedidosia::create([
-            'nro'          => $nro,
-            'codcli'       => $codcli,
-            'idcliente'    => $client->id,
-            'nomcli'       => $nomcli,
-            'fecha'        => $fecha,
-            'tipo_entrega' => $tipoEntrega,
-            'calle'        => $calle ?: null,
-            'numero'       => $numero ?: null,
-            'localidad'    => $localidad ?: null,
-            'dato_extra'   => $datoExtra ?: null,
-            'forma_pago'   => $formaPago,
-            'total'        => $total,
-            'obs'          => $obs ?: null,
-            'estado'       => Pedidosia::ESTADO_PENDIENTE,
-            'pedido_at'    => now(),
-        ]);
 
         // Notificar al local
         $config      = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
@@ -1740,6 +2026,61 @@ Herramientas disponibles:
         } else {
             $texto = "🛒 *Pedido #{$nro}*\n👤 {$nomcli}\n\n{$detalle}\n\n*Total: $" . number_format($total, 2, ',', '.') . "*";
             $this->sendWhatsapp($phone, $texto);
+        }
+    }
+
+    public function sendInteractiveButtons(string $phone, string $body, string $footer, array $buttons): void
+    {
+        $btnPayload = array_map(fn($b) => [
+            'type'  => 'reply',
+            'reply' => ['id' => $b['id'], 'title' => $b['title']],
+        ], $buttons);
+
+        try {
+            $response = Http::withToken($this->whatsappKey())
+                ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $phone,
+                    'type'              => 'interactive',
+                    'interactive'       => [
+                        'type'   => 'button',
+                        'body'   => ['text' => $body],
+                        'footer' => ['text' => $footer],
+                        'action' => ['buttons' => $btnPayload],
+                    ],
+                ]);
+            $this->lastOutgoingWamid = data_get($response->json(), 'messages.0.id');
+            if (!$response->successful()) {
+                Log::error("sendInteractiveButtons error [{$phone}]: " . $response->body());
+            }
+        } catch (\Throwable $e) {
+            Log::error("sendInteractiveButtons exception [{$phone}]: " . $e->getMessage());
+        }
+    }
+
+    public function sendInteractiveList(string $phone, string $body, string $buttonText, array $sections): void
+    {
+        try {
+            $response = Http::withToken($this->whatsappKey())
+                ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $phone,
+                    'type'              => 'interactive',
+                    'interactive'       => [
+                        'type'   => 'list',
+                        'body'   => ['text' => $body],
+                        'action' => [
+                            'button'   => $buttonText,
+                            'sections' => $sections,
+                        ],
+                    ],
+                ]);
+            $this->lastOutgoingWamid = data_get($response->json(), 'messages.0.id');
+            if (!$response->successful()) {
+                Log::error("sendInteractiveList error [{$phone}]: " . $response->body());
+            }
+        } catch (\Throwable $e) {
+            Log::error("sendInteractiveList exception [{$phone}]: " . $e->getMessage());
         }
     }
 

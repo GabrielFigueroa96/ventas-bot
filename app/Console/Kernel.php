@@ -15,6 +15,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('pedidos:notificar')->everyMinute();
         $schedule->command('recordatorios:enviar')->everyMinute();
         $schedule->command('clientes:seguimiento')->dailyAt('10:00');
+        $schedule->call(fn() => \App\Models\Carrito::where('expires_at', '<', now()->subHours(2))->delete())->hourly();
     }
 
     /**
