@@ -799,7 +799,7 @@ Herramientas disponibles:
                         'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
                         'ver_carrito'        => $this->verCarrito($cliente),
                         'vaciar_carrito'     => $this->vaciarCarrito($cliente),
-                        'crear_pedido'       => $this->iniciarConfirmacionPedido($cliente, $args['fecha_entrega'] ?? null),
+                        'crear_pedido'       => $this->iniciarConfirmacionPedido($cliente),
                         'ver_pedidos'        => $this->orderStatus($cliente),
                         'ver_precios'        => $this->priceList($cliente),
                         'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false), $puedePedir),
@@ -1196,7 +1196,7 @@ Herramientas disponibles:
         return now()->addDay()->format('Y-m-d');
     }
 
-    public function iniciarConfirmacionPedido($client, ?string $fechaSolicitada = null): string
+    public function iniciarConfirmacionPedido($client): string
     {
         $empresa       = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
         $permiteEnvio  = $empresa?->bot_permite_envio  ?? true;
@@ -1217,7 +1217,7 @@ Herramientas disponibles:
 
         // Si solo hay una opción de entrega, saltear esa pantalla
         if ($permiteEnvio && !$permiteRetiro) {
-            $fecha     = $this->getProximaFechaValida($client, 'envio', $empresa, $fechaSolicitada);
+            $fecha     = $this->getProximaFechaValida($client, 'envio', $empresa);
             $fechaLabel = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
             $client->update(['estado' => 'confirmando_pago']);
             Cache::put('pedido_conf_' . $client->id, [
@@ -1233,7 +1233,7 @@ Herramientas disponibles:
         }
 
         if (!$permiteEnvio && $permiteRetiro) {
-            $fecha      = $this->getProximaFechaValida($client, 'retiro', $empresa, $fechaSolicitada);
+            $fecha      = $this->getProximaFechaValida($client, 'retiro', $empresa);
             $fechaLabel = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
             $client->update(['estado' => 'confirmando_pago']);
             Cache::put('pedido_conf_' . $client->id, [
@@ -1244,11 +1244,8 @@ Herramientas disponibles:
             return 'Botones enviados';
         }
 
-        // Ambas opciones disponibles — guardar fechaSolicitada para usarla al elegir tipo entrega
+        // Ambas opciones disponibles
         $client->update(['estado' => 'confirmando_entrega']);
-        if ($fechaSolicitada) {
-            Cache::put('pedido_conf_' . $client->id, ['fecha_solicitada' => $fechaSolicitada], now()->addMinutes(30));
-        }
         $this->sendInteractiveButtons(
             $client->phone,
             "{$itemsText}\n\n*Total: $" . $this->fmt($total) . '*',
@@ -1285,13 +1282,9 @@ Herramientas disponibles:
     {
         $tipoEntrega     = ($id === 'entrega_envio') ? 'envio' : 'retiro';
         $empresa         = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
-        $cacheKey        = 'pedido_conf_' . $client->id;
-        $prevData        = Cache::get($cacheKey, []);
-        $fechaSolicitada = $prevData['fecha_solicitada'] ?? null;
-
         $data = [
             'tipo_entrega'   => $tipoEntrega,
-            'fecha_entrega'  => $this->getProximaFechaValida($client, $tipoEntrega, $empresa, $fechaSolicitada),
+            'fecha_entrega'  => $this->getProximaFechaValida($client, $tipoEntrega, $empresa),
         ];
         if ($tipoEntrega === 'envio') {
             $data['calle']      = $client->calle      ?? '';
