@@ -32,6 +32,7 @@ class IaEmpresa extends Model
         'tienda_facebook',
         'tienda_instagram',
         'tienda_tiktok',
+        'two_factor_enabled',
     ];
 
     protected $casts = [
@@ -44,6 +45,7 @@ class IaEmpresa extends Model
         'bot_puede_mas_vendidos' => 'boolean',
         'bot_notifica_estados'   => 'boolean',
         'tienda_ocultar_precios' => 'boolean',
+        'two_factor_enabled'     => 'boolean',
         'pedido_minimo'          => 'float',
     ];
 

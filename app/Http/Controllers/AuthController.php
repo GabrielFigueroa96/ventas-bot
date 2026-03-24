@@ -32,12 +32,16 @@ class AuthController extends Controller
             ])->onlyInput('email');
         }
 
-        // Cargar el tenant para obtener el teléfono de contacto
+        // Cargar el tenant para obtener la config de 2FA
         $telefono = null;
         if ($user->tenant_id) {
             try {
                 app(TenantManager::class)->loadById((int) $user->tenant_id);
-                $telefono = IaEmpresa::first()?->telefono_pedidos;
+                $iaEmpresa = IaEmpresa::first();
+                $twoFactorEnabled = $iaEmpresa?->two_factor_enabled ?? false;
+                if ($twoFactorEnabled) {
+                    $telefono = $iaEmpresa?->telefono_pedidos;
+                }
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error("2FA tenant error: " . $e->getMessage());
             }

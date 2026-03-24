@@ -34,10 +34,10 @@ class AdminController extends Controller
             'mensajes_hoy' => Message::whereDate('created_at', today())->count(),
         ];
 
-        $pedidos_recientes = Pedido::orderByDesc('reg')
-            ->get()
-            ->groupBy('nro')
-            ->take(10);
+        $pedidos_recientes = Pedidosia::with('items')
+            ->orderByDesc('id')
+            ->take(10)
+            ->get();
 
         // Pedidos por día — últimos 14 días
         $porDiaRaw = Pedido::selectRaw('fecha, COUNT(DISTINCT nro) as total')
@@ -190,10 +190,43 @@ class AdminController extends Controller
         $pedidosia     = $this->loadPedidosia($pedidosRaw);
         $lastPedidoReg = (int) ($pedidosRaw->max('reg') ?? 0);
 
-        $totalPedidos    = $pedidos->count();
-        $ultimoPedidoAt  = $pedidosRaw->max('pedido_at');
+        $totalPedidos   = $pedidos->count();
+        $ultimoPedidoAt = $pedidosRaw->max('pedido_at');
+        $localidades    = Localidad::orderBy('nombre')->get();
 
-        return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas', 'pedidosia', 'lastPedidoReg', 'totalPedidos', 'ultimoPedidoAt'));
+        return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas', 'pedidosia', 'lastPedidoReg', 'totalPedidos', 'ultimoPedidoAt', 'localidades'));
+    }
+
+    public function updateCliente(Request $request, Cliente $cliente)
+    {
+        $request->validate([
+            'name'   => 'nullable|string|max:255',
+            'phone'  => 'required|string|max:20',
+            'estado' => 'required|in:activo,inactivo',
+        ]);
+
+        $phone = preg_replace('/\D/', '', $request->input('phone'));
+
+        if (Cliente::where('phone', $phone)->where('id', '!=', $cliente->id)->exists()) {
+            return back()->withErrors(['phone' => 'Ya existe otro cliente con ese teléfono.'])->withInput();
+        }
+
+        $localidadId = $request->input('localidad_id') ?: null;
+        $localidad   = $localidadId ? Localidad::find($localidadId) : null;
+
+        $cliente->update([
+            'name'         => $request->input('name') ?: null,
+            'phone'        => $phone,
+            'estado'       => $request->input('estado'),
+            'calle'        => $request->input('calle') ?: null,
+            'numero'       => $request->input('numero') ?: null,
+            'dato_extra'   => $request->input('dato_extra') ?: null,
+            'localidad_id' => $localidadId,
+            'localidad'    => $localidad ? $localidad->nombre : ($request->input('localidad_texto') ?: null),
+            'provincia'    => $localidad ? $localidad->provincia : null,
+        ]);
+
+        return redirect()->route('admin.cliente', $cliente)->with('ok', 'Cliente actualizado.');
     }
 
     public function pedidos(Request $request)
@@ -311,6 +344,7 @@ class AdminController extends Controller
         $data = [
             'nombre_ia'          => $request->input('nombre_ia'),
             'telefono_pedidos'   => $request->input('telefono_pedidos'),
+            'two_factor_enabled' => $request->boolean('two_factor_enabled'),
             'bot_info'           => $request->input('bot_info'),
             'bot_instrucciones'  => $request->input('bot_instrucciones'),
             'bot_permite_retiro'     => $request->boolean('bot_permite_retiro'),

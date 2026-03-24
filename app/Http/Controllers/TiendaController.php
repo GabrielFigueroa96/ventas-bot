@@ -480,9 +480,8 @@ class TiendaController extends Controller
             if ($updateData)  $cliente->update($updateData);
         }
 
-        $items    = $carrito->items ?? [];
-        $subtotal = array_sum(array_map(fn($i) => ($i['precio'] ?? 0) * ($i['cantidad'] ?? 0), $items));
-        $total    = $subtotal;
+        $items = $carrito->items ?? [];
+        $total = array_sum(array_map(fn($i) => $i['neto'] ?? 0, $items));
 
         // Validar pedido mínimo
         $pedidoMinimo = (float) ($empresa->pedido_minimo ?? 0);
@@ -501,11 +500,11 @@ class TiendaController extends Controller
 
         $lineas = [];
         foreach ($items as $item) {
-            $tipo = strtolower($item['tipo'] ?? '');
-            if ($tipo === 'unidad') {
-                $lineas[] = "{$item['des']} x{$item['cantidad']} = $" . number_format($item['neto'], 2, ',', '.');
+            $esPeso = strtolower($item['tipo'] ?? '') !== 'unidad';
+            if ($esPeso) {
+                $lineas[] = "  • {$item['des']} " . ($item['kilos'] ?? 0) . "kg = $" . number_format($item['neto'] ?? 0, 2, ',', '.');
             } else {
-                $lineas[] = "{$item['des']} {$item['cantidad']}kg = $" . number_format($item['neto'], 2, ',', '.');
+                $lineas[] = "  • {$item['des']} x" . ($item['cant'] ?? 0) . " = $" . number_format($item['neto'] ?? 0, 2, ',', '.');
             }
         }
         $descripcion = implode("\n", $lineas);
@@ -520,7 +519,7 @@ class TiendaController extends Controller
                 'fecha'     => $fecha,
                 'nro'       => $nro,
                 'nomcli'    => $nomcli,
-                'cant'      => $item['cantidad'],
+                'cant'      => $item['cant'] ?? 0,
                 'descrip'   => $item['des'],
                 'kilos'     => $item['kilos'] ?? 0,
                 'precio'    => $item['precio'],
@@ -537,12 +536,12 @@ class TiendaController extends Controller
             ]);
         }
 
-        try {
-            $localNombre = '';
-            if ($tipoEntrega === 'envio' && !empty($localidadId)) {
-                $localNombre = Localidad::find($localidadId)?->nombre ?? '';
-            }
+        $localNombre = '';
+        if ($tipoEntrega === 'envio' && !empty($localidadId)) {
+            $localNombre = Localidad::find($localidadId)?->nombre ?? '';
+        }
 
+        try {
             Pedidosia::create([
                 'nro'          => $nro,
                 'nomcli'       => $nomcli,
@@ -571,10 +570,10 @@ class TiendaController extends Controller
         try {
             $resumen = "✅ *Pedido #{$nro} recibido*\n\n";
             foreach ($items as $item) {
-                $tipo = strtolower($item['tipo'] ?? '');
-                $resumen .= $tipo === 'unidad'
-                    ? "• {$item['des']} x{$item['cantidad']}\n"
-                    : "• {$item['des']} {$item['cantidad']}kg\n";
+                $esPeso = strtolower($item['tipo'] ?? '') !== 'unidad';
+                $resumen .= $esPeso
+                    ? "• {$item['des']} " . ($item['kilos'] ?? 0) . "kg\n"
+                    : "• {$item['des']} x" . ($item['cant'] ?? 0) . "\n";
             }
             $resumen .= "\n*Total: $" . number_format($total, 2, ',', '.') . "*";
             $resumen .= "\n" . ($tipoEntrega === 'retiro' ? 'Retiro en local' : 'Envío');
@@ -587,12 +586,22 @@ class TiendaController extends Controller
         // Notificación WhatsApp al negocio
         try {
             if ($empresa->telefono_pedidos) {
-                $notif = "🛒 *Nuevo pedido web #{$nro}*\n";
-                $notif .= "Cliente: {$nomcli} ({$cliente->phone})\n";
-                $notif .= $descripcion . "\n";
-                $notif .= "*Total: $" . number_format($total, 2, ',', '.') . "*\n";
-                $notif .= ($tipoEntrega === 'retiro' ? 'Retiro en local' : 'Envío');
-                $notif .= " | " . (IaEmpresa::MEDIOS_PAGO[$medioPago] ?? $medioPago);
+                $entregaTexto = $tipoEntrega === 'envio'
+                    ? 'Envío: ' . trim(($request->input('calle') ?? '') . ' ' . ($request->input('numero') ?? ''))
+                        . ($localNombre ? ", {$localNombre}" : '')
+                        . ($request->input('dato_extra') ? ' (' . $request->input('dato_extra') . ')' : '')
+                    : 'Retiro en local';
+
+                $notif = "🛒 *Nuevo pedido web #{$nro}*\n"
+                    . "👤 {$nomcli} | {$cliente->phone}\n"
+                    . "📅 Fecha: {$fecha}\n"
+                    . "📦 {$entregaTexto}\n"
+                    . "💳 Pago: " . (IaEmpresa::MEDIOS_PAGO[$medioPago] ?? $medioPago) . "\n\n"
+                    . $descripcion . "\n\n"
+                    . "*Total: $" . number_format($total, 2, ',', '.') . "*";
+
+                if ($obs) $notif .= "\n📝 {$obs}";
+
                 app(BotService::class)->sendWhatsapp($empresa->telefono_pedidos, $notif);
             }
         } catch (\Throwable $e) {

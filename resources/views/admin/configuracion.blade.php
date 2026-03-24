@@ -32,6 +32,18 @@
                 <p class="text-xs text-gray-400 mt-1">Se usa para recibir copia de pedidos por WhatsApp y para enviar el código de verificación al iniciar sesión.</p>
             </div>
 
+            @if($config->telefono_pedidos)
+            <div class="flex items-start gap-3">
+                <input type="checkbox" name="two_factor_enabled" value="1" id="two_factor_enabled"
+                    {{ old('two_factor_enabled', $config->two_factor_enabled ?? true) ? 'checked' : '' }}
+                    class="mt-0.5 accent-red-600">
+                <label for="two_factor_enabled" class="text-sm cursor-pointer">
+                    <span class="font-medium text-gray-700">Verificación en dos pasos (WhatsApp)</span>
+                    <p class="text-xs text-gray-400 mt-0.5">Al iniciar sesión se enviará un código al número {{ $config->telefono_pedidos }}.</p>
+                </label>
+            </div>
+            @endif
+
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Sucursal</label>
                 <input type="text" name="suc" value="{{ old('suc', $config->suc) }}"

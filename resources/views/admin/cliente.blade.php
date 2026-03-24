@@ -37,6 +37,15 @@
         </div>
     </div>
 
+    {{-- Botón editar --}}
+    <button onclick="abrirModalEditar()"
+        class="shrink-0 flex items-center gap-1.5 text-sm text-gray-600 border border-gray-300 hover:border-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+        </svg>
+        Editar
+    </button>
+
     {{-- Control bot/humano --}}
     @if($cliente->modo === 'humano')
         <div class="flex items-center gap-3">
@@ -62,10 +71,92 @@
 </div>
 
 @if(session('success'))
-    <div class="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2 rounded-lg mb-4">
-        {{ session('success') }}
-    </div>
+    <div class="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2 rounded-lg mb-4">{{ session('success') }}</div>
 @endif
+@if(session('ok'))
+    <div class="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2 rounded-lg mb-4">{{ session('ok') }}</div>
+@endif
+@if($errors->any())
+    <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg mb-4">{{ $errors->first() }}</div>
+@endif
+
+{{-- Modal editar cliente --}}
+<div id="modal-editar" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <h3 class="font-bold text-gray-800 text-base mb-5">Editar cliente</h3>
+
+        <form method="POST" action="{{ route('admin.cliente.update', $cliente) }}" class="space-y-4">
+            @csrf
+            @method('PUT')
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Nombre</label>
+                    <input type="text" name="name" value="{{ old('name', $cliente->name) }}"
+                        placeholder="Nombre del cliente"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Teléfono</label>
+                    <input type="text" name="phone" value="{{ old('phone', $cliente->phone) }}" required
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div class="col-span-3 sm:col-span-1">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Calle</label>
+                    <input type="text" name="calle" value="{{ old('calle', $cliente->calle) }}"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Número</label>
+                    <input type="text" name="numero" value="{{ old('numero', $cliente->numero) }}"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Piso/Depto</label>
+                    <input type="text" name="dato_extra" value="{{ old('dato_extra', $cliente->dato_extra) }}"
+                        placeholder="Ej: 2° A"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Localidad</label>
+                <select name="localidad_id"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                    <option value="">— Sin localidad —</option>
+                    @foreach($localidades as $loc)
+                        <option value="{{ $loc->id }}" {{ old('localidad_id', $cliente->localidad_id) == $loc->id ? 'selected' : '' }}>
+                            {{ $loc->nombre }}{{ $loc->provincia ? ' (' . $loc->provincia . ')' : '' }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Estado</label>
+                <select name="estado"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                    <option value="activo"   {{ old('estado', $cliente->estado) === 'activo'   ? 'selected' : '' }}>Activo</option>
+                    <option value="inactivo" {{ old('estado', $cliente->estado) === 'inactivo' ? 'selected' : '' }}>Inactivo</option>
+                </select>
+            </div>
+
+            <div class="flex gap-2 pt-1">
+                <button type="button" onclick="cerrarModalEditar()"
+                    class="flex-1 border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm font-medium py-2 rounded-lg transition">
+                    Cancelar
+                </button>
+                <button type="submit"
+                    class="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 rounded-lg transition">
+                    Guardar cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <div class="grid md:grid-cols-2 gap-6 items-start">
 
@@ -373,6 +464,11 @@ async function pollPedidos() {
     } catch (_) {}
 }
 
+// Abrir modal editar si hay errores de validación
+@if($errors->any())
+abrirModalEditar();
+@endif
+
 // Scroll inicial al fondo
 scrollBottom();
 
@@ -539,6 +635,17 @@ document.addEventListener('click', e => {
     if (!e.target.closest('#cuenta-buscar') && !e.target.closest('#cuenta-display')) {
         document.getElementById('cuenta-buscar')?.classList.add('hidden');
     }
+});
+
+// ── Modal editar cliente ─────────────────────────────────────────────────────
+function abrirModalEditar() {
+    document.getElementById('modal-editar').classList.remove('hidden');
+}
+function cerrarModalEditar() {
+    document.getElementById('modal-editar').classList.add('hidden');
+}
+document.getElementById('modal-editar')?.addEventListener('click', function(e) {
+    if (e.target === this) cerrarModalEditar();
 });
 
 // ── Modal imprimir ────────────────────────────────────────────────────────────

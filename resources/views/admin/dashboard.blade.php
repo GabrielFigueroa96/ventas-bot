@@ -169,23 +169,22 @@
         <a href="{{ route('admin.pedidos') }}" class="text-sm text-red-600 hover:underline">Ver todos</a>
     </div>
     <div class="divide-y">
-        @forelse($pedidos_recientes as $nro => $items)
+        @forelse($pedidos_recientes as $pedido)
         <div class="px-4 sm:px-6 py-4">
             <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        <span class="font-semibold text-gray-800">#{{ $nro }}</span>
-                        <span class="text-sm text-gray-500 truncate">{{ $items->first()->nomcli }} — {{ $items->first()->fecha }}</span>
+                        <span class="font-semibold text-gray-800">#{{ $pedido->nro }}</span>
+                        <span class="text-sm text-gray-500 truncate">{{ $pedido->nomcli }} — {{ $pedido->fecha->format('d/m/Y') }}</span>
                     </div>
                     <ul class="mt-1 text-sm text-gray-600">
-                        @foreach($items as $item)
+                        @foreach($pedido->items as $item)
                             <li>• {{ $item->descrip }} — {{ $item->kilos }} kg/u</li>
                         @endforeach
                     </ul>
                 </div>
-                <span class="shrink-0 text-xs px-2 py-1 rounded-full font-medium
-                    {{ $items->first()->estado == 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700' }}">
-                    {{ $items->first()->estado_texto }}
+                <span class="shrink-0 text-xs px-2 py-1 rounded-full font-medium {{ $pedido->estadoCss() }}">
+                    {{ $pedido->estadoLabel() }}
                 </span>
             </div>
         </div>

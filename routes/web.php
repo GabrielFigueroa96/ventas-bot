@@ -24,6 +24,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::get ('/clientes',           [AdminController::class, 'clientes'])->name('clientes');
     Route::post('/clientes',           [AdminController::class, 'storeCliente'])->name('clientes.store');
     Route::get ('/clientes/{cliente}', [AdminController::class, 'cliente'])->name('cliente');
+    Route::put ('/clientes/{cliente}', [AdminController::class, 'updateCliente'])->name('cliente.update');
     Route::get  ('/pedidos',                             [AdminController::class, 'pedidos'])->name('pedidos');
     Route::patch('/pedidos/ia/{id}/estado',              [AdminController::class, 'avanzarEstadoPedido'])->name('pedidos.ia.estado');
     Route::patch('/pedidos/ia/{id}/cancelar',            [AdminController::class, 'cancelarPedido'])->name('pedidos.ia.cancelar');

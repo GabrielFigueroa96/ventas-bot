@@ -11,7 +11,7 @@
             <svg class="w-5 h-5 text-green-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
-            <span><strong>Web habilitada.</strong> Los clientes pueden visualizar productos y realizar pedidos desde la web.</span>
+            <span><strong>Web habilitada.</strong> Los clientes pueden visualizar productos y su historial de pedidos desde la web.</span>
         </div>
     @else
         <div class="flex items-start gap-3 bg-gray-50 border border-gray-200 text-gray-600 text-sm px-4 py-4 rounded-xl">
