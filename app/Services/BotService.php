@@ -812,19 +812,43 @@ Herramientas disponibles:
         $normalize  = fn(string $s) => strtolower(\Illuminate\Support\Str::ascii($s));
         $errores    = [];
 
+        Log::info('agregarAlCarrito items recibidos', ['items' => $items, 'cliente' => $client->id]);
+
         foreach ($items as $item) {
             $descrip  = trim($item['descrip'] ?? '');
             $cantidad = $this->parsearNumero($item['cantidad'] ?? 0);
 
-            if ($descrip === '') continue;
+            Log::info("agregarAlCarrito procesando", [
+                'descrip'   => $descrip,
+                'cantidad'  => $cantidad,
+                'normalize' => $normalize($descrip),
+            ]);
+
+            if ($descrip === '') {
+                Log::warning('agregarAlCarrito: descrip vacío, se omite');
+                continue;
+            }
 
             // Solo coincidencia exacta (normalizada): el nombre debe ser igual al de la lista
             $match = $productos->first(fn($p) => $normalize($p->des) === $normalize($descrip));
 
             if (!$match) {
+                // Log de los candidatos cercanos para diagnóstico
+                $candidatos = $productos->filter(fn($p) => str_contains($normalize($p->des), $normalize($descrip)) || str_contains($normalize($descrip), $normalize($p->des)))->pluck('des')->take(5)->toArray();
+                Log::warning("agregarAlCarrito: '{$descrip}' no encontrado", [
+                    'normalize_buscado' => $normalize($descrip),
+                    'candidatos'        => $candidatos,
+                    'total_productos'   => $productos->count(),
+                ]);
                 $errores[] = "Producto '{$descrip}' no encontrado en la lista. Llamá ver_producto para encontrar el nombre exacto correcto antes de agregar.";
                 continue;
             }
+
+            Log::info("agregarAlCarrito: match encontrado '{$match->des}'", [
+                'cod'   => $match->cod,
+                'tipo'  => $match->tipo,
+                'precio'=> $match->precio,
+            ]);
 
             // notas_ia con "precio fijo" → se cobra por unidad aunque tipo sea Peso
             $precioFijo = !empty($match->notas_ia) && stripos($match->notas_ia, 'precio fijo') !== false;
