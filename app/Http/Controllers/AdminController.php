@@ -235,9 +235,10 @@ class AdminController extends Controller
 
     public function pedidos(Request $request)
     {
-        $estado = $request->input('estado');
-        $fecha  = $request->input('fecha', today()->format('Y-m-d'));
-        $search = $request->input('search');
+        $estado     = $request->input('estado');
+        $fecha      = $request->input('fecha', today()->format('Y-m-d'));
+        $search     = $request->input('search');
+        $porEntrega = $request->boolean('por_entrega');
 
         $query = Pedido::orderByDesc('reg');
 
@@ -247,8 +248,13 @@ class AdminController extends Controller
         }
 
         if ($fecha) {
-            // Filtrar por fecha de creación del pedido (pedido_at en ia_pedidos)
-            $nrosDeFecha = Pedidosia::whereDate('pedido_at', $fecha)->pluck('nro');
+            if ($porEntrega) {
+                // Filtrar por fecha de entrega (campo fecha en ia_pedidos)
+                $nrosDeFecha = Pedidosia::whereDate('fecha', $fecha)->pluck('nro');
+            } else {
+                // Filtrar por fecha de creación
+                $nrosDeFecha = Pedidosia::whereDate('pedido_at', $fecha)->pluck('nro');
+            }
             $query->whereIn('nro', $nrosDeFecha);
         }
 
@@ -262,7 +268,7 @@ class AdminController extends Controller
         $pedidosia  = $this->loadPedidosia($pedidosRaw);
         $vmayo      = $this->loadVmayo($pedidosia);
 
-        return view('admin.pedidos', compact('pedidos', 'factventas', 'pedidosia', 'vmayo', 'fecha'));
+        return view('admin.pedidos', compact('pedidos', 'factventas', 'pedidosia', 'vmayo', 'fecha', 'porEntrega'));
     }
 
     public function usoIa()

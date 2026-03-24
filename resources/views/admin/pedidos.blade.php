@@ -20,6 +20,16 @@
     <input type="date" name="fecha" value="{{ $fecha }}"
         class="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
 
+    <label class="flex items-center gap-2 text-sm text-gray-600 select-none cursor-pointer self-center">
+        <div class="relative">
+            <input type="checkbox" name="por_entrega" value="1" class="sr-only peer"
+                {{ request('por_entrega') ? 'checked' : '' }}>
+            <div class="w-9 h-5 bg-gray-300 rounded-full peer-checked:bg-red-500 transition-colors"></div>
+            <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+        </div>
+        Fecha de entrega
+    </label>
+
     <button type="submit" class="bg-red-600 text-white rounded-lg px-5 py-2 text-sm hover:bg-red-700">Filtrar</button>
     <a href="{{ route('admin.pedidos') }}" class="text-sm text-gray-500 hover:underline self-center">Limpiar</a>
 </form>
