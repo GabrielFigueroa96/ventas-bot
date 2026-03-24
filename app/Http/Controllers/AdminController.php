@@ -29,8 +29,8 @@ class AdminController extends Controller
 
         $stats = [
             'clientes'     => Cliente::count(),
-            'pedidos_hoy'  => Pedido::whereDate('fecha', today())->distinct('nro')->count('nro'),
-            'pedidos_pend' => Pedido::where('estado', Pedido::ESTADO_PENDIENTE)->distinct('nro')->count('nro'),
+            'pedidos_hoy'  => Pedidosia::whereDate('pedido_at', today())->count(),
+            'pedidos_pend' => Pedidosia::where('estado', Pedidosia::ESTADO_PENDIENTE)->count(),
             'mensajes_hoy' => Message::whereDate('created_at', today())->count(),
         ];
 
@@ -55,8 +55,8 @@ class AdminController extends Controller
 
         // Donut: pendientes vs finalizados
         $chartEstados = [
-            Pedido::where('estado', Pedido::ESTADO_PENDIENTE)->distinct('nro')->count('nro'),
-            Pedido::where('estado', Pedido::ESTADO_FINALIZADO)->distinct('nro')->count('nro'),
+            Pedidosia::where('estado', Pedidosia::ESTADO_PENDIENTE)->count(),
+            Pedidosia::where('estado', Pedidosia::ESTADO_ENTREGADO)->count(),
         ];
 
         // Top 6 artículos más pedidos (por kilos totales)
