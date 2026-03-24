@@ -42,6 +42,36 @@
 
 </div>
 
+{{-- Costos estimados --}}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+
+    <div class="bg-white rounded-xl shadow p-4 sm:p-5 flex items-center gap-3">
+        <div class="bg-purple-100 text-purple-600 rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-lg shrink-0">🧠</div>
+        <div class="min-w-0">
+            <p class="text-xs text-gray-500 uppercase font-medium">Costo IA este mes</p>
+            <p class="text-2xl sm:text-3xl font-bold text-purple-700">U$S {{ number_format($costoIaMes, 4) }}</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-4 sm:p-5 flex items-center gap-3">
+        <div class="bg-green-100 text-green-600 rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-lg shrink-0">📲</div>
+        <div class="min-w-0">
+            <p class="text-xs text-gray-500 uppercase font-medium">Costo WA estimado</p>
+            <p class="text-2xl sm:text-3xl font-bold text-green-700">U$S {{ number_format($costoWaMes, 2) }}</p>
+            <p class="text-xs text-gray-400 mt-0.5">{{ number_format($templatesMes) }} templates × U$S 0.05</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-4 sm:p-5 flex items-center gap-3">
+        <div class="bg-red-100 text-red-600 rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-lg shrink-0">💰</div>
+        <div class="min-w-0">
+            <p class="text-xs text-gray-500 uppercase font-medium">Costo total estimado</p>
+            <p class="text-2xl sm:text-3xl font-bold text-red-700">U$S {{ number_format($costoIaMes + $costoWaMes, 2) }}</p>
+        </div>
+    </div>
+
+</div>
+
 {{-- Detalle por modelo --}}
 @if($filasMes->isNotEmpty())
 <div class="bg-white rounded-xl shadow mb-6 overflow-hidden">

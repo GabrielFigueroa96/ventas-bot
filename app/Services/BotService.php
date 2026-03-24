@@ -375,6 +375,7 @@ class BotService
 
         // Próximo día de reparto para este cliente (respeta fechas cerradas)
         $proximoRepartoTexto = '';
+        $proximoRepartoFecha = '';
         if (!empty($diasReparto)) {
             for ($i = 1; $i <= 14; $i++) {
                 $candidato = now()->addDays($i);
@@ -382,6 +383,7 @@ class BotService
                 $fechaStr  = $candidato->format('Y-m-d');
                 if (\in_array($diaSemana, $diasReparto, true) && !\in_array($fechaStr, $fechasCerradas, true)) {
                     $proximoRepartoTexto = $candidato->locale('es')->isoFormat('dddd D [de] MMMM');
+                    $proximoRepartoFecha = $fechaStr;
                     break;
                 }
             }
@@ -395,7 +397,7 @@ class BotService
         $mediosOpciones = array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados);
 
         $paso3Fecha = $proximoRepartoTexto
-            ? "¿Lo querés para el próximo {$proximoRepartoTexto}?" . (count($diasReparto) > 1 ? ' (o indicá otra fecha de reparto disponible)' : '')
+            ? "¿Lo querés para el próximo {$proximoRepartoTexto} ({$proximoRepartoFecha})?" . (count($diasReparto) > 1 ? ' (o indicá otra fecha de reparto disponible)' : '')
             : '¿Para cuándo?';
         $paso3Entrega = count($entregasOpciones) === 1
             ? '¿Te lo ' . (in_array('envío', $entregasOpciones) ? 'enviamos' : 'pasás a buscar') . '?'
@@ -2059,6 +2061,11 @@ Herramientas disponibles:
         $template = trim($parts[0]);
         $langCode = isset($parts[1]) ? trim($parts[1]) : 'es_AR';
 
+        // Los parámetros de template no admiten saltos de línea ni tabs
+        $mensajePlano = preg_replace('/\s*\n\s*/', ' | ', trim($mensaje));
+        $mensajePlano = preg_replace('/\t+/', ' ', $mensajePlano);
+        $mensajePlano = preg_replace('/ {5,}/', '    ', $mensajePlano);
+
         try {
             $response = Http::withToken($this->whatsappKey())
                 ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
@@ -2072,7 +2079,7 @@ Herramientas disponibles:
                             'type'       => 'body',
                             'parameters' => [
                                 ['type' => 'text', 'text' => $nombre],
-                                ['type' => 'text', 'text' => $mensaje],
+                                ['type' => 'text', 'text' => $mensajePlano],
                             ],
                         ]],
                     ],

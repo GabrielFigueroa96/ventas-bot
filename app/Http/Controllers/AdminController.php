@@ -299,6 +299,20 @@ class AdminController extends Controller
             $chartTokens[] = (int) ($tokensporDiaRaw[$d] ?? 0);
         }
 
+        // Costo IA este mes
+        $costoIaMes = DB::table('ia_token_usos')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->sum('costo_usd');
+
+        // Templates WA enviados este mes (notif pedido + recordatorios)
+        // Se cuentan los mensajes de tipo 'template' en el log, o estimamos por pedidos confirmados + recordatorios
+        $templatesMes = DB::table('ia_pedidos')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->count();
+        $costoWaMes = $templatesMes * 0.05;
+
         // Conversaciones WhatsApp este mes
         try {
             $waConvMes = DB::table('ia_messages')
@@ -333,6 +347,7 @@ class AdminController extends Controller
 
         return view('admin.uso', compact(
             'filasMes', 'inputTokens', 'outputTokens', 'totalTokens',
+            'costoIaMes', 'costoWaMes', 'templatesMes',
             'waConvMes',
             'chartDias', 'chartTokens',
             'chartWaDias', 'chartWa',
