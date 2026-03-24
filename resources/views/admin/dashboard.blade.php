@@ -179,7 +179,15 @@
                     </div>
                     <ul class="mt-1 text-sm text-gray-600">
                         @foreach($pedido->items as $item)
-                            <li>• {{ $item->descrip }} — {{ $item->kilos }} kg/u</li>
+                            <li>• {{ $item->descrip }}
+                                @if($item->kilos > 0 && $item->cant > 0)
+                                    — {{ (int) $item->cant }} u · {{ number_format($item->kilos, 2, ',', '.') }} kg
+                                @elseif($item->kilos > 0)
+                                    — {{ number_format($item->kilos, 3, ',', '.') }} kg
+                                @elseif($item->cant > 0)
+                                    — {{ (int) $item->cant }} u.
+                                @endif
+                            </li>
                         @endforeach
                     </ul>
                 </div>

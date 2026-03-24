@@ -749,6 +749,8 @@ Herramientas disponibles:
                 $funcName = $toolCall['function']['name'];
                 $args     = json_decode($toolCall['function']['arguments'], true) ?? [];
 
+                Log::info("toolCall [{$funcName}]", ['args' => $args]);
+
                 try {
                     $result = match ($funcName) {
                         'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
@@ -765,7 +767,10 @@ Herramientas disponibles:
                 } catch (\Throwable $e) {
                     Log::error("handleToolCalls [{$funcName}] error: " . $e->getMessage());
                     $result = 'Error interno al ejecutar la función. Informale al cliente que hubo un problema técnico y que intente nuevamente en unos minutos.';
+
                 }
+
+                Log::info("toolCall [{$funcName}] result", ['result' => substr($result, 0, 300)]);
 
                 $messages[] = [
                     'role'         => 'tool',
