@@ -90,6 +90,7 @@ async function avanzarEstado(id, btn) {
 
         // Actualizar data-estado para la próxima vez
         btn.dataset.estado = data.estado;
+        actualizarTimeline(id, data.estado);
 
         if (data.estado >= max) {
             btn.remove();
@@ -129,6 +130,42 @@ function elegirVmayo(nro) {
     cerrarModalVmayo();
     if (window._vmayoResolve) { window._vmayoResolve(nro); window._vmayoResolve = null; }
 }
+// ── Timeline ──────────────────────────────────────────────────────────────────
+function actualizarTimeline(id, estado) {
+    const el = document.getElementById(`timeline-sia-${id}`);
+    if (!el) return;
+    const tipo  = el.dataset.tipo;
+    const pasos = tipo === 'retiro'
+        ? ['Pendiente', 'Confirmado', 'Listo', 'Retirado']
+        : ['Pendiente', 'Confirmado', 'Preparado', 'En camino', 'Entregado'];
+
+    let html = '';
+    pasos.forEach((label, i) => {
+        const done    = estado > i;
+        const current = estado === i;
+        const circleClass = done
+            ? 'bg-red-600 text-white'
+            : current
+                ? 'bg-red-100 text-red-700 ring-2 ring-red-500'
+                : 'bg-gray-100 text-gray-400';
+        const labelClass = current
+            ? 'text-red-600 font-semibold'
+            : done ? 'text-gray-500' : 'text-gray-300';
+        const lineClass = done ? 'bg-red-500' : 'bg-gray-200';
+
+        html += `<div class="flex flex-col items-center shrink-0">
+            <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${circleClass}">
+                ${done ? '✓' : i + 1}
+            </div>
+            <span class="text-[10px] mt-0.5 leading-tight text-center ${labelClass}">${label}</span>
+        </div>`;
+        if (i < pasos.length - 1) {
+            html += `<div class="h-px flex-1 mb-3.5 ${lineClass}"></div>`;
+        }
+    });
+    el.innerHTML = html;
+}
+
 function cerrarModalVmayo() {
     document.getElementById('modal-vmayo').classList.add('hidden');
 }

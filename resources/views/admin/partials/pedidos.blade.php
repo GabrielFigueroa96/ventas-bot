@@ -126,7 +126,7 @@
                 ? [0 => 'Pendiente', 1 => 'Confirmado', 2 => 'Listo', 3 => 'Retirado']
                 : [0 => 'Pendiente', 1 => 'Confirmado', 2 => 'Preparado', 3 => 'En camino', 4 => 'Entregado'];
         @endphp
-        <div class="flex items-center gap-0 mt-3">
+        <div id="timeline-sia-{{ $sia->id }}" data-tipo="{{ $sia->tipo_entrega }}" class="flex items-center gap-0 mt-3">
             @foreach($pasos as $paso => $pasoLabel)
                 @php
                     $done    = $siaEstado > $paso;

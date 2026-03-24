@@ -11,7 +11,15 @@
             {{ strtoupper(substr($cliente->name ?? '?', 0, 1)) }}
         </div>
         <div>
-            <h1 class="text-2xl font-bold text-gray-800">{{ $cliente->name ?? 'Sin nombre' }}</h1>
+            <div class="flex items-center gap-2">
+                <h1 class="text-2xl font-bold text-gray-800">{{ $cliente->name ?? 'Sin nombre' }}</h1>
+                <button onclick="abrirModalEditar()" title="Editar cliente"
+                    class="text-gray-400 hover:text-red-600 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                </button>
+            </div>
             <p class="text-gray-500 text-sm">{{ $cliente->phone }} · Cliente desde {{ $cliente->created_at->format('d/m/Y') }}</p>
             {{-- Cuenta vinculada --}}
             <div class="mt-1.5 flex items-center gap-2" id="cuenta-display">
@@ -36,15 +44,6 @@
             </div>
         </div>
     </div>
-
-    {{-- Botón editar --}}
-    <button onclick="abrirModalEditar()"
-        class="shrink-0 flex items-center gap-1.5 text-sm text-gray-600 border border-gray-300 hover:border-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-        </svg>
-        Editar
-    </button>
 
     {{-- Control bot/humano --}}
     @if($cliente->modo === 'humano')
@@ -727,6 +726,7 @@ async function avanzarEstado(id, btn) {
 
         // Actualizar data-estado para la próxima vez
         btn.dataset.estado = data.estado;
+        actualizarTimeline(id, data.estado);
 
         if (data.estado >= max) {
             btn.remove();
@@ -766,6 +766,42 @@ function elegirVmayo(nro) {
     cerrarModalVmayo();
     if (window._vmayoResolve) { window._vmayoResolve(nro); window._vmayoResolve = null; }
 }
+// ── Timeline ──────────────────────────────────────────────────────────────────
+function actualizarTimeline(id, estado) {
+    const el = document.getElementById(`timeline-sia-${id}`);
+    if (!el) return;
+    const tipo  = el.dataset.tipo;
+    const pasos = tipo === 'retiro'
+        ? ['Pendiente', 'Confirmado', 'Listo', 'Retirado']
+        : ['Pendiente', 'Confirmado', 'Preparado', 'En camino', 'Entregado'];
+
+    let html = '';
+    pasos.forEach((label, i) => {
+        const done    = estado > i;
+        const current = estado === i;
+        const circleClass = done
+            ? 'bg-red-600 text-white'
+            : current
+                ? 'bg-red-100 text-red-700 ring-2 ring-red-500'
+                : 'bg-gray-100 text-gray-400';
+        const labelClass = current
+            ? 'text-red-600 font-semibold'
+            : done ? 'text-gray-500' : 'text-gray-300';
+        const lineClass = done ? 'bg-red-500' : 'bg-gray-200';
+
+        html += `<div class="flex flex-col items-center shrink-0">
+            <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${circleClass}">
+                ${done ? '✓' : i + 1}
+            </div>
+            <span class="text-[10px] mt-0.5 leading-tight text-center ${labelClass}">${label}</span>
+        </div>`;
+        if (i < pasos.length - 1) {
+            html += `<div class="h-px flex-1 mb-3.5 ${lineClass}"></div>`;
+        }
+    });
+    el.innerHTML = html;
+}
+
 function cerrarModalVmayo() {
     document.getElementById('modal-vmayo').classList.add('hidden');
 }
