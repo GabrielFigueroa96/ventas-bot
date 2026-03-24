@@ -66,9 +66,9 @@
                         <button onclick="avanzarEstado({{ $sia->id }}, this)"
                             data-max="{{ $sia->estadoMax() }}"
                             data-estado="{{ $siaEstado }}"
-                            data-label="{{ $nextLabel ? '→ '.$nextLabel : '›' }}"
+                            data-label="{{ $nextLabel ? $nextLabel : '›' }}"
                             class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1 rounded-full transition-colors font-medium shrink-0">
-                            {{ $nextLabel ? '→ '.$nextLabel : '›' }}
+                            {{ $nextLabel ? $nextLabel : '›' }}
                         </button>
                     @endif
                     @if($siaEstado === \App\Models\Pedidosia::ESTADO_PENDIENTE)

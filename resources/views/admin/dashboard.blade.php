@@ -19,7 +19,46 @@
 <h1 class="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
 @endif
 
-{{-- KPIs --}}
+{{-- KPIs ventas del mes --}}
+@php
+    $mesLabel = now()->locale('es')->isoFormat('MMMM');
+    $variacion = $totalMesAnterior > 0 ? round((($totalMes - $totalMesAnterior) / $totalMesAnterior) * 100) : null;
+@endphp
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Vendido en {{ $mesLabel }}</p>
+        <p class="text-2xl font-bold text-gray-900 mt-1">${{ number_format($totalMes, 0, ',', '.') }}</p>
+        @if($variacion !== null)
+        <p class="text-xs mt-1.5 {{ $variacion >= 0 ? 'text-emerald-600' : 'text-red-500' }}">
+            {{ $variacion >= 0 ? '↑' : '↓' }} {{ abs($variacion) }}% vs mes anterior
+        </p>
+        @endif
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pedidos en {{ $mesLabel }}</p>
+        <p class="text-2xl font-bold text-gray-900 mt-1">{{ $cantMes }}</p>
+        <p class="text-xs text-gray-400 mt-1.5">Ticket prom. ${{ number_format($ticketProm, 0, ',', '.') }}</p>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conversión bot</p>
+        <p class="text-2xl font-bold text-gray-900 mt-1">{{ $tasaConversion }}%</p>
+        <p class="text-xs text-gray-400 mt-1.5">{{ $clientesConPedidoMes }} pedidos / {{ $clientesActivosMes }} chats</p>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Inactivos +30 días</p>
+        <p class="text-2xl font-bold mt-1 {{ $inactivosCount > 0 ? 'text-amber-500' : 'text-gray-900' }}">{{ number_format($inactivosCount) }}</p>
+        @if($inactivosCount > 0)
+        <a href="{{ route('admin.clientes') }}" class="text-xs text-amber-600 hover:text-amber-700 font-medium mt-1.5 inline-block">Ver clientes →</a>
+        @endif
+    </div>
+
+</div>
+
+{{-- KPIs operativos --}}
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
 
     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
@@ -133,6 +172,99 @@
     </div>
 
 </div>
+
+{{-- Próximos pedidos + Por localidad --}}
+<div class="grid md:grid-cols-2 gap-4 mb-4">
+
+    {{-- Próximos 7 días --}}
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <h2 class="text-sm font-semibold text-gray-700">Entregas próximas</h2>
+        </div>
+        <div class="divide-y divide-gray-50">
+            @forelse($proximosDias as $dia)
+            <div class="px-5 py-3 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 text-center">
+                        <p class="text-xs font-bold {{ $dia['label'] === 'Hoy' ? 'text-red-600' : ($dia['label'] === 'Mañana' ? 'text-amber-600' : 'text-gray-500') }}">
+                            {{ $dia['label'] }}
+                        </p>
+                    </div>
+                    <div class="flex gap-2">
+                        @if($dia['envios'] > 0)
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">🚚 {{ $dia['envios'] }}</span>
+                        @endif
+                        @if($dia['retiros'] > 0)
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">🏪 {{ $dia['retiros'] }}</span>
+                        @endif
+                    </div>
+                </div>
+                <span class="text-sm font-bold {{ $dia['label'] === 'Hoy' ? 'text-red-600' : 'text-gray-700' }}">
+                    {{ $dia['total'] }} pedido{{ $dia['total'] !== 1 ? 's' : '' }}
+                </span>
+            </div>
+            @empty
+            <div class="px-5 py-6 text-center text-sm text-gray-400">Sin entregas en los próximos días.</div>
+            @endforelse
+        </div>
+    </div>
+
+    {{-- Pendientes por localidad --}}
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <h2 class="text-sm font-semibold text-gray-700">Pendientes por localidad</h2>
+        </div>
+        @if($pedidosPorLocalidad->isNotEmpty())
+        @php $maxLoc = $pedidosPorLocalidad->max('total'); @endphp
+        <div class="divide-y divide-gray-50">
+            @foreach($pedidosPorLocalidad as $loc)
+            <div class="px-5 py-3">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm text-gray-700">{{ $loc->localidad }}</span>
+                    <span class="text-sm font-bold text-gray-800">{{ $loc->total }}</span>
+                </div>
+                <div class="w-full bg-gray-100 rounded-full h-1.5">
+                    <div class="bg-red-400 h-1.5 rounded-full" style="width: {{ round(($loc->total / $maxLoc) * 100) }}%"></div>
+                </div>
+            </div>
+            @endforeach
+        </div>
+        @else
+        <div class="px-5 py-6 text-center text-sm text-gray-400">Sin pedidos pendientes con localidad.</div>
+        @endif
+    </div>
+
+</div>
+
+{{-- Clientes esperando atención --}}
+@if($clientesHumano->isNotEmpty())
+<div class="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden mb-4">
+    <div class="px-5 py-4 border-b border-amber-50 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <h2 class="text-sm font-semibold text-gray-700">Esperando atención humana</h2>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">{{ $clientesHumano->count() }}</span>
+        </div>
+    </div>
+    <div class="divide-y divide-gray-50">
+        @foreach($clientesHumano as $c)
+        <div class="px-5 py-3 flex items-center justify-between gap-3">
+            <a href="{{ route('admin.cliente', $c->id) }}" class="text-sm font-medium text-gray-800 hover:text-red-600 transition-colors">
+                {{ $c->name ?: $c->phone }}
+            </a>
+            <span class="text-xs text-gray-400">{{ $c->updated_at->diffForHumans() }}</span>
+        </div>
+        @endforeach
+    </div>
+</div>
+@endif
 
 {{-- Recordatorios de hoy --}}
 @if($recordatoriosHoy->isNotEmpty())

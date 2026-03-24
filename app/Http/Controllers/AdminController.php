@@ -86,6 +86,82 @@ class AdminController extends Controller
             $chartClientes[] = (int) ($clientesPorSemana[$key] ?? 0);
         }
 
+        // ── Nuevas métricas ──────────────────────────────────────────────────────
+
+        // Total vendido este mes (pedidos no cancelados)
+        $inicioMes = now()->startOfMonth();
+        $totalMes  = Pedidosia::where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
+            ->where('pedido_at', '>=', $inicioMes)
+            ->sum('total');
+        $totalMesAnterior = Pedidosia::where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
+            ->whereBetween('pedido_at', [now()->subMonth()->startOfMonth(), now()->subMonth()->endOfMonth()])
+            ->sum('total');
+
+        // Ticket promedio este mes
+        $cantMes    = Pedidosia::where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
+            ->where('pedido_at', '>=', $inicioMes)->count();
+        $ticketProm = $cantMes > 0 ? round($totalMes / $cantMes) : 0;
+
+        // Tasa de conversión: clientes con al menos 1 pedido este mes / clientes activos este mes
+        $clientesActivosMes = Message::whereDate('created_at', '>=', $inicioMes)
+            ->distinct('cliente_id')->count('cliente_id');
+        $clientesConPedidoMes = Pedidosia::where('pedido_at', '>=', $inicioMes)
+            ->distinct('idcliente')->count('idcliente');
+        $tasaConversion = $clientesActivosMes > 0
+            ? round(($clientesConPedidoMes / $clientesActivosMes) * 100)
+            : 0;
+
+        // Clientes esperando atención humana
+        $clientesHumano = Cliente::where('estado', 'humano')
+            ->orderByDesc('updated_at')->take(10)->get();
+
+        // Clientes inactivos: tienen cuenta pero no piden hace más de 30 días
+        $inactivosCount = Cliente::whereNotNull('phone')
+            ->where(function ($q) {
+                $q->whereNull('last_order_at')
+                  ->orWhere('last_order_at', '<', now()->subDays(30));
+            })
+            ->whereNotNull('name')
+            ->count();
+
+        // Pedidos por fecha de entrega — próximos 7 días
+        $proximosPedidos = Pedidosia::whereIn('estado', [
+                Pedidosia::ESTADO_PENDIENTE,
+                Pedidosia::ESTADO_CONFIRMADO,
+                Pedidosia::ESTADO_EN_CAMINO,
+            ])
+            ->whereBetween('fecha', [today(), today()->addDays(6)])
+            ->get()
+            ->groupBy(fn($p) => \Carbon\Carbon::parse($p->fecha)->format('Y-m-d'));
+
+        $proximosDias = [];
+        for ($i = 0; $i <= 6; $i++) {
+            $d = today()->addDays($i);
+            $key = $d->format('Y-m-d');
+            $pedidosDia = $proximosPedidos->get($key, collect());
+            if ($pedidosDia->isNotEmpty() || $i <= 1) {
+                $proximosDias[] = [
+                    'fecha'   => $d,
+                    'label'   => $i === 0 ? 'Hoy' : ($i === 1 ? 'Mañana' : ucfirst($d->locale('es')->isoFormat('dddd D/MM'))),
+                    'total'   => $pedidosDia->count(),
+                    'envios'  => $pedidosDia->where('tipo_entrega', 'envio')->count(),
+                    'retiros' => $pedidosDia->where('tipo_entrega', 'retiro')->count(),
+                ];
+            }
+        }
+
+        // Pedidos pendientes por localidad
+        $pedidosPorLocalidad = Pedidosia::whereIn('estado', [
+                Pedidosia::ESTADO_PENDIENTE,
+                Pedidosia::ESTADO_CONFIRMADO,
+            ])
+            ->whereNotNull('localidad')
+            ->selectRaw('localidad, COUNT(*) as total')
+            ->groupBy('localidad')
+            ->orderByDesc('total')
+            ->take(6)
+            ->get();
+
         // Recordatorios de hoy
         $hoy = (int) now()->format('w'); // 0=Dom … 6=Sáb
         $recordatoriosHoy = Recordatorio::where('activo', true)->get()
@@ -120,6 +196,10 @@ class AdminController extends Controller
             'chartSemanas', 'chartClientes',
             'seguimientos',
             'recordatoriosHoy',
+            'totalMes', 'totalMesAnterior', 'ticketProm', 'cantMes',
+            'tasaConversion', 'clientesActivosMes', 'clientesConPedidoMes',
+            'clientesHumano', 'inactivosCount',
+            'proximosDias', 'pedidosPorLocalidad',
         ));
     }
 
