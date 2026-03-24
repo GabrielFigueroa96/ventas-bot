@@ -17,7 +17,7 @@
     $fechaEntregaTexto = null;
     if ($fechaEntrega) {
         $fechaEntregaTexto = ($diasParaEntrega !== null && $diasParaEntrega >= 0 && $diasParaEntrega <= 7)
-            ? $fechaEntrega->locale('es')->isoFormat('dddd D/MM/YYYY')
+            ? ucfirst($fechaEntrega->locale('es')->isoFormat('dddd D/MM/YYYY'))
             : $fechaEntrega->format('d/m/Y');
     }
 
@@ -118,6 +118,40 @@
                 <span class="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700 italic">📝 {{ $obs }}</span>
             @endif
         </div>
+
+        {{-- Timeline de estados --}}
+        @if($sia && $siaEstado !== \App\Models\Pedidosia::ESTADO_CANCELADO)
+        @php
+            $pasos = $sia->tipo_entrega === 'retiro'
+                ? [0 => 'Pendiente', 1 => 'Confirmado', 2 => 'Listo', 3 => 'Retirado']
+                : [0 => 'Pendiente', 1 => 'Confirmado', 2 => 'Preparado', 3 => 'En camino', 4 => 'Entregado'];
+        @endphp
+        <div class="flex items-center gap-0 mt-3">
+            @foreach($pasos as $paso => $pasoLabel)
+                @php
+                    $done    = $siaEstado > $paso;
+                    $current = $siaEstado === $paso;
+                @endphp
+                {{-- Círculo --}}
+                <div class="flex flex-col items-center shrink-0">
+                    <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
+                        {{ $done    ? 'bg-red-600 text-white' : '' }}
+                        {{ $current ? 'bg-red-100 text-red-700 ring-2 ring-red-500' : '' }}
+                        {{ !$done && !$current ? 'bg-gray-100 text-gray-400' : '' }}">
+                        @if($done) ✓ @else {{ $paso + 1 }} @endif
+                    </div>
+                    <span class="text-[10px] mt-0.5 leading-tight text-center
+                        {{ $current ? 'text-red-600 font-semibold' : ($done ? 'text-gray-500' : 'text-gray-300') }}">
+                        {{ $pasoLabel }}
+                    </span>
+                </div>
+                {{-- Línea conectora --}}
+                @if(!$loop->last)
+                    <div class="h-px flex-1 mb-3.5 {{ $done ? 'bg-red-500' : 'bg-gray-200' }}"></div>
+                @endif
+            @endforeach
+        </div>
+        @endif
     </div>
 
     {{-- Productos acordados --}}
