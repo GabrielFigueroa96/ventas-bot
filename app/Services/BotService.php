@@ -2053,7 +2053,7 @@ Herramientas disponibles:
      * Si hay template configurado lo usa (sin restricción de ventana 24hs).
      * Si no, envía texto libre (requiere que el número haya escrito en las últimas 24hs).
      */
-    public function sendRecordatorioTemplate(string $phone, string $templateRaw, string $mensaje): void
+    public function sendRecordatorioTemplate(string $phone, string $templateRaw, string $nombre, string $mensaje): void
     {
         $parts    = explode('|', $templateRaw, 2);
         $template = trim($parts[0]);
@@ -2071,6 +2071,7 @@ Herramientas disponibles:
                         'components' => [[
                             'type'       => 'body',
                             'parameters' => [
+                                ['type' => 'text', 'text' => $nombre],
                                 ['type' => 'text', 'text' => $mensaje],
                             ],
                         ]],

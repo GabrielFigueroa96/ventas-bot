@@ -41,7 +41,8 @@ class EnviarRecordatorios extends Command
 
                     $template = trim($recordatorio->template_nombre ?? '');
                     if ($template) {
-                        $bot->sendRecordatorioTemplate($cliente->phone, $template, $mensaje);
+                        $nombre = $cliente->name ?? 'cliente';
+                        $bot->sendRecordatorioTemplate($cliente->phone, $template, $nombre, $mensaje);
                     } elseif (!empty($imagenUrl)) {
                         $bot->sendWhatsappImageByUrl($cliente->phone, $imagenUrl, $mensaje);
                     } else {
