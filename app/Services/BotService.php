@@ -315,7 +315,7 @@ class BotService
         if ($localidadObj && !$cliente->localidad_id) {
             $cliente->update(['localidad_id' => $localidadObj->id]);
         }
-        $diasReparto   = $localidadObj?->dias_reparto ?? $empresa?->bot_dias_reparto ?? [];
+        $diasReparto   = $localidadObj?->dias_reparto ?? [];
         if (!empty($diasReparto)) {
             $diasNombres = implode(', ', array_map(fn($d) => $diasLabel[$d] ?? $d, $diasReparto));
             $diasTexto   = $localidad
@@ -1159,8 +1159,14 @@ Herramientas disponibles:
             $diasAbiertos = array_keys(array_filter($horarios, fn($t) => !empty($t)));
             $dias         = !empty($diasAbiertos) ? array_map('intval', $diasAbiertos) : [1, 2, 3, 4, 5, 6];
         } else {
-            $localidadObj = $client->localidadObj;
-            $dias = $localidadObj?->dias_reparto ?? $empresa?->bot_dias_reparto ?? [];
+            $localidadObj = $client->localidad_id
+                ? $client->localidadObj
+                : ($client->localidad
+                    ? Localidad::where('activo', true)
+                        ->whereRaw('LOWER(nombre) = ?', [strtolower($client->localidad)])
+                        ->first()
+                    : null);
+            $dias = $localidadObj?->dias_reparto ?? [];
         }
 
         // Si el cliente pidió una fecha específica, usarla si es válida
@@ -1201,6 +1207,24 @@ Herramientas disponibles:
         $empresa       = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
         $permiteEnvio  = $empresa?->bot_permite_envio  ?? true;
         $permiteRetiro = $empresa?->bot_permite_retiro ?? true;
+
+        // Verificar localidad para envío
+        if ($permiteEnvio && !$permiteRetiro) {
+            if (!$client->localidad) {
+                return 'No tengo registrada tu localidad. ¿En qué localidad estás para saber si tenemos reparto en tu zona?';
+            }
+            $localidadObj = $client->localidad_id
+                ? $client->localidadObj
+                : Localidad::where('activo', true)
+                    ->whereRaw('LOWER(nombre) = ?', [strtolower($client->localidad)])
+                    ->first();
+            if (!$localidadObj) {
+                return "Lo sentimos, por el momento no tenemos reparto para {$client->localidad}.";
+            }
+            if (empty($localidadObj->dias_reparto)) {
+                return "La localidad {$client->localidad} no tiene días de reparto configurados. Consultanos por otro medio.";
+            }
+        }
 
         $carrito = $this->getCarrito($client);
         $items   = $carrito ? $carrito->items : [];

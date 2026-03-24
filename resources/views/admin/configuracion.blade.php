@@ -83,6 +83,23 @@
                     <span class="font-medium text-gray-700">Retiro en local</span>
                 </label>
             </div>
+
+            {{-- Días de reparto globales --}}
+            <div class="pt-2 border-t border-gray-100">
+                <p class="text-xs font-medium text-gray-500 mb-2">Días de reparto (global)</p>
+                <div class="flex flex-wrap gap-2">
+                    @php $diasReparto = $config->bot_dias_reparto ?? []; @endphp
+                    @foreach(['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'] as $i => $label)
+                    <label class="flex items-center gap-1 text-xs cursor-pointer">
+                        <input type="checkbox" name="bot_dias_reparto[]" value="{{ $i }}"
+                            {{ in_array($i, $diasReparto) ? 'checked' : '' }}
+                            class="accent-red-600">
+                        {{ $label }}
+                    </label>
+                    @endforeach
+                </div>
+                <p class="text-xs text-gray-400 mt-1">Si una localidad tiene días propios, se usan esos. Si no hay ninguno configurado, el bot no anuncia próxima fecha.</p>
+            </div>
         </div>
 
           {{-- Pedido mínimo --}}
