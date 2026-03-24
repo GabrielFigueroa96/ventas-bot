@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 
 class EnviarRecordatorios extends Command
 {
-    protected $signature   = 'recordatorios:enviar';
+    protected $signature   = 'recordatorios:enviar {--force : Ignorar restricción horaria y enviar todos los activos}';
     protected $description = 'Envía recordatorios programados por WhatsApp a clientes';
 
     public function handle(): void
@@ -27,7 +27,19 @@ class EnviarRecordatorios extends Command
 
     private function procesarTenant(BotService $bot): void
     {
-        $recordatorios = Recordatorio::where('activo', true)->get()->filter->deberia();
+        $todos = Recordatorio::where('activo', true)->get();
+
+        if ($this->option('force')) {
+            $recordatorios = $todos;
+            $this->line('Modo --force: ignorando restricción horaria.');
+        } else {
+            $recordatorios = $todos->filter->deberia();
+        }
+
+        if ($recordatorios->isEmpty()) {
+            $this->line('No hay recordatorios para enviar ahora. (Usá --force para forzar el envío)');
+            return;
+        }
 
         foreach ($recordatorios as $recordatorio) {
             $clientes = $this->obtenerClientes($recordatorio);
@@ -109,15 +121,18 @@ class EnviarRecordatorios extends Command
 
         // Tipo: recomendacion — adjunta top 3 productos del cliente
         if ($rec->tipo === 'recomendacion') {
-            $top = Pedido::where('codcli', $codcli)
+            $items = Pedido::where('codcli', $codcli)
                 ->selectRaw('descrip, COUNT(*) as veces')
                 ->groupBy('descrip')
                 ->orderByDesc('veces')
                 ->take(3)
-                ->pluck('descrip')
-                ->implode(', ');
+                ->pluck('descrip');
 
-            $mensaje = str_replace('{recomendaciones}', $top ?: 'nuestros productos', $mensaje);
+            $top = $items->isNotEmpty()
+                ? $items->map(fn($d) => "• {$d}")->implode("\n")
+                : 'nuestros productos';
+
+            $mensaje = str_replace('{recomendaciones}', $top, $mensaje);
         }
 
         return $mensaje;
