@@ -189,7 +189,7 @@ class AdminChatController extends Controller
         $pedidos    = $pedidosRaw->groupBy('nro');
         $factventas = $this->loadFactventas($pedidosRaw);
         $pedidosia  = Pedidosia::whereIn('nro', $pedidosRaw->pluck('nro')->unique())->get()->keyBy('nro');
-        $vmayo      = $this->loadVmayo($pedidosRaw);
+        $vmayo      = $this->loadVmayo($pedidosia);
         $lastReg    = (int) ($pedidosRaw->max('reg') ?? 0);
 
         $html = view('admin.partials.pedidos', compact('pedidos', 'factventas', 'pedidosia', 'vmayo'))->render();
@@ -197,11 +197,24 @@ class AdminChatController extends Controller
         return response()->json(['html' => $html, 'lastReg' => $lastReg]);
     }
 
-    private function loadVmayo($pedidos): \Illuminate\Support\Collection
+    private function loadVmayo(\Illuminate\Support\Collection $pedidosia): \Illuminate\Support\Collection
     {
-        $nros = $pedidos->pluck('nro')->unique()->filter()->values();
-        if ($nros->isEmpty()) return collect();
-        return Vmayo::whereIn('nro', $nros)->get()->groupBy('nro');
+        $map = $pedidosia
+            ->filter(fn($s) => !empty($s->vmayo_nro))
+            ->pluck('vmayo_nro', 'nro');
+
+        if ($map->isEmpty()) return collect();
+
+        $rows = Vmayo::whereIn('nro', $map->values())->get();
+
+        $result = collect();
+        foreach ($map as $nroBot => $vmayoNro) {
+            $items = $rows->where('nro', $vmayoNro)->values();
+            if ($items->isNotEmpty()) {
+                $result->put($nroBot, $items);
+            }
+        }
+        return $result;
     }
 
     private function loadFactventas($pedidos): \Illuminate\Support\Collection

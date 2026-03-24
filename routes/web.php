@@ -28,6 +28,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::get  ('/pedidos',                             [AdminController::class, 'pedidos'])->name('pedidos');
     Route::patch('/pedidos/ia/{id}/estado',              [AdminController::class, 'avanzarEstadoPedido'])->name('pedidos.ia.estado');
     Route::patch('/pedidos/ia/{id}/cancelar',            [AdminController::class, 'cancelarPedido'])->name('pedidos.ia.cancelar');
+    Route::get  ('/pedidos/ia/{id}/vmayo-opciones',      [AdminController::class, 'vmayoOpciones'])->name('pedidos.ia.vmayo');
 
     // Control manual del chat
     Route::get ('/clientes/{cliente}/mensajes',      [AdminChatController::class, 'mensajesNuevos'])->name('chat.mensajes');

@@ -27,20 +27,59 @@
 <div class="space-y-4">
     @include('admin.partials.pedidos', compact('pedidos', 'factventas', 'pedidosia', 'vmayo'))
 </div>
+
+{{-- Modal vincular vmayo --}}
+<div id="modal-vmayo" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-3">
+        <h3 class="text-sm font-semibold text-gray-800">Vincular con pedido procesado</h3>
+        <p class="text-xs text-gray-500">Seleccioná el registro que corresponde a este pedido. Queda guardado para verlo después.</p>
+        <div id="vmayo-lista" class="space-y-2 max-h-64 overflow-y-auto"></div>
+        <div class="flex gap-2 pt-2 border-t border-gray-100">
+            <button id="vmayo-sin-vincular" type="button"
+                class="flex-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg py-2">
+                Avanzar sin vincular
+            </button>
+            <button id="vmayo-cancelar" type="button"
+                class="text-xs text-red-400 hover:text-red-600 px-3 py-2">
+                Cancelar
+            </button>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('scripts')
 <script>
 const csrfToken = document.querySelector('meta[name=csrf-token]').content;
+const ESTADO_CONFIRMADO = 1;
 
+// ── Avanzar estado ────────────────────────────────────────────────────────────
 async function avanzarEstado(id, btn) {
-    const max = parseInt(btn.dataset.max ?? 4);
-    btn.disabled = true;
+    const max         = parseInt(btn.dataset.max ?? 4);
+    const estadoActual = parseInt(btn.dataset.estado ?? 0);
+    btn.disabled  = true;
     btn.textContent = '...';
+
+    // Confirmado → Preparado: pedir vinculación con vmayo
+    let vmayoNro = null;
+    if (estadoActual === ESTADO_CONFIRMADO) {
+        vmayoNro = await pedirVmayo(id);
+        if (vmayoNro === false) {           // usuario canceló
+            btn.disabled = false; btn.textContent = '›';
+            return;
+        }
+    }
+
     try {
+        const body = vmayoNro != null ? JSON.stringify({ vmayo_nro: vmayoNro }) : null;
         const res  = await fetch(`/admin/pedidos/ia/${id}/estado`, {
             method: 'PATCH',
-            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+            headers: {
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json',
+                ...(body ? { 'Content-Type': 'application/json' } : {}),
+            },
+            body,
         });
         const data = await res.json();
         if (!res.ok) { alert(data.error ?? 'Error'); btn.disabled = false; btn.textContent = '›'; return; }
@@ -50,9 +89,11 @@ async function avanzarEstado(id, btn) {
             badge.textContent = data.label;
             badge.className   = `text-xs px-2 py-0.5 rounded-full font-medium ${data.css}`;
         }
-        // Si avanzó desde pendiente, quitar el botón cancelar
         const cancelBtn = document.getElementById(`cancel-sia-${id}`);
         if (cancelBtn) cancelBtn.remove();
+
+        // Actualizar data-estado para la próxima vez
+        btn.dataset.estado = data.estado;
 
         if (data.estado >= max) {
             btn.remove();
@@ -65,6 +106,42 @@ async function avanzarEstado(id, btn) {
     }
 }
 
+// ── Selector de vmayo ─────────────────────────────────────────────────────────
+async function pedirVmayo(id) {
+    const res     = await fetch(`/admin/pedidos/ia/${id}/vmayo-opciones`);
+    const data    = await res.json();
+    const opciones = data.opciones ?? [];
+
+    if (opciones.length === 0) return null;   // sin opciones: avanzar directo
+
+    return new Promise(resolve => {
+        const lista = document.getElementById('vmayo-lista');
+        lista.innerHTML = opciones.map(op => `
+            <button type="button" onclick="elegirVmayo(${op.nro})"
+                class="w-full text-left px-3 py-2 rounded-lg border border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition text-sm flex items-center justify-between gap-2">
+                <span><span class="font-semibold text-gray-800">#${op.nro}</span> <span class="text-gray-600">${op.nomcli}</span></span>
+                <span class="text-xs text-gray-400 shrink-0">${op.items} ítems · $${op.total_fmt}</span>
+            </button>`).join('');
+
+        document.getElementById('vmayo-sin-vincular').onclick = () => { cerrarModalVmayo(); resolve(null); };
+        document.getElementById('vmayo-cancelar').onclick     = () => { cerrarModalVmayo(); resolve(false); };
+        window._vmayoResolve = resolve;
+        document.getElementById('modal-vmayo').classList.remove('hidden');
+    });
+}
+
+function elegirVmayo(nro) {
+    cerrarModalVmayo();
+    if (window._vmayoResolve) { window._vmayoResolve(nro); window._vmayoResolve = null; }
+}
+function cerrarModalVmayo() {
+    document.getElementById('modal-vmayo').classList.add('hidden');
+}
+document.getElementById('modal-vmayo')?.addEventListener('click', function(e) {
+    if (e.target === this) { cerrarModalVmayo(); window._vmayoResolve?.(false); window._vmayoResolve = null; }
+});
+
+// ── Cancelar pedido ───────────────────────────────────────────────────────────
 async function cancelarPedido(id, btn) {
     if (!confirm('¿Cancelar este pedido?')) return;
     btn.disabled = true;
@@ -82,7 +159,6 @@ async function cancelarPedido(id, btn) {
             badge.textContent = data.label;
             badge.className   = `text-xs px-2 py-0.5 rounded-full font-medium ${data.css}`;
         }
-        // Quitar ambos botones
         btn.remove();
         const avanzarBtn = document.querySelector(`[onclick="avanzarEstado(${id}, this)"]`);
         if (avanzarBtn) avanzarBtn.remove();

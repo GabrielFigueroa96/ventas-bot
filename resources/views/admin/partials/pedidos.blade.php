@@ -64,6 +64,7 @@
                     @if($siaEstado < $sia->estadoMax() && $siaEstado !== \App\Models\Pedidosia::ESTADO_CANCELADO)
                         <button onclick="avanzarEstado({{ $sia->id }}, this)"
                             data-max="{{ $sia->estadoMax() }}"
+                            data-estado="{{ $siaEstado }}"
                             class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full transition shrink-0">
                             ›
                         </button>

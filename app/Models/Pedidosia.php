@@ -23,6 +23,7 @@ class Pedidosia extends Model
         'total',
         'obs',
         'estado',
+        'vmayo_nro',
         'pedido_at',
     ];
 

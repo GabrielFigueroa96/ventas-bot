@@ -189,7 +189,7 @@ class AdminController extends Controller
         $pedidos       = $pedidosRaw->groupBy('nro');
         $factventas    = $this->loadFactventas($pedidosRaw);
         $pedidosia     = $this->loadPedidosia($pedidosRaw);
-        $vmayo         = $this->loadVmayo($pedidosRaw);
+        $vmayo         = $this->loadVmayo($pedidosia);
         $lastPedidoReg = (int) ($pedidosRaw->max('reg') ?? 0);
 
         $totalPedidos   = $pedidos->count();
@@ -260,7 +260,7 @@ class AdminController extends Controller
         $pedidos    = $pedidosRaw->groupBy('nro');
         $factventas = $this->loadFactventas($pedidosRaw);
         $pedidosia  = $this->loadPedidosia($pedidosRaw);
-        $vmayo      = $this->loadVmayo($pedidosRaw);
+        $vmayo      = $this->loadVmayo($pedidosia);
 
         return view('admin.pedidos', compact('pedidos', 'factventas', 'pedidosia', 'vmayo', 'fecha'));
     }
@@ -517,6 +517,30 @@ class AdminController extends Controller
         return back()->with('ok', 'Configuración de la tienda guardada.');
     }
 
+    public function vmayoOpciones(int $id)
+    {
+        $sia = Pedidosia::findOrFail($id);
+
+        $usados = Pedidosia::whereNotNull('vmayo_nro')->pluck('vmayo_nro')->toArray();
+
+        $opciones = DB::table('vmayo')
+            ->where('codcli', $sia->codcli)
+            ->whereNotIn('nro', $usados)
+            ->selectRaw('nro, nomcli, SUM(NETO) as total, COUNT(*) as items')
+            ->groupBy('nro', 'nomcli')
+            ->orderByDesc('nro')
+            ->limit(20)
+            ->get()
+            ->map(fn($r) => [
+                'nro'       => $r->nro,
+                'nomcli'    => $r->nomcli,
+                'items'     => $r->items,
+                'total_fmt' => number_format($r->total, 2, ',', '.'),
+            ]);
+
+        return response()->json(['opciones' => $opciones]);
+    }
+
     public function avanzarEstadoPedido(int $id, Request $request)
     {
         $sia = Pedidosia::findOrFail($id);
@@ -524,6 +548,11 @@ class AdminController extends Controller
         $nextEstado = $sia->estado + 1;
         if ($nextEstado > $sia->estadoMax()) {
             return response()->json(['error' => 'Ya está en el estado final.'], 422);
+        }
+
+        // Al pasar de Confirmado → Preparado, guardar vmayo_nro si se envió
+        if ($sia->estado === Pedidosia::ESTADO_CONFIRMADO && $request->filled('vmayo_nro')) {
+            $sia->vmayo_nro = (int) $request->input('vmayo_nro');
         }
 
         $sia->estado = $nextEstado;
@@ -582,12 +611,28 @@ class AdminController extends Controller
         return Pedidosia::whereIn('nro', $nros)->get()->keyBy('nro');
     }
 
-    // Carga las filas de vmayo para los pedidos (relación directa por nro).
-    private function loadVmayo($pedidos): \Illuminate\Support\Collection
+    // Carga las filas de vmayo para los pedidos vinculados (por vmayo_nro en ia_pedidos).
+    // $pedidosia: colección de Pedidosia keyed by nro (pedido bot).
+    // Retorna colección keyed by nro (pedido bot) → Collection de filas vmayo.
+    private function loadVmayo(\Illuminate\Support\Collection $pedidosia): \Illuminate\Support\Collection
     {
-        $nros = $pedidos->pluck('nro')->unique()->filter()->values();
-        if ($nros->isEmpty()) return collect();
-        return Vmayo::whereIn('nro', $nros)->get()->groupBy('nro');
+        // nro_bot => vmayo_nro (solo los que tienen vínculo)
+        $map = $pedidosia
+            ->filter(fn($s) => !empty($s->vmayo_nro))
+            ->pluck('vmayo_nro', 'nro');
+
+        if ($map->isEmpty()) return collect();
+
+        $rows = Vmayo::whereIn('nro', $map->values())->get();
+
+        $result = collect();
+        foreach ($map as $nroBot => $vmayoNro) {
+            $items = $rows->where('nro', $vmayoNro)->values();
+            if ($items->isNotEmpty()) {
+                $result->put($nroBot, $items);
+            }
+        }
+        return $result;
     }
 
     // Carga los renglones de factventas para pedidos finalizados.
