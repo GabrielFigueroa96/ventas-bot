@@ -521,6 +521,10 @@ class AdminController extends Controller
     {
         $sia = Pedidosia::findOrFail($id);
 
+        if (!$sia->cliente?->cuenta_cod) {
+            return response()->json(['error' => 'El cliente no tiene cuenta vinculada.'], 422);
+        }
+
         $usados = Pedidosia::whereNotNull('vmayo_nro')->pluck('vmayo_nro')->toArray();
 
         $opciones = DB::table('vmayo')
@@ -550,9 +554,14 @@ class AdminController extends Controller
             return response()->json(['error' => 'Ya está en el estado final.'], 422);
         }
 
-        // Al pasar de Confirmado → Preparado, guardar vmayo_nro si se envió
-        if ($sia->estado === Pedidosia::ESTADO_CONFIRMADO && $request->filled('vmayo_nro')) {
-            $sia->vmayo_nro = (int) $request->input('vmayo_nro');
+        // Al pasar de Confirmado → Preparado, verificar que tenga cuenta vinculada
+        if ($sia->estado === Pedidosia::ESTADO_CONFIRMADO) {
+            if (!$sia->cliente?->cuenta_cod) {
+                return response()->json(['error' => 'El cliente no tiene cuenta vinculada. Vinculá una cuenta antes de avanzar.'], 422);
+            }
+            if ($request->filled('vmayo_nro')) {
+                $sia->vmayo_nro = (int) $request->input('vmayo_nro');
+            }
         }
 
         $sia->estado = $nextEstado;
