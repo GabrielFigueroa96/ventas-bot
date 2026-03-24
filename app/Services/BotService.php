@@ -389,6 +389,11 @@ class BotService
             }
         }
 
+        // Guardar la fecha calculada en cache para que iniciarConfirmacionPedido use la misma
+        if ($proximoRepartoFecha) {
+            Cache::put('proxima_fecha_entrega_' . $cliente->id, $proximoRepartoFecha, now()->addMinutes(30));
+        }
+
         // Texto dinámico para el paso 3 del flujo de pedido
         $entregasOpciones = array_filter([
             $permiteEnvio  ? 'envío' : null,
@@ -397,8 +402,8 @@ class BotService
         $mediosOpciones = array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados);
 
         $paso3Fecha = $proximoRepartoTexto
-            ? "¿Lo querés para el próximo {$proximoRepartoTexto} ({$proximoRepartoFecha})?" . (count($diasReparto) > 1 ? ' (o indicá otra fecha de reparto disponible)' : '')
-            : '¿Para cuándo?';
+            ? "Informale que el próximo reparto es el {$proximoRepartoTexto}. No menciones la fecha en formato numérico, solo el día y mes en texto."
+            : '';
         $paso3Entrega = count($entregasOpciones) === 1
             ? '¿Te lo ' . (in_array('envío', $entregasOpciones) ? 'enviamos' : 'pasás a buscar') . '?'
             : '¿' . implode(' o ', array_map('ucfirst', $entregasOpciones)) . '?';
@@ -494,7 +499,7 @@ Pasos:
 1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación extra ni resumas antes. Si el cliente dice si, dale, esta bien o similar con una cantidad implícita o explícita → accioná.
 2. Podés agregar múltiples productos en una sola llamada a agregar_al_carrito.
 3. Mostrá el resumen con ver_carrito. Si hay alertas de precio (⚠️) o producto no disponible (❌), ofrecé actualizar o eliminar el ítem antes de continuar.
-4. Cuando el carrito esté listo, preguntá si el cliente confirma. Podés mencionar la próxima fecha de entrega ({$paso3Fecha}). Luego llamá DIRECTAMENTE crear_pedido — el sistema pedirá entrega y forma de pago con un menú interactivo. No preguntes por tipo de entrega ni medio de pago vos.
+4. Cuando el carrito esté listo, preguntá si el cliente confirma. Podés mencionar la próxima fecha de entrega ({$paso3Fecha}). Luego llamá DIRECTAMENTE crear_pedido pasando tipo_entrega y forma_pago si el cliente ya los mencionó en la conversación — si no, el sistema los pedirá con un menú interactivo. No los preguntes vos si no los sabés.
 5. Una vez creado el pedido (ves 'Botones enviados' en la respuesta del sistema), no envíes ningún mensaje: el cliente ya está viendo los botones de confirmación.
 6. Si el cliente dice el horario o turno preferido, guardalo en obs (no en fecha_entrega).
 
@@ -799,7 +804,7 @@ Herramientas disponibles:
                         'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
                         'ver_carrito'        => $this->verCarrito($cliente),
                         'vaciar_carrito'     => $this->vaciarCarrito($cliente),
-                        'crear_pedido'       => $this->iniciarConfirmacionPedido($cliente),
+                        'crear_pedido'       => $this->iniciarConfirmacionPedido($cliente, $args),
                         'ver_pedidos'        => $this->orderStatus($cliente),
                         'ver_precios'        => $this->priceList($cliente),
                         'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false), $puedePedir),
@@ -1202,7 +1207,7 @@ Herramientas disponibles:
         return now()->addDay()->format('Y-m-d');
     }
 
-    public function iniciarConfirmacionPedido($client): string
+    public function iniciarConfirmacionPedido($client, array $args = []): string
     {
         $empresa       = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
         $permiteEnvio  = $empresa?->bot_permite_envio  ?? true;
@@ -1239,43 +1244,73 @@ Herramientas disponibles:
         ));
         $total = array_sum(array_column($items, 'neto'));
 
-        // Si solo hay una opción de entrega, saltear esa pantalla
-        if ($permiteEnvio && !$permiteRetiro) {
-            $fecha     = $this->getProximaFechaValida($client, 'envio', $empresa);
+        // Tipo de entrega: del argumento de la IA, o forzado por configuración
+        $tipoProvisto = null;
+        if (isset($args['tipo_entrega']) && in_array($args['tipo_entrega'], ['envio', 'retiro'])) {
+            // Solo usar el tipo provisto si la configuración lo permite
+            if (($args['tipo_entrega'] === 'envio'  && $permiteEnvio)  ||
+                ($args['tipo_entrega'] === 'retiro' && $permiteRetiro)) {
+                $tipoProvisto = $args['tipo_entrega'];
+            }
+        }
+        if ($permiteEnvio  && !$permiteRetiro) $tipoProvisto = 'envio';
+        if (!$permiteEnvio && $permiteRetiro)  $tipoProvisto = 'retiro';
+
+        // Forma de pago provista por la IA
+        $pagoProvisto = null;
+        if (!empty($args['forma_pago'])) {
+            $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
+            if (in_array($args['forma_pago'], $mediosHabilitados)) {
+                $pagoProvisto = $args['forma_pago'];
+            }
+        }
+
+        // Si ya tenemos tipo de entrega, calcular fecha y armar datos
+        if ($tipoProvisto !== null) {
+            $fecha = Cache::get('proxima_fecha_entrega_' . $client->id)
+                  ?? $this->getProximaFechaValida($client, $tipoProvisto, $empresa);
             $fechaLabel = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
-            $client->update(['estado' => 'confirmando_pago']);
-            Cache::put('pedido_conf_' . $client->id, [
-                'tipo_entrega'  => 'envio',
+
+            $data = [
+                'tipo_entrega'  => $tipoProvisto,
                 'fecha_entrega' => $fecha,
-                'calle'         => $client->calle      ?? '',
-                'numero'        => $client->numero     ?? '',
-                'localidad'     => $client->localidad  ?? '',
-                'dato_extra'    => $client->dato_extra ?? '',
-            ], now()->addMinutes(30));
-            $this->enviarListaPago($client, $empresa, $itemsText, $total, "📍 Envío — {$fechaLabel}");
+            ];
+            if ($tipoProvisto === 'envio') {
+                $data['calle']      = $args['calle']      ?? $client->calle      ?? '';
+                $data['numero']     = $args['numero']     ?? $client->numero     ?? '';
+                $data['localidad']  = $args['localidad']  ?? $client->localidad  ?? '';
+                $data['dato_extra'] = $args['dato_extra'] ?? $client->dato_extra ?? '';
+            }
+            if (!empty($args['obs'])) {
+                $data['obs'] = $args['obs'];
+            }
+
+            $tipoLabel = ($tipoProvisto === 'envio' ? "📍 Envío" : "🏪 Retiro en local") . " — {$fechaLabel}";
+
+            // Si también tenemos forma de pago, ir directo al resumen final
+            if ($pagoProvisto !== null) {
+                $data['medio_pago'] = $pagoProvisto;
+                Cache::put('pedido_conf_' . $client->id, $data, now()->addMinutes(30));
+                $client->update(['estado' => 'confirmando_final']);
+                $this->mostrarResumenFinal($client, $data, $itemsText, $total);
+                return 'Botones enviados';
+            }
+
+            // Solo tenemos entrega, pedir forma de pago
+            Cache::put('pedido_conf_' . $client->id, $data, now()->addMinutes(30));
+            $client->update(['estado' => 'confirmando_pago']);
+            $this->enviarListaPago($client, $empresa, $itemsText, $total, $tipoLabel);
             return 'Botones enviados';
         }
 
-        if (!$permiteEnvio && $permiteRetiro) {
-            $fecha      = $this->getProximaFechaValida($client, 'retiro', $empresa);
-            $fechaLabel = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
-            $client->update(['estado' => 'confirmando_pago']);
-            Cache::put('pedido_conf_' . $client->id, [
-                'tipo_entrega'  => 'retiro',
-                'fecha_entrega' => $fecha,
-            ], now()->addMinutes(30));
-            $this->enviarListaPago($client, $empresa, $itemsText, $total, "🏪 Retiro en local — {$fechaLabel}");
-            return 'Botones enviados';
-        }
-
-        // Ambas opciones disponibles
+        // Ambas opciones disponibles y la IA no indicó tipo: preguntar
         $client->update(['estado' => 'confirmando_entrega']);
         $this->sendInteractiveButtons(
             $client->phone,
             "{$itemsText}\n\n*Total: $" . $this->fmt($total) . '*',
             '¿Cómo recibís tu pedido?',
             [
-                ['id' => 'entrega_envio',  'title' => 'Envío a domicilio'],
+                ['id' => 'entrega_envio',  'title' => 'Envío'],
                 ['id' => 'entrega_retiro', 'title' => 'Retiro en local'],
             ]
         );
@@ -1399,7 +1434,7 @@ Herramientas disponibles:
         $fechaLabel = isset($data['fecha_entrega'])
             ? ' — ' . \Carbon\Carbon::parse($data['fecha_entrega'])->locale('es')->isoFormat('dddd D [de] MMMM')
             : '';
-        $tipoLabel  = (($data['tipo_entrega'] ?? 'retiro') === 'envio' ? 'Envío a domicilio' : 'Retiro en local') . $fechaLabel;
+        $tipoLabel  = (($data['tipo_entrega'] ?? 'retiro') === 'envio' ? 'Envío' : 'Retiro en local') . $fechaLabel;
 
         $body = "{$itemsText}\n\n"
             . "📦 {$tipoLabel}\n"
