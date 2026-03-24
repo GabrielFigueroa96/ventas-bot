@@ -55,6 +55,20 @@
             </div>
 
             <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                    Template de WhatsApp
+                    <span class="text-gray-400 font-normal">(recomendado — permite enviar fuera de la ventana de 24hs)</span>
+                </label>
+                <input type="text" name="template_nombre" value="{{ old('template_nombre', $editando?->template_nombre) }}"
+                    placeholder="nombre_template o nombre_template|es_AR"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none">
+                <p class="text-xs text-gray-400 mt-1">
+                    El template debe tener un parámetro <code>{{1}}</code> en el cuerpo donde se insertará el mensaje.
+                    Si no se configura, se envía como mensaje de texto (solo funciona dentro de 24hs).
+                </p>
+            </div>
+
+            <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">URL de imagen <span class="text-gray-400 font-normal">(opcional — se envía junto al mensaje)</span></label>
                 <input type="url" name="imagen_url" value="{{ old('imagen_url', $editando?->imagen_url) }}"
                     placeholder="https://ejemplo.com/imagen.jpg"

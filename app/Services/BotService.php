@@ -2053,6 +2053,38 @@ Herramientas disponibles:
      * Si hay template configurado lo usa (sin restricción de ventana 24hs).
      * Si no, envía texto libre (requiere que el número haya escrito en las últimas 24hs).
      */
+    public function sendRecordatorioTemplate(string $phone, string $templateRaw, string $mensaje): void
+    {
+        $parts    = explode('|', $templateRaw, 2);
+        $template = trim($parts[0]);
+        $langCode = isset($parts[1]) ? trim($parts[1]) : 'es_AR';
+
+        try {
+            $response = Http::withToken($this->whatsappKey())
+                ->post('https://graph.facebook.com/v19.0/' . $this->phoneNumberId() . '/messages', [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $phone,
+                    'type'              => 'template',
+                    'template'          => [
+                        'name'       => $template,
+                        'language'   => ['code' => $langCode],
+                        'components' => [[
+                            'type'       => 'body',
+                            'parameters' => [
+                                ['type' => 'text', 'text' => $mensaje],
+                            ],
+                        ]],
+                    ],
+                ]);
+            if (!$response->successful()) {
+                Log::error("sendRecordatorioTemplate [{$phone}] HTTP {$response->status()}: " . $response->body());
+            }
+        } catch (\Throwable $e) {
+            Log::error("sendRecordatorioTemplate exception: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
     public function enviarNotifPedido(string $phone, int $nro, string $nomcli, string $detalle, float $total): void
     {
         $config   = IaEmpresa::first();

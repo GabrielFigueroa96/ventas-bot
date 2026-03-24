@@ -35,11 +35,14 @@ class EnviarRecordatorios extends Command
 
             foreach ($clientes as $cliente) {
                 try {
-                    $mensaje    = $this->construirMensaje($recordatorio, $cliente);
-                    $imagenUrl  = null;
+                    $mensaje   = $this->construirMensaje($recordatorio, $cliente);
+                    $imagenUrl = null;
                     try { $imagenUrl = $recordatorio->imagen_url; } catch (\Throwable) {}
 
-                    if (!empty($imagenUrl)) {
+                    $template = trim($recordatorio->template_nombre ?? '');
+                    if ($template) {
+                        $bot->sendRecordatorioTemplate($cliente->phone, $template, $mensaje);
+                    } elseif (!empty($imagenUrl)) {
                         $bot->sendWhatsappImageByUrl($cliente->phone, $imagenUrl, $mensaje);
                     } else {
                         $bot->sendWhatsapp($cliente->phone, $mensaje);
