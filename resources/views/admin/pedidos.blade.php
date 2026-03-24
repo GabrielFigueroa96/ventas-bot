@@ -17,7 +17,7 @@
         @endforeach
     </select>
 
-    <input type="date" name="fecha" value="{{ request('fecha') }}"
+    <input type="date" name="fecha" value="{{ $fecha }}"
         class="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
 
     <button type="submit" class="bg-red-600 text-white rounded-lg px-5 py-2 text-sm hover:bg-red-700">Filtrar</button>
@@ -25,7 +25,7 @@
 </form>
 
 <div class="space-y-4">
-    @include('admin.partials.pedidos', compact('pedidos', 'factventas', 'pedidosia'))
+    @include('admin.partials.pedidos', compact('pedidos', 'factventas', 'pedidosia', 'vmayo'))
 </div>
 @endsection
 

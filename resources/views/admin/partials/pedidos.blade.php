@@ -1,9 +1,10 @@
 @forelse($pedidos as $nro => $items)
 @php
-    $first = $items->first();
-    $key   = "{$first->venta}-{$first->pv}";
-    $fact  = $factventas->get($key);
-    $sia   = $pedidosia->get($nro) ?? null;
+    $first     = $items->first();
+    $key       = "{$first->venta}-{$first->pv}";
+    $fact      = $factventas->get($key);
+    $sia       = $pedidosia->get($nro) ?? null;
+    $vmayoRows = ($vmayo ?? collect())->get($nro);
 
     // Comprobante: número de venta del sistema
     $nroComprobante = ($first->venta && $first->venta > 0)
@@ -148,6 +149,39 @@
             <span class="text-base font-bold text-red-700">${{ number_format($totalAcordado, 2, ',', '.') }}</span>
         </div>
     </div>
+
+    {{-- Cómo salió (vmayo) --}}
+    @if($vmayoRows?->isNotEmpty())
+    <div class="px-4 py-3 bg-orange-50 border-t border-orange-100">
+        <p class="text-xs text-orange-500 uppercase font-semibold mb-2">Cómo salió</p>
+        <div class="space-y-1.5">
+            @foreach($vmayoRows as $v)
+            <div class="flex items-start justify-between gap-2">
+                <span class="text-sm text-gray-700 leading-tight">{{ $v->descrip }}</span>
+                <div class="text-right shrink-0">
+                    <p class="text-xs text-gray-400">
+                        @if($v->cant > 0 && $v->kilos > 0)
+                            {{ (int) $v->cant }}u · {{ number_format($v->kilos, 3, ',', '.') }}kg
+                        @elseif($v->kilos > 0)
+                            {{ number_format($v->kilos, 3, ',', '.') }} kg
+                        @else
+                            {{ (int) $v->cant }} u
+                        @endif
+                        @if($v->precio)
+                            · ${{ number_format($v->precio, 2, ',', '.') }}
+                        @endif
+                    </p>
+                    <p class="text-sm font-semibold text-gray-800">${{ number_format($v->NETO, 2, ',', '.') }}</p>
+                </div>
+            </div>
+            @endforeach
+        </div>
+        <div class="flex justify-between items-center mt-3 pt-2 border-t border-orange-100">
+            <span class="text-sm font-semibold text-gray-600">Total</span>
+            <span class="text-base font-bold text-orange-700">${{ number_format($vmayoRows->sum('NETO'), 2, ',', '.') }}</span>
+        </div>
+    </div>
+    @endif
 
     {{-- Real facturado --}}
     @if($fact?->isNotEmpty())

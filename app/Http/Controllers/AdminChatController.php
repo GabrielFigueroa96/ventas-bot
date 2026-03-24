@@ -8,6 +8,7 @@ use App\Models\Factventas;
 use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Pedidosia;
+use App\Models\Vmayo;
 use App\Services\BotService;
 use App\Services\TenantManager;
 use Illuminate\Http\Request;
@@ -188,11 +189,19 @@ class AdminChatController extends Controller
         $pedidos    = $pedidosRaw->groupBy('nro');
         $factventas = $this->loadFactventas($pedidosRaw);
         $pedidosia  = Pedidosia::whereIn('nro', $pedidosRaw->pluck('nro')->unique())->get()->keyBy('nro');
+        $vmayo      = $this->loadVmayo($pedidosRaw);
         $lastReg    = (int) ($pedidosRaw->max('reg') ?? 0);
 
-        $html = view('admin.partials.pedidos', compact('pedidos', 'factventas', 'pedidosia'))->render();
+        $html = view('admin.partials.pedidos', compact('pedidos', 'factventas', 'pedidosia', 'vmayo'))->render();
 
         return response()->json(['html' => $html, 'lastReg' => $lastReg]);
+    }
+
+    private function loadVmayo($pedidos): \Illuminate\Support\Collection
+    {
+        $nros = $pedidos->pluck('nro')->unique()->filter()->values();
+        if ($nros->isEmpty()) return collect();
+        return Vmayo::whereIn('nro', $nros)->get()->groupBy('nro');
     }
 
     private function loadFactventas($pedidos): \Illuminate\Support\Collection

@@ -8,6 +8,7 @@ use App\Models\Localidad;
 use App\Models\Recordatorio;
 use App\Models\Factventas;
 use App\Models\IaEmpresa;
+use App\Models\Vmayo;
 use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Pedidosia;
@@ -188,13 +189,14 @@ class AdminController extends Controller
         $pedidos       = $pedidosRaw->groupBy('nro');
         $factventas    = $this->loadFactventas($pedidosRaw);
         $pedidosia     = $this->loadPedidosia($pedidosRaw);
+        $vmayo         = $this->loadVmayo($pedidosRaw);
         $lastPedidoReg = (int) ($pedidosRaw->max('reg') ?? 0);
 
         $totalPedidos   = $pedidos->count();
         $ultimoPedidoAt = $pedidosRaw->max('pedido_at');
         $localidades    = Localidad::orderBy('nombre')->get();
 
-        return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas', 'pedidosia', 'lastPedidoReg', 'totalPedidos', 'ultimoPedidoAt', 'localidades'));
+        return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas', 'pedidosia', 'vmayo', 'lastPedidoReg', 'totalPedidos', 'ultimoPedidoAt', 'localidades'));
     }
 
     public function updateCliente(Request $request, int $cliente)
@@ -245,7 +247,9 @@ class AdminController extends Controller
         }
 
         if ($fecha) {
-            $query->whereDate('fecha', $fecha);
+            // Filtrar por fecha de creación del pedido (pedido_at en ia_pedidos)
+            $nrosDeFecha = Pedidosia::whereDate('pedido_at', $fecha)->pluck('nro');
+            $query->whereIn('nro', $nrosDeFecha);
         }
 
         if ($search) {
@@ -256,8 +260,9 @@ class AdminController extends Controller
         $pedidos    = $pedidosRaw->groupBy('nro');
         $factventas = $this->loadFactventas($pedidosRaw);
         $pedidosia  = $this->loadPedidosia($pedidosRaw);
+        $vmayo      = $this->loadVmayo($pedidosRaw);
 
-        return view('admin.pedidos', compact('pedidos', 'factventas', 'pedidosia'));
+        return view('admin.pedidos', compact('pedidos', 'factventas', 'pedidosia', 'vmayo', 'fecha'));
     }
 
     public function usoIa()
@@ -348,7 +353,9 @@ class AdminController extends Controller
             'nombre_ia'          => $request->input('nombre_ia'),
             'telefono_pedidos'   => $request->input('telefono_pedidos'),
             'two_factor_enabled'    => $request->boolean('two_factor_enabled'),
-            'notif_negocio_enabled'  => $request->boolean('notif_negocio_enabled'),
+            'notif_negocio_enabled'  => $request->input('telefono_pedidos')
+                ? $request->boolean('notif_negocio_enabled')
+                : ($config->notif_negocio_enabled ?? true),
             'notif_template_nombre'  => $request->input('notif_template_nombre'),
             'bot_info'           => $request->input('bot_info'),
             'bot_instrucciones'  => $request->input('bot_instrucciones'),
@@ -363,9 +370,7 @@ class AdminController extends Controller
             'bot_atiende_nuevos'     => $request->input('bot_atiende_nuevos', 'bot'),
             'suc'                    => $request->input('suc'),
             'pv'                     => $request->input('pv'),
-            'bot_dias_abierto'       => $request->has('bot_dias_abierto') ? array_map('intval', $request->input('bot_dias_abierto')) : null,
-            'bot_horario_apertura'   => $request->input('bot_horario_apertura') ?: null,
-            'bot_horario_cierre'     => $request->input('bot_horario_cierre') ?: null,
+            'bot_horarios'           => $this->parseHorarios($request->input('bot_horarios', '')),
             'bot_fechas_cerrado'     => $this->parseFechasCerradas($request->input('bot_fechas_cerrado', '')),
         ];
 
@@ -435,10 +440,18 @@ class AdminController extends Controller
         return back()->with('ok', 'Configuración guardada.');
     }
 
-    private function parseFechasCerradas(string $raw): array
+    private function parseFechasCerradas(?string $raw): array
     {
+        if (empty($raw)) return [];
         $fechas = array_filter(array_map('trim', explode(',', $raw)));
         return array_values(array_filter($fechas, fn($f) => preg_match('/^\d{4}-\d{2}-\d{2}$/', $f)));
+    }
+
+    private function parseHorarios(?string $raw): array
+    {
+        if (empty($raw)) return [];
+        $data = json_decode($raw, true);
+        return is_array($data) ? $data : [];
     }
 
     public function tienda()
@@ -567,6 +580,14 @@ class AdminController extends Controller
         }
 
         return Pedidosia::whereIn('nro', $nros)->get()->keyBy('nro');
+    }
+
+    // Carga las filas de vmayo para los pedidos (relación directa por nro).
+    private function loadVmayo($pedidos): \Illuminate\Support\Collection
+    {
+        $nros = $pedidos->pluck('nro')->unique()->filter()->values();
+        if ($nros->isEmpty()) return collect();
+        return Vmayo::whereIn('nro', $nros)->get()->groupBy('nro');
     }
 
     // Carga los renglones de factventas para pedidos finalizados.
