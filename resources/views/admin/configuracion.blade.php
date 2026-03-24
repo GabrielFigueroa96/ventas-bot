@@ -34,8 +34,18 @@
 
             @if($config->telefono_pedidos)
             <div class="flex items-start gap-3">
+                <input type="checkbox" name="notif_negocio_enabled" value="1" id="notif_negocio_enabled"
+                    {{ old('notif_negocio_enabled', $config->notif_negocio_enabled ?? true) ? 'checked' : '' }}
+                    class="mt-0.5 accent-red-600">
+                <label for="notif_negocio_enabled" class="text-sm cursor-pointer">
+                    <span class="font-medium text-gray-700">Recibir copia del pedido por WhatsApp</span>
+                    <p class="text-xs text-gray-400 mt-0.5">Cuando un cliente confirme un pedido, se enviará un resumen al número {{ $config->telefono_pedidos }}.</p>
+                </label>
+            </div>
+
+            <div class="flex items-start gap-3">
                 <input type="checkbox" name="two_factor_enabled" value="1" id="two_factor_enabled"
-                    {{ old('two_factor_enabled', $config->two_factor_enabled ?? true) ? 'checked' : '' }}
+                    {{ old('two_factor_enabled', $config->two_factor_enabled ?? false) ? 'checked' : '' }}
                     class="mt-0.5 accent-red-600">
                 <label for="two_factor_enabled" class="text-sm cursor-pointer">
                     <span class="font-medium text-gray-700">Verificación en dos pasos (WhatsApp)</span>

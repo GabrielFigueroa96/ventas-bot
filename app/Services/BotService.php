@@ -1372,7 +1372,7 @@ Herramientas disponibles:
 
         // Si la coincidencia no es exacta (fuzzy), confirmar antes de mostrar
         if ($normalize($producto->des) !== $normalize($nombre)) {
-            return "Encontré '{$producto->des}' como posible coincidencia para '{$nombre}'. Preguntale al cliente: '¿Te referís a {$producto->des}?' — si confirma (dice sí, ese, dale, etc.) y da una cantidad, llamá DIRECTAMENTE agregar_al_carrito con nombre='{$producto->des}' y la cantidad indicada. Si confirma sin dar cantidad, pedile la cantidad y luego llamá agregar_al_carrito. NO volvás a llamar ver_producto para este mismo producto.";
+            return "Encontré '{$producto->des}' como posible coincidencia para '{$nombre}'. Preguntale al cliente: '¿Te referís a {$producto->des}?' — si confirma (dice sí, ese, dale, etc.) y da una cantidad, llamá DIRECTAMENTE agregar_al_carrito con descrip='{$producto->des}' y la cantidad indicada. Si confirma sin dar cantidad, pedile la cantidad y luego llamá agregar_al_carrito. NO volvás a llamar ver_producto para este mismo producto.";
         }
 
         $caption = "*{$producto->des}*";

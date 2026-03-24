@@ -12,9 +12,9 @@
 
     <select name="estado" class="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
         <option value="">Todos los estados</option>
-        <option value="0" {{ request('estado') === '0' ? 'selected' : '' }}>Pendiente</option>
-        <option value="1" {{ request('estado') === '1' ? 'selected' : '' }}>Finalizado</option>
-        <option value="9" {{ request('estado') === '9' ? 'selected' : '' }}>Cancelado</option>
+        @foreach(\App\Models\Pedidosia::ESTADOS as $val => $info)
+            <option value="{{ $val }}" {{ request('estado') == $val ? 'selected' : '' }}>{{ $info['label'] }}</option>
+        @endforeach
     </select>
 
     <input type="date" name="fecha" value="{{ request('fecha') }}"

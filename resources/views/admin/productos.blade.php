@@ -137,14 +137,22 @@
 
                     {{-- Descripción --}}
                     <div class="relative sm:col-span-1">
-                        <label class="block text-xs font-medium text-gray-500 mb-1">Descripción (visible al cliente)</label>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-xs font-medium text-gray-500">Descripción (visible al cliente)</label>
+                            <button type="button"
+                                onclick="sugerirDescripcion('{{ $producto->cod }}', this)"
+                                class="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 border border-purple-200 hover:border-purple-400 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-full transition">
+                                🤖 Sugerir
+                            </button>
+                        </div>
                         <textarea
                             data-url="{{ route('admin.productos.descripcion', $producto->cod) }}"
+                            data-cod="{{ $producto->cod }}"
                             placeholder="Ej: corte tierno ideal para asado..."
                             maxlength="500" rows="2"
                             class="desc-input w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-red-300 placeholder-gray-300"
                         >{{ $ia->descripcion }}</textarea>
-                        <span class="desc-status absolute top-6 right-1.5 text-xs text-green-500 hidden">✓</span>
+                        <span class="desc-status absolute bottom-1.5 right-1.5 text-xs text-green-500 hidden">✓</span>
                     </div>
 
                     {{-- Notas IA --}}
@@ -285,6 +293,78 @@ function autoSaveTextarea(selector, statusSelector, bodyKey) {
 
 autoSaveTextarea('.desc-input', '.desc-status', 'descripcion');
 autoSaveTextarea('.ia-input',   '.ia-status',   'notas_ia');
+
+async function sugerirDescripcion(cod, btn) {
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Pensando...';
+
+    try {
+        const res  = await fetch(`/admin/productos/${cod}/sugerir-descripcion`, {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+        });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+            alert(data.error ?? 'No se pudo obtener la sugerencia.');
+            return;
+        }
+
+        // Buscar el textarea de la misma fila
+        const textarea = document.querySelector(`.desc-input[data-cod="${cod}"]`);
+        if (!textarea) return;
+
+        // Mostrar sugerencia en un mini-panel debajo del textarea
+        let panel = document.getElementById(`sugerencia-panel-${cod}`);
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = `sugerencia-panel-${cod}`;
+            panel.className = 'mt-1 p-2 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-800';
+            textarea.parentElement.appendChild(panel);
+        }
+
+        panel.innerHTML = `
+            <p class="font-medium mb-1">Sugerencia IA:</p>
+            <p class="italic mb-2">"${data.sugerencia}"</p>
+            <div class="flex gap-2">
+                <button onclick="aplicarSugerencia('${cod}', this)" data-sugerencia="${data.sugerencia.replace(/"/g, '&quot;')}"
+                    class="text-xs bg-purple-600 hover:bg-purple-700 text-white px-2 py-0.5 rounded-full transition">
+                    Usar esta descripción
+                </button>
+                <button onclick="document.getElementById('sugerencia-panel-${cod}').remove()"
+                    class="text-xs text-gray-500 hover:text-gray-700 px-2 py-0.5 rounded-full border border-gray-200 hover:bg-gray-50 transition">
+                    Descartar
+                </button>
+            </div>`;
+    } catch (e) {
+        alert('Error de red.');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
+}
+
+async function aplicarSugerencia(cod, btn) {
+    const sugerencia = btn.dataset.sugerencia;
+    const textarea   = document.querySelector(`.desc-input[data-cod="${cod}"]`);
+    if (!textarea) return;
+
+    textarea.value = sugerencia;
+
+    // Guardar automáticamente
+    try {
+        await fetch(textarea.dataset.url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+            body: JSON.stringify({ descripcion: sugerencia }),
+        });
+        const status = textarea.parentElement.querySelector('.desc-status');
+        if (status) { status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 2000); }
+    } catch (_) {}
+
+    document.getElementById(`sugerencia-panel-${cod}`)?.remove();
+}
 
 document.querySelectorAll('.precio-input').forEach(input => {
     let original = input.value;

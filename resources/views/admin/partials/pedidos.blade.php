@@ -27,7 +27,8 @@
 
     // Estado sia
     $siaEstado = $sia ? (int) $sia->estado : null;
-    $siaInfo   = $sia ? (\App\Models\Pedidosia::ESTADOS[$siaEstado] ?? ['label' => '?', 'css' => 'bg-gray-100 text-gray-500']) : null;
+    $siaLabel  = $sia ? $sia->estadoLabel() : null;
+    $siaCss    = $sia ? $sia->estadoCss()   : null;
     $siaMax    = \App\Models\Pedidosia::ESTADO_ENTREGADO;
 
     $totalAcordado = $items->sum('neto');
@@ -56,8 +57,8 @@
             @if($sia)
                 <div class="flex items-center gap-1.5 shrink-0">
                     <span id="badge-sia-{{ $sia->id }}"
-                          class="text-xs px-2 py-0.5 rounded-full font-medium {{ $siaInfo['css'] }}">
-                        {{ $siaInfo['label'] }}
+                          class="text-xs px-2 py-0.5 rounded-full font-medium {{ $siaCss }}">
+                        {{ $siaLabel }}
                     </span>
                     @if($siaEstado < $sia->estadoMax() && $siaEstado !== \App\Models\Pedidosia::ESTADO_CANCELADO)
                         <button onclick="avanzarEstado({{ $sia->id }}, this)"

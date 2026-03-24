@@ -7,6 +7,7 @@ use App\Models\Producto;
 use App\Services\TenantManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class ProductoController extends Controller
@@ -232,5 +233,59 @@ class ProductoController extends Controller
         imagejpeg($dst, public_path($name), $quality);
 
         return $name;
+    }
+
+    public function sugerirDescripcion($cod)
+    {
+        $producto = Producto::where('cod', $cod)->firstOrFail();
+        $ia       = $producto->iaProducto;
+
+        $nombre   = $producto->des;
+        $grupo    = $producto->desgrupo ?? '';
+        $tipo     = $producto->tipo ?? '';
+        $desc     = $ia?->descripcion ?? '';
+        $notas    = $ia?->notas_ia ?? '';
+
+        $contexto = "Producto: {$nombre}";
+        if ($grupo) $contexto .= "\nGrupo: {$grupo}";
+        if ($tipo)  $contexto .= "\nTipo de venta: " . ($tipo === 'Unidad' ? 'por unidad' : 'por kilogramo');
+        if ($desc)  $contexto .= "\nDescripción actual: {$desc}";
+        if ($notas) $contexto .= "\nNotas internas: {$notas}";
+
+        $prompt = <<<EOT
+Sos un asistente de una carnicería/rotisería argentina. Escribí una descripción corta y atractiva para el cliente sobre este producto.
+- Máximo 120 caracteres
+- Lenguaje cercano, sin tecnicismos
+- Destacá lo mejor del corte o producto (sabor, uso recomendado, textura)
+- No repitas el nombre del producto al inicio
+- No uses comillas
+
+{$contexto}
+
+Respondé solo con la descripción, sin explicaciones adicionales.
+EOT;
+
+        try {
+            $response = Http::withToken(config('api.openai.key'))
+                ->timeout(20)
+                ->post('https://api.openai.com/v1/chat/completions', [
+                    'model'       => 'gpt-4.1-mini',
+                    'max_tokens'  => 80,
+                    'temperature' => 0.7,
+                    'messages'    => [
+                        ['role' => 'user', 'content' => $prompt],
+                    ],
+                ])->json();
+
+            $sugerencia = trim($response['choices'][0]['message']['content'] ?? '');
+
+            if (!$sugerencia) {
+                return response()->json(['error' => 'La IA no devolvió una sugerencia.'], 500);
+            }
+
+            return response()->json(['sugerencia' => $sugerencia]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Error al conectar con la IA.'], 500);
+        }
     }
 }

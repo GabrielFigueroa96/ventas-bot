@@ -197,8 +197,10 @@ class AdminController extends Controller
         return view('admin.cliente', compact('cliente', 'mensajes', 'pedidos', 'factventas', 'pedidosia', 'lastPedidoReg', 'totalPedidos', 'ultimoPedidoAt', 'localidades'));
     }
 
-    public function updateCliente(Request $request, Cliente $cliente)
+    public function updateCliente(Request $request, int $cliente)
     {
+        $clienteModel = Cliente::findOrFail($cliente);
+
         $request->validate([
             'name'   => 'nullable|string|max:255',
             'phone'  => 'required|string|max:20',
@@ -207,14 +209,14 @@ class AdminController extends Controller
 
         $phone = preg_replace('/\D/', '', $request->input('phone'));
 
-        if (Cliente::where('phone', $phone)->where('id', '!=', $cliente->id)->exists()) {
+        if (Cliente::where('phone', $phone)->where('id', '!=', $clienteModel->id)->exists()) {
             return back()->withErrors(['phone' => 'Ya existe otro cliente con ese teléfono.'])->withInput();
         }
 
         $localidadId = $request->input('localidad_id') ?: null;
         $localidad   = $localidadId ? Localidad::find($localidadId) : null;
 
-        $cliente->update([
+        $clienteModel->update([
             'name'         => $request->input('name') ?: null,
             'phone'        => $phone,
             'estado'       => $request->input('estado'),
@@ -222,11 +224,11 @@ class AdminController extends Controller
             'numero'       => $request->input('numero') ?: null,
             'dato_extra'   => $request->input('dato_extra') ?: null,
             'localidad_id' => $localidadId,
-            'localidad'    => $localidad ? $localidad->nombre : ($request->input('localidad_texto') ?: null),
+            'localidad'    => $localidad ? $localidad->nombre : null,
             'provincia'    => $localidad ? $localidad->provincia : null,
         ]);
 
-        return redirect()->route('admin.cliente', $cliente)->with('ok', 'Cliente actualizado.');
+        return redirect()->route('admin.cliente', $clienteModel->id)->with('ok', 'Cliente actualizado.');
     }
 
     public function pedidos(Request $request)
@@ -238,7 +240,8 @@ class AdminController extends Controller
         $query = Pedido::orderByDesc('reg');
 
         if ($estado !== null && $estado !== '') {
-            $query->where('estado', $estado);
+            $nrosFiltrados = Pedidosia::where('estado', $estado)->pluck('nro');
+            $query->whereIn('nro', $nrosFiltrados);
         }
 
         if ($fecha) {
@@ -344,7 +347,8 @@ class AdminController extends Controller
         $data = [
             'nombre_ia'          => $request->input('nombre_ia'),
             'telefono_pedidos'   => $request->input('telefono_pedidos'),
-            'two_factor_enabled' => $request->boolean('two_factor_enabled'),
+            'two_factor_enabled'    => $request->boolean('two_factor_enabled'),
+            'notif_negocio_enabled' => $request->boolean('notif_negocio_enabled'),
             'bot_info'           => $request->input('bot_info'),
             'bot_instrucciones'  => $request->input('bot_instrucciones'),
             'bot_permite_retiro'     => $request->boolean('bot_permite_retiro'),
