@@ -35,12 +35,8 @@
         <p class="text-xs text-gray-500">Seleccioná el registro que corresponde a este pedido. Queda guardado para verlo después.</p>
         <div id="vmayo-lista" class="space-y-2 max-h-64 overflow-y-auto"></div>
         <div class="flex gap-2 pt-2 border-t border-gray-100">
-            <button id="vmayo-sin-vincular" type="button"
-                class="flex-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg py-2">
-                Avanzar sin vincular
-            </button>
             <button id="vmayo-cancelar" type="button"
-                class="text-xs text-red-400 hover:text-red-600 px-3 py-2">
+                class="flex-1 text-xs text-red-400 hover:text-red-600 border border-gray-200 rounded-lg py-2">
                 Cancelar
             </button>
         </div>
@@ -123,8 +119,7 @@ async function pedirVmayo(id) {
                 <span class="text-xs text-gray-400 shrink-0">${op.items} ítems · $${op.total_fmt}</span>
             </button>`).join('');
 
-        document.getElementById('vmayo-sin-vincular').onclick = () => { cerrarModalVmayo(); resolve(null); };
-        document.getElementById('vmayo-cancelar').onclick     = () => { cerrarModalVmayo(); resolve(false); };
+        document.getElementById('vmayo-cancelar').onclick = () => { cerrarModalVmayo(); resolve(false); };
         window._vmayoResolve = resolve;
         document.getElementById('modal-vmayo').classList.remove('hidden');
     });

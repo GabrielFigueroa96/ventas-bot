@@ -521,14 +521,15 @@ class AdminController extends Controller
     {
         $sia = Pedidosia::findOrFail($id);
 
-        if (!$sia->cliente?->cuenta_cod) {
+        $cuentaCod = $sia->cliente?->cuenta_cod;
+        if (!$cuentaCod) {
             return response()->json(['error' => 'El cliente no tiene cuenta vinculada.'], 422);
         }
 
         $usados = Pedidosia::whereNotNull('vmayo_nro')->pluck('vmayo_nro')->toArray();
 
         $opciones = DB::table('vmayo')
-            ->where('codcli', $sia->codcli)
+            ->where('codcli', $cuentaCod)
             ->whereNotIn('nro', $usados)
             ->selectRaw('nro, nomcli, SUM(NETO) as total, COUNT(*) as items')
             ->groupBy('nro', 'nomcli')
@@ -559,9 +560,10 @@ class AdminController extends Controller
             if (!$sia->cliente?->cuenta_cod) {
                 return response()->json(['error' => 'El cliente no tiene cuenta vinculada. Vinculá una cuenta antes de avanzar.'], 422);
             }
-            if ($request->filled('vmayo_nro')) {
-                $sia->vmayo_nro = (int) $request->input('vmayo_nro');
+            if (!$request->filled('vmayo_nro')) {
+                return response()->json(['error' => 'Debés vincular un registro de vmayo antes de avanzar.'], 422);
             }
+            $sia->vmayo_nro = (int) $request->input('vmayo_nro');
         }
 
         $sia->estado = $nextEstado;
