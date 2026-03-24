@@ -2,39 +2,66 @@
 @section('title', 'Pedidos')
 
 @section('content')
-<h1 class="text-2xl font-bold text-gray-800 mb-6">Pedidos</h1>
+<div class="flex items-center justify-between mb-5">
+    <h1 class="text-2xl font-bold text-gray-800">Pedidos</h1>
+</div>
 
 {{-- Filtros --}}
-<form method="GET" class="flex flex-wrap gap-3 mb-5">
-    <input type="text" name="search" value="{{ request('search') }}"
-        placeholder="Buscar cliente..."
-        class="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+<div class="bg-white rounded-xl shadow p-4 mb-5">
+    <form method="GET" class="flex flex-wrap gap-3 items-end">
 
-    <select name="estado" class="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
-        <option value="">Todos los estados</option>
-        @foreach(\App\Models\Pedidosia::ESTADOS as $val => $info)
-            <option value="{{ $val }}" {{ request('estado') == $val ? 'selected' : '' }}>{{ $info['label'] }}</option>
-        @endforeach
-    </select>
-
-    <input type="date" name="fecha" value="{{ $fecha }}"
-        class="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
-
-    <label class="flex items-center gap-2 text-sm text-gray-600 select-none cursor-pointer self-center">
-        <div class="relative">
-            <input type="checkbox" name="por_entrega" value="1" class="sr-only peer"
-                {{ request('por_entrega') ? 'checked' : '' }}>
-            <div class="w-9 h-5 bg-gray-300 rounded-full peer-checked:bg-red-500 transition-colors"></div>
-            <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+        <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium text-gray-500 uppercase">Cliente</label>
+            <input type="text" name="search" value="{{ request('search') }}"
+                placeholder="Buscar..."
+                class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 w-44">
         </div>
-        Fecha de entrega
-    </label>
 
-    <button type="submit" class="bg-red-600 text-white rounded-lg px-5 py-2 text-sm hover:bg-red-700">Filtrar</button>
-    <a href="{{ route('admin.pedidos') }}" class="text-sm text-gray-500 hover:underline self-center">Limpiar</a>
-</form>
+        <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium text-gray-500 uppercase">Estado</label>
+            <select name="estado" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                <option value="">Todos</option>
+                @foreach(\App\Models\Pedidosia::ESTADOS as $val => $info)
+                    <option value="{{ $val }}" {{ request('estado') == $val ? 'selected' : '' }}>{{ $info['label'] }}</option>
+                @endforeach
+            </select>
+        </div>
 
-<div class="space-y-4">
+        <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium text-gray-500 uppercase">Fecha</label>
+            <input type="date" name="fecha" value="{{ $fecha }}"
+                class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+        </div>
+
+        <label class="flex flex-col gap-1 cursor-pointer select-none">
+            <span class="text-xs font-medium text-gray-500 uppercase">Tipo de fecha</span>
+            <div class="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 h-[38px]">
+                <div class="relative">
+                    <input type="checkbox" name="por_entrega" value="1" class="sr-only peer"
+                        {{ $porEntrega ? 'checked' : '' }}>
+                    <div class="w-8 h-4 bg-gray-300 rounded-full peer-checked:bg-red-500 transition-colors"></div>
+                    <div class="absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+                </div>
+                <span class="text-sm text-gray-600">Por entrega</span>
+            </div>
+        </label>
+
+        <div class="flex gap-2 self-end">
+            <button type="submit"
+                class="bg-red-600 hover:bg-red-700 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors">
+                Filtrar
+            </button>
+            <a href="{{ route('admin.pedidos') }}"
+                class="border border-gray-200 hover:bg-gray-50 text-gray-500 rounded-lg px-4 py-2 text-sm transition-colors">
+                Limpiar
+            </a>
+        </div>
+
+    </form>
+</div>
+
+{{-- Resultados --}}
+<div class="space-y-3">
     @include('admin.partials.pedidos', compact('pedidos', 'factventas', 'pedidosia', 'vmayo'))
 </div>
 
@@ -42,7 +69,7 @@
 <div id="modal-vmayo" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-3">
         <h3 class="text-sm font-semibold text-gray-800">Vincular con pedido procesado</h3>
-        <p class="text-xs text-gray-500">Seleccioná el registro que corresponde a este pedido. Queda guardado para verlo después.</p>
+        <p class="text-xs text-gray-500">Seleccioná el registro que corresponde a este pedido.</p>
         <div id="vmayo-lista" class="space-y-2 max-h-64 overflow-y-auto"></div>
         <div class="flex gap-2 pt-2 border-t border-gray-100">
             <button id="vmayo-cancelar" type="button"
@@ -61,17 +88,17 @@ const ESTADO_CONFIRMADO = 1;
 
 // ── Avanzar estado ────────────────────────────────────────────────────────────
 async function avanzarEstado(id, btn) {
-    const max         = parseInt(btn.dataset.max ?? 4);
+    const max          = parseInt(btn.dataset.max ?? 4);
     const estadoActual = parseInt(btn.dataset.estado ?? 0);
-    btn.disabled  = true;
-    btn.textContent = '...';
+    btn.disabled     = true;
+    btn.innerHTML    = '<span class="animate-pulse">…</span>';
 
-    // Confirmado → Preparado: pedir vinculación con vmayo
     let vmayoNro = null;
     if (estadoActual === ESTADO_CONFIRMADO) {
         vmayoNro = await pedirVmayo(id);
-        if (vmayoNro === false) {           // usuario canceló
-            btn.disabled = false; btn.textContent = '›';
+        if (vmayoNro === false) {
+            btn.disabled  = false;
+            btn.innerHTML = btn.dataset.label ?? '›';
             return;
         }
     }
@@ -88,44 +115,43 @@ async function avanzarEstado(id, btn) {
             body,
         });
         const data = await res.json();
-        if (!res.ok) { alert(data.error ?? 'Error'); btn.disabled = false; btn.textContent = '›'; return; }
+        if (!res.ok) { alert(data.error ?? 'Error'); btn.disabled = false; btn.innerHTML = btn.dataset.label ?? '›'; return; }
 
         const badge = document.getElementById(`badge-sia-${id}`);
         if (badge) {
             badge.textContent = data.label;
-            badge.className   = `text-xs px-2 py-0.5 rounded-full font-medium ${data.css}`;
+            badge.className   = `inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold ${data.css}`;
         }
         const cancelBtn = document.getElementById(`cancel-sia-${id}`);
         if (cancelBtn) cancelBtn.remove();
 
-        // Actualizar data-estado para la próxima vez
         btn.dataset.estado = data.estado;
         actualizarTimeline(id, data.estado);
 
         if (data.estado >= max) {
             btn.remove();
         } else {
-            btn.disabled    = false;
-            btn.textContent = '›';
+            btn.disabled  = false;
+            btn.innerHTML = btn.dataset.label ?? '›';
         }
     } catch (e) {
-        btn.disabled = false; btn.textContent = '›';
+        btn.disabled = false; btn.innerHTML = btn.dataset.label ?? '›';
     }
 }
 
 // ── Selector de vmayo ─────────────────────────────────────────────────────────
 async function pedirVmayo(id) {
-    const res     = await fetch(`/admin/pedidos/ia/${id}/vmayo-opciones`);
-    const data    = await res.json();
+    const res      = await fetch(`/admin/pedidos/ia/${id}/vmayo-opciones`);
+    const data     = await res.json();
     const opciones = data.opciones ?? [];
 
-    if (opciones.length === 0) return null;   // sin opciones: avanzar directo
+    if (opciones.length === 0) return null;
 
     return new Promise(resolve => {
         const lista = document.getElementById('vmayo-lista');
         lista.innerHTML = opciones.map(op => `
             <button type="button" onclick="elegirVmayo(${op.nro})"
-                class="w-full text-left px-3 py-2 rounded-lg border border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition text-sm flex items-center justify-between gap-2">
+                class="w-full text-left px-3 py-2.5 rounded-lg border border-gray-200 hover:border-orange-400 hover:bg-orange-50 transition text-sm flex items-center justify-between gap-2">
                 <span><span class="font-semibold text-gray-800">#${op.nro}</span> <span class="text-gray-600">${op.nomcli}</span></span>
                 <span class="text-xs text-gray-400 shrink-0">${op.items} ítems · $${op.total_fmt}</span>
             </button>`).join('');
@@ -140,6 +166,7 @@ function elegirVmayo(nro) {
     cerrarModalVmayo();
     if (window._vmayoResolve) { window._vmayoResolve(nro); window._vmayoResolve = null; }
 }
+
 // ── Timeline ──────────────────────────────────────────────────────────────────
 function actualizarTimeline(id, estado) {
     const el = document.getElementById(`timeline-sia-${id}`);
@@ -161,7 +188,7 @@ function actualizarTimeline(id, estado) {
         const labelClass = current
             ? 'text-red-600 font-semibold'
             : done ? 'text-gray-500' : 'text-gray-300';
-        const lineClass = done ? 'bg-red-500' : 'bg-gray-200';
+        const lineClass = done ? 'bg-red-400' : 'bg-gray-200';
 
         html += `<div class="flex flex-col items-center shrink-0">
             <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${circleClass}">
@@ -186,8 +213,8 @@ document.getElementById('modal-vmayo')?.addEventListener('click', function(e) {
 // ── Cancelar pedido ───────────────────────────────────────────────────────────
 async function cancelarPedido(id, btn) {
     if (!confirm('¿Cancelar este pedido?')) return;
-    btn.disabled = true;
-    btn.textContent = '...';
+    btn.disabled    = true;
+    btn.textContent = '…';
     try {
         const res  = await fetch(`/admin/pedidos/ia/${id}/cancelar`, {
             method: 'PATCH',
@@ -199,7 +226,7 @@ async function cancelarPedido(id, btn) {
         const badge = document.getElementById(`badge-sia-${id}`);
         if (badge) {
             badge.textContent = data.label;
-            badge.className   = `text-xs px-2 py-0.5 rounded-full font-medium ${data.css}`;
+            badge.className   = `inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold ${data.css}`;
         }
         btn.remove();
         const avanzarBtn = document.querySelector(`[onclick="avanzarEstado(${id}, this)"]`);
