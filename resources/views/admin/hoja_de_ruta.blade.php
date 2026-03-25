@@ -278,8 +278,12 @@ function imprimirHoja() {
     const contenido = document.getElementById('contenido-ruta');
     if (!contenido) return;
 
-    const fechaLabel = @json(\Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM [de] YYYY'));
-    const total      = @json(number_format($totalGeneral, 2, ',', '.'));
+    @php
+        $js_fechaLabel = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM [de] YYYY');
+        $js_total      = number_format($totalGeneral, 2, ',', '.');
+    @endphp
+    const fechaLabel = @json($js_fechaLabel);
+    const total      = @json($js_total);
     const cant       = @json($totalPedidos);
 
     const win = window.open('', '_blank', 'width=950,height=750');
