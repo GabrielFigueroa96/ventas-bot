@@ -3,13 +3,43 @@
 
 @section('content')
 
-<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+{{-- Print styles --}}
+<style>
+@media print {
+    #sidebar, header.sticky, #overlay, #toast-wrap, .no-print { display: none !important; }
+    body { background: white !important; }
+    main { padding: 0 !important; max-width: none !important; }
+    .shadow, .shadow-sm { box-shadow: none !important; }
+    .rounded-xl { border-radius: 4px !important; }
+    .bg-gray-100 { background: white !important; }
+    .print-title { display: block !important; }
+}
+.print-title { display: none; }
+</style>
+
+{{-- Loading overlay al cambiar fecha --}}
+<div id="fecha-loading" class="hidden fixed inset-0 z-50 bg-white/60 backdrop-blur-sm flex items-center justify-center no-print">
+    <div class="bg-white rounded-xl shadow-lg px-6 py-5 flex items-center gap-3">
+        <svg class="animate-spin w-5 h-5 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+        </svg>
+        <span class="text-sm font-medium text-gray-600">Cargando pedidos…</span>
+    </div>
+</div>
+
+{{-- Título visible solo en impresión --}}
+<div class="print-title mb-3">
+    <h1 style="font-size:16px;font-weight:bold;">Hoja de ruta — {{ \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM [de] YYYY') }}</h1>
+</div>
+
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5 no-print">
     <h1 class="text-2xl font-bold text-gray-800">Hoja de ruta</h1>
 
     <div class="flex items-center gap-2 flex-wrap">
-        <form method="GET" class="flex items-center gap-2" data-no-loading>
+        <form method="GET" class="flex items-center gap-2" id="form-fecha">
             <input type="date" name="fecha" value="{{ $fecha }}"
-                onchange="this.form.submit()"
+                onchange="cambiarFecha(this)"
                 class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
         </form>
 
@@ -41,11 +71,12 @@
 </div>
 
 @php
-    $totalPedidos = $pedidos->count();
-    $totalGeneral = $pedidos->sum('total');
-    $preparados   = $pedidos->where('estado', \App\Models\Pedidosia::ESTADO_EN_CAMINO)->count();
-    $enReparto    = $pedidos->where('estado', \App\Models\Pedidosia::ESTADO_EN_REPARTO)->count();
-    $porLocalidad = $pedidos->groupBy('localidad');
+    $totalPedidos    = $pedidos->count();
+    $totalGeneral    = $pedidos->sum('total');
+    $totalDespachado = $vmayo->flatten()->sum('NETO');
+    $preparados      = $pedidos->where('estado', \App\Models\Pedidosia::ESTADO_EN_CAMINO)->count();
+    $enReparto       = $pedidos->where('estado', \App\Models\Pedidosia::ESTADO_EN_REPARTO)->count();
+    $porLocalidad    = $pedidos->groupBy('localidad');
 @endphp
 
 @if($pedidos->isEmpty())
@@ -82,9 +113,15 @@
     </div>
     @endif
     <div>
-        <p class="text-xs text-gray-400 uppercase font-medium">Total</p>
+        <p class="text-xs text-gray-400 uppercase font-medium">Total pedido</p>
         <p class="text-sm font-semibold text-gray-800">${{ number_format($totalGeneral, 2, ',', '.') }}</p>
     </div>
+    @if($totalDespachado > 0)
+    <div>
+        <p class="text-xs text-gray-400 uppercase font-medium">Total despachado</p>
+        <p class="text-sm font-semibold text-green-700">${{ number_format($totalDespachado, 2, ',', '.') }}</p>
+    </div>
+    @endif
 </div>
 
 {{-- Pedidos --}}
@@ -115,18 +152,18 @@
         <div class="flex items-start gap-3 px-4 py-3 border-b {{ $esEnReparto ? 'border-indigo-50 bg-indigo-50/40' : 'border-gray-50' }}">
             <span class="text-xs font-bold text-gray-300 w-5 shrink-0 text-center pt-0.5">{{ $idx + 1 }}</span>
             <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold text-gray-800 truncate">{{ $pedido->nomcli }}</p>
-                @if($pedido->direccion)
-                    <p class="text-xs text-gray-500 truncate">{{ $pedido->direccion }}</p>
-                @endif
-                <div class="flex items-center gap-2 mt-1">
+                <div class="flex items-start justify-between gap-2">
+                    <p class="text-sm font-semibold text-gray-800 truncate">{{ $pedido->nomcli }}</p>
                     @if($esEnReparto)
-                        <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700">En reparto</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 shrink-0">En reparto</span>
                     @else
-                        <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-700">Preparado</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-700 shrink-0">Preparado</span>
                     @endif
-                    <span class="text-xs text-gray-400">#{{ $pedido->nro }}</span>
                 </div>
+                @if($pedido->direccion)
+                    <p class="text-xs text-gray-500 truncate mt-0.5">{{ $pedido->direccion }}</p>
+                @endif
+                <span class="text-xs text-gray-400">#{{ $pedido->nro }}</span>
             </div>
         </div>
 
@@ -243,6 +280,12 @@
 const CSRF  = document.querySelector('meta[name=csrf-token]').content;
 const FECHA = @json($fecha);
 
+// ── Cambio de fecha con loading ───────────────────────────────────────────────
+function cambiarFecha(input) {
+    document.getElementById('fecha-loading').classList.remove('hidden');
+    document.getElementById('form-fecha').submit();
+}
+
 // ── Marcar todos como En reparto ──────────────────────────────────────────────
 async function marcarTodosReparto() {
     const btn = document.getElementById('btn-marcar-reparto');
@@ -273,69 +316,9 @@ async function marcarTodosReparto() {
     }
 }
 
-// ── Imprimir: abre ventana limpia ─────────────────────────────────────────────
+// ── Imprimir ──────────────────────────────────────────────────────────────────
 function imprimirHoja() {
-    const contenido = document.getElementById('contenido-ruta');
-    if (!contenido) return;
-
-    @php
-        $js_fechaLabel = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM [de] YYYY');
-        $js_total      = number_format($totalGeneral, 2, ',', '.');
-    @endphp
-    const fechaLabel = @json($js_fechaLabel);
-    const total      = @json($js_total);
-    const cant       = @json($totalPedidos);
-
-    const win = window.open('', '_blank', 'width=950,height=750');
-    win.document.write(`<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Hoja de ruta — ${fechaLabel}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; padding: 20px; }
-  h1 { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
-  .resumen { font-size: 11px; color: #555; margin-bottom: 16px; }
-  .grupo { margin-bottom: 16px; }
-  .localidad-badge { background: #b91c1c; color: #fff; font-size: 11px; font-weight: bold;
-    padding: 2px 10px; border-radius: 20px; display: inline-block; margin-bottom: 6px; }
-  .pedido { border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 8px; overflow: hidden; page-break-inside: avoid; }
-  .pedido.en-reparto { border-color: #c7d2fe; }
-  .pedido-header { padding: 5px 10px; border-bottom: 1px solid #f3f4f6; display: flex; justify-content: space-between; align-items: flex-start; background: #fff; }
-  .pedido.en-reparto .pedido-header { background: #eef2ff; }
-  .pedido-nombre { font-weight: bold; font-size: 12px; }
-  .pedido-dir { font-size: 10px; color: #777; }
-  .estado-badge { font-size: 10px; font-weight: bold; padding: 1px 7px; border-radius: 20px; white-space: nowrap; }
-  .estado-preparado { background: #ffedd5; color: #c2410c; }
-  .estado-reparto { background: #e0e7ff; color: #4338ca; }
-  .seccion-label { font-size: 10px; font-weight: bold; color: #555; padding: 4px 10px 2px;
-    display: flex; align-items: center; gap: 4px; }
-  .seccion-label.real { color: #16a34a; border-top: 1px dashed #e5e7eb; }
-  .seccion-label.original { color: #9ca3af; border-top: 1px dashed #e5e7eb; }
-  table { width: 100%; border-collapse: collapse; }
-  table th, table td { padding: 2px 10px; font-size: 11px; }
-  table th { text-align: left; color: #9ca3af; font-weight: normal; border-bottom: 1px solid #f3f4f6; }
-  td:nth-child(2), th:nth-child(2),
-  td:nth-child(3), th:nth-child(3),
-  td:nth-child(4), th:nth-child(4) { text-align: right; }
-  tr.dim td { color: #aaa; }
-  .pedido-footer { padding: 3px 10px; background: #f9fafb; border-top: 1px solid #f3f4f6;
-    display: flex; justify-content: space-between; font-size: 10px; color: #666; }
-  .pedido-footer strong { color: #111; font-size: 12px; }
-  .total-general { background: #1f2937; color: #fff; padding: 7px 14px; border-radius: 6px;
-    display: flex; justify-content: space-between; margin-top: 12px; font-weight: bold; font-size: 13px; }
-</style>
-</head>
-<body>
-<h1>Hoja de ruta — ${fechaLabel}</h1>
-<p class="resumen">${cant} pedidos · Total: $${total}</p>
-${contenido.innerHTML}
-</body>
-</html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 400);
+    window.print();
 }
 </script>
 @endsection
