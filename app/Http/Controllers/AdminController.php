@@ -131,6 +131,7 @@ class AdminController extends Controller
             ->groupBy('estado')
             ->pluck('total', 'estado')
             ->toArray();
+        $totalPedidosMes = array_sum($pedidosPorEstado);
 
         // Clientes esperando atención humana
         $clientesHumano = Cliente::where('estado', 'humano')
@@ -219,7 +220,7 @@ class AdminController extends Controller
             'tasaConversion', 'clientesActivosMes', 'clientesConPedidoMes',
             'clientesHumano', 'inactivosCount',
             'proximosDias', 'pedidosPorLocalidad',
-            'pedidosPorEstado',
+            'pedidosPorEstado', 'totalPedidosMes',
         ));
     }
 
