@@ -41,7 +41,7 @@
     {{-- Header --}}
     <div class="px-4 pt-4 pb-3">
 
-        {{-- Fila superior: número + nombre + badge arriba a la derecha --}}
+        {{-- Fila superior: número + nombre | (desktop: botones + badge) (mobile: solo badge) --}}
         <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
                 <div class="flex items-baseline gap-1.5 flex-wrap">
@@ -54,23 +54,46 @@
                     <p class="text-xs text-gray-400 mt-0.5">Pedido el {{ $pedidoAt }}</p>
                 @endif
             </div>
-            {{-- Badge de estado siempre arriba a la derecha --}}
-            @if($sia)
-                <span id="badge-sia-{{ $sia->id }}"
-                      class="inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 {{ $siaCss }}">
-                    {{ $siaLabel }}
-                </span>
-            @else
-                <span class="inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold shrink-0
-                    {{ $first->estado == \App\Models\Pedido::ESTADO_CANCELADO ? 'bg-red-100 text-red-600' : ($first->estado == 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700') }}">
-                    {{ $first->estado_texto }}
-                </span>
-            @endif
+
+            {{-- Derecha: botones (solo desktop) + badge --}}
+            <div class="flex items-center gap-2 shrink-0">
+                @if($sia && $siaEstado < $sia->estadoMax() && $siaEstado !== \App\Models\Pedidosia::ESTADO_CANCELADO)
+                    {{-- Botones desktop --}}
+                    <div class="hidden md:flex gap-2">
+                        <button onclick="avanzarEstado({{ $sia->id }}, this)"
+                            data-max="{{ $sia->estadoMax() }}"
+                            data-estado="{{ $siaEstado }}"
+                            data-label="{{ $nextLabel ?? '›' }}"
+                            class="text-sm font-semibold bg-gray-800 hover:bg-gray-700 text-white py-1.5 px-4 rounded-lg transition-colors">
+                            {{ $nextLabel ?? '›' }}
+                        </button>
+                        @if($siaEstado === \App\Models\Pedidosia::ESTADO_PENDIENTE)
+                            <button id="cancel-sia-{{ $sia->id }}" onclick="cancelarPedido({{ $sia->id }}, this)"
+                                class="text-sm font-medium bg-red-50 hover:bg-red-100 text-red-500 py-1.5 px-3 rounded-lg transition-colors">
+                                Cancelar
+                            </button>
+                        @endif
+                    </div>
+                @endif
+
+                {{-- Badge de estado siempre visible --}}
+                @if($sia)
+                    <span id="badge-sia-{{ $sia->id }}"
+                          class="inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold {{ $siaCss }}">
+                        {{ $siaLabel }}
+                    </span>
+                @else
+                    <span class="inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold
+                        {{ $first->estado == \App\Models\Pedido::ESTADO_CANCELADO ? 'bg-red-100 text-red-600' : ($first->estado == 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700') }}">
+                        {{ $first->estado_texto }}
+                    </span>
+                @endif
+            </div>
         </div>
 
-        {{-- Botones de acción: fila separada, área de toque generosa --}}
+        {{-- Botones mobile: fila separada con área de toque generosa --}}
         @if($sia && $siaEstado < $sia->estadoMax() && $siaEstado !== \App\Models\Pedidosia::ESTADO_CANCELADO)
-            <div class="flex gap-2 mt-3">
+            <div class="flex md:hidden gap-2 mt-3">
                 <button onclick="avanzarEstado({{ $sia->id }}, this)"
                     data-max="{{ $sia->estadoMax() }}"
                     data-estado="{{ $siaEstado }}"
