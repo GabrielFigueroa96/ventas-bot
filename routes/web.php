@@ -65,6 +65,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::get ('/configuracion',  [AdminController::class, 'configuracion'])->name('configuracion');
     Route::post('/configuracion',  [AdminController::class, 'guardarConfiguracion'])->name('configuracion.save');
 
+    // Cuenta / contraseña
+    Route::get ('/cuenta',          [AdminController::class, 'cuenta'])->name('cuenta');
+    Route::post('/cuenta/password', [AdminController::class, 'cambiarPassword'])->name('cuenta.password');
+
     // Tienda online
     Route::get ('/tienda-config',  [AdminController::class, 'tienda'])->name('tienda');
     Route::post('/tienda-config',  [AdminController::class, 'guardarTienda'])->name('tienda.save');

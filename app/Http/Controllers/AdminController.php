@@ -16,6 +16,7 @@ use App\Models\Seguimiento;
 use App\Services\BotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class AdminController extends Controller
 {
@@ -851,5 +852,33 @@ class AdminController extends Controller
 
         // Se agrupa por "venta-pv" igual que la clave usada en la vista
         return $rows->groupBy(fn($f) => "{$f->nro}-{$f->pv}");
+    }
+
+    public function cuenta()
+    {
+        return view('admin.cuenta');
+    }
+
+    public function cambiarPassword(Request $request)
+    {
+        $request->validate([
+            'password_actual'    => 'required',
+            'password_nuevo'     => 'required|min:8|confirmed',
+        ], [
+            'password_actual.required' => 'Ingresá tu contraseña actual.',
+            'password_nuevo.required'  => 'Ingresá una nueva contraseña.',
+            'password_nuevo.min'       => 'La nueva contraseña debe tener al menos 8 caracteres.',
+            'password_nuevo.confirmed' => 'Las contraseñas no coinciden.',
+        ]);
+
+        $user = auth()->user();
+
+        if (!Hash::check($request->password_actual, $user->password)) {
+            return back()->withErrors(['password_actual' => 'La contraseña actual es incorrecta.']);
+        }
+
+        $user->update(['password' => Hash::make($request->password_nuevo)]);
+
+        return back()->with('ok', 'Contraseña actualizada correctamente.');
     }
 }

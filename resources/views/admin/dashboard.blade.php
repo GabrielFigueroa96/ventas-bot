@@ -129,9 +129,11 @@
             $x3   = 480;
             $svgW = 700;
 
-            $totalChats   = max((int)$clientesActivosMes, 1);
-            $totalPedidos = max($totalPedidosMes, 1);
-            $pctConv      = round($clientesConPedidoMes / $totalChats * 100);
+            $totalChats   = (int)$clientesActivosMes;
+            $totalPedidos = (int)$totalPedidosMes;
+            $totalChatsCalc   = max($totalChats, 1);
+            $totalPedidosCalc = max($totalPedidos, 1);
+            $pctConv      = $totalChats > 0 ? round($clientesConPedidoMes / $totalChatsCalc * 100) : 0;
 
             $estadoCfg = [
                 0 => ['label' => 'Pendiente',   'fill' => '#f59e0b', 'ribbon' => '#fbbf24'],
@@ -154,7 +156,7 @@
                     'fill'   => $cfg['fill'],
                     'ribbon' => $cfg['ribbon'],
                     'count'  => $cnt,
-                    'pct'    => round($cnt / $totalPedidos * 100),
+                    'pct'    => round($cnt / $totalPedidosCalc * 100),
                     'h'      => 0,
                     'y'      => 0,
                 ];
@@ -164,7 +166,7 @@
             $availH    = $fH - $totalGaps;
 
             foreach ($bands as &$b) {
-                $b['h'] = max(6, (int)round($b['count'] / $totalPedidos * $availH));
+                $b['h'] = max(6, (int)round($b['count'] / $totalPedidosCalc * $availH));
             }
             unset($b);
             // Corregir rounding en el último band
