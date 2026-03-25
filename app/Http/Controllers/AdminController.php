@@ -683,16 +683,21 @@ class AdminController extends Controller
     {
         $fecha = $request->input('fecha', today()->format('Y-m-d'));
 
-        $pedidos = Pedidosia::with(['items', 'cliente'])
-            ->whereDate('fecha', $fecha)
-            ->where('tipo_entrega', 'envio')
-            ->whereIn('estado', [Pedidosia::ESTADO_EN_CAMINO, Pedidosia::ESTADO_EN_REPARTO])
-            ->orderBy('localidad')
-            ->orderBy('nro')
-            ->get();
+        try {
+            $pedidos = Pedidosia::with(['items', 'cliente'])
+                ->whereDate('fecha', $fecha)
+                ->where('tipo_entrega', 'envio')
+                ->whereIn('estado', [Pedidosia::ESTADO_EN_CAMINO, Pedidosia::ESTADO_EN_REPARTO])
+                ->orderBy('localidad')
+                ->orderBy('nro')
+                ->get();
 
-        // Cargar ítems reales de vmayo para los pedidos que lo tienen vinculado
-        $vmayo = $this->loadVmayo($pedidos->keyBy('nro'));
+            // Cargar ítems reales de vmayo para los pedidos que lo tienen vinculado
+            $vmayo = $this->loadVmayo($pedidos->keyBy('nro'));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('hojaDeRuta error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            abort(500, 'Error al cargar la hoja de ruta: ' . $e->getMessage());
+        }
 
         return view('admin.hoja_de_ruta', compact('pedidos', 'vmayo', 'fecha'));
     }
