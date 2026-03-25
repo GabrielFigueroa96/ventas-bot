@@ -204,6 +204,10 @@
                     @endforeach
                 </tbody>
             </table>
+            <div class="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
+                <span class="text-xs text-gray-500">Total despachado</span>
+                <span class="text-sm font-bold text-green-700">${{ number_format($vmayoItems->sum('NETO'), 2, ',', '.') }}</span>
+            </div>
         </div>
         @endif
 

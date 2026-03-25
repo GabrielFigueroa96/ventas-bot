@@ -41,10 +41,10 @@
     {{-- Header --}}
     <div class="px-4 pt-4 pb-3">
 
-        {{-- Fila superior: nombre + badge/botones (col en mobile, row en sm+) --}}
-        <div class="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        {{-- Fila superior: número + nombre + badge arriba a la derecha --}}
+        <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-                <div class="flex items-baseline gap-2 flex-wrap">
+                <div class="flex items-baseline gap-1.5 flex-wrap">
                     <span class="text-xs font-bold text-gray-400 tracking-wide">#{{ $nro }}</span>
                     <span class="text-base font-bold text-gray-800 truncate">
                         {{ $sia?->nomcli ?: $first->nomcli }}
@@ -54,37 +54,38 @@
                     <p class="text-xs text-gray-400 mt-0.5">Pedido el {{ $pedidoAt }}</p>
                 @endif
             </div>
+            {{-- Badge de estado siempre arriba a la derecha --}}
+            @if($sia)
+                <span id="badge-sia-{{ $sia->id }}"
+                      class="inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 {{ $siaCss }}">
+                    {{ $siaLabel }}
+                </span>
+            @else
+                <span class="inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold shrink-0
+                    {{ $first->estado == \App\Models\Pedido::ESTADO_CANCELADO ? 'bg-red-100 text-red-600' : ($first->estado == 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700') }}">
+                    {{ $first->estado_texto }}
+                </span>
+            @endif
+        </div>
 
-            {{-- Badge + botones de acción --}}
-            <div class="flex items-center gap-1.5 flex-wrap sm:shrink-0">
-                @if($sia)
-                    <span id="badge-sia-{{ $sia->id }}"
-                          class="inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold {{ $siaCss }}">
-                        {{ $siaLabel }}
-                    </span>
-                    @if($siaEstado < $sia->estadoMax() && $siaEstado !== \App\Models\Pedidosia::ESTADO_CANCELADO)
-                        <button onclick="avanzarEstado({{ $sia->id }}, this)"
-                            data-max="{{ $sia->estadoMax() }}"
-                            data-estado="{{ $siaEstado }}"
-                            data-label="{{ $nextLabel ?? '›' }}"
-                            class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1 rounded-full transition-colors font-medium shrink-0">
-                            {{ $nextLabel ?? '›' }}
-                        </button>
-                    @endif
-                    @if($siaEstado === \App\Models\Pedidosia::ESTADO_PENDIENTE)
-                        <button id="cancel-sia-{{ $sia->id }}" onclick="cancelarPedido({{ $sia->id }}, this)"
-                            class="text-xs bg-red-50 hover:bg-red-100 text-red-500 px-2 py-1 rounded-full transition-colors shrink-0">
-                            Cancelar
-                        </button>
-                    @endif
-                @else
-                    <span class="inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold
-                        {{ $first->estado == \App\Models\Pedido::ESTADO_CANCELADO ? 'bg-red-100 text-red-600' : ($first->estado == 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700') }}">
-                        {{ $first->estado_texto }}
-                    </span>
+        {{-- Botones de acción: fila separada, área de toque generosa --}}
+        @if($sia && $siaEstado < $sia->estadoMax() && $siaEstado !== \App\Models\Pedidosia::ESTADO_CANCELADO)
+            <div class="flex gap-2 mt-3">
+                <button onclick="avanzarEstado({{ $sia->id }}, this)"
+                    data-max="{{ $sia->estadoMax() }}"
+                    data-estado="{{ $siaEstado }}"
+                    data-label="{{ $nextLabel ?? '›' }}"
+                    class="flex-1 text-sm font-semibold bg-gray-800 hover:bg-gray-700 text-white py-2.5 px-4 rounded-xl transition-colors">
+                    {{ $nextLabel ?? '›' }}
+                </button>
+                @if($siaEstado === \App\Models\Pedidosia::ESTADO_PENDIENTE)
+                    <button id="cancel-sia-{{ $sia->id }}" onclick="cancelarPedido({{ $sia->id }}, this)"
+                        class="text-sm font-medium bg-red-50 hover:bg-red-100 text-red-500 py-2.5 px-4 rounded-xl transition-colors">
+                        Cancelar
+                    </button>
                 @endif
             </div>
-        </div>
+        @endif
 
         {{-- Badges: entrega, pago, fecha, dirección, obs --}}
         @php
