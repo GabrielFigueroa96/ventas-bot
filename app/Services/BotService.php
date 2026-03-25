@@ -402,6 +402,16 @@ class BotService
             Cache::put('proxima_fecha_entrega_' . $cliente->id, $proximoRepartoFecha, now()->addMinutes(30));
         }
 
+        // Aviso de horario de corte superado
+        $corteAviso = '';
+        if ($horaCorte && $startDaysPrompt === 1) {
+            $corteHoraFmt = \Carbon\Carbon::today()->setTimeFromTimeString($horaCorte)->format('H:i');
+            $corteAviso   = "⚠️ HORARIO DE CORTE: Los pedidos para el día de hoy se reciben hasta las {$corteHoraFmt}hs. Ya pasó ese horario, por lo que NO se puede pedir para hoy. "
+                          . ($proximoRepartoTexto
+                              ? "Si el cliente quiere pedir para hoy, informale amablemente que no va a llegar y que el próximo reparto disponible es el {$proximoRepartoTexto}."
+                              : "Si el cliente quiere pedir para hoy, informale amablemente que no va a llegar y que debe esperar al próximo día de reparto.");
+        }
+
         // Texto dinámico para el paso 3 del flujo de pedido
         $entregasOpciones = array_filter([
             $permiteEnvio  ? 'envío' : null,
@@ -448,6 +458,7 @@ class BotService
             $configNegocio .= "\nFechas en que el local estará cerrado (sin entregas ni retiros): {$cerradasFmt}.";
         }
 
+        if ($corteAviso)     $configNegocio .= "\n\n{$corteAviso}";
         if (!$puedePedir)    $configNegocio .= "\n\nIMPORTANTE: No podés tomar pedidos. Solo informás precios y describís productos. Si el cliente quiere pedir, indicale que contacte al negocio directamente.";
         if (!$puedeSupgerir) $configNegocio .= "\nNo sugieras productos de forma proactiva. Solo respondé lo que el cliente consulte.";
 

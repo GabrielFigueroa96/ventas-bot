@@ -24,7 +24,7 @@
             Imprimir
         </button>
 
-        <a href="{{ route('pedidos') }}"
+        <a href="{{ route('admin.pedidos') }}"
             class="border border-gray-200 hover:bg-gray-50 text-gray-500 text-sm px-4 py-2 rounded-lg transition-colors">
             ← Pedidos
         </a>
