@@ -64,12 +64,12 @@
                             data-max="{{ $sia->estadoMax() }}"
                             data-estado="{{ $siaEstado }}"
                             data-label="{{ $nextLabel ?? '›' }}"
-                            class="text-sm font-semibold bg-gray-800 hover:bg-gray-700 text-white py-1.5 px-4 rounded-lg transition-colors">
+                            class="inline-flex items-center text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1 rounded-full transition-colors">
                             {{ $nextLabel ?? '›' }}
                         </button>
                         @if($siaEstado === \App\Models\Pedidosia::ESTADO_PENDIENTE)
                             <button id="cancel-sia-{{ $sia->id }}" onclick="cancelarPedido({{ $sia->id }}, this)"
-                                class="text-sm font-medium bg-red-50 hover:bg-red-100 text-red-500 py-1.5 px-3 rounded-lg transition-colors">
+                                class="inline-flex items-center text-xs font-semibold bg-red-100 hover:bg-red-200 text-red-600 px-2.5 py-1 rounded-full transition-colors">
                                 Cancelar
                             </button>
                         @endif
