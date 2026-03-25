@@ -3,20 +3,9 @@
 
 @section('content')
 
-{{-- Header empresa --}}
-@if($empresa)
-<div class="flex items-center justify-between mb-6">
-    <div>
-        <h1 class="text-2xl font-bold text-gray-900">{{ $empresa->nombre }}</h1>
-        <p class="text-sm text-gray-400 mt-0.5">{{ $empresa->domi }}{{ $empresa->prov ? ' · '.$empresa->prov : '' }}</p>
-    </div>
-    <div class="hidden sm:flex items-center gap-2 text-xs text-gray-400 bg-white border border-gray-100 rounded-xl px-4 py-2 shadow-sm">
-        <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-        Bot activo
-    </div>
-</div>
-@else
-<h1 class="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
+{{-- Subtítulo empresa --}}
+@if($empresa && ($empresa->domi || $empresa->prov))
+<p class="text-sm text-gray-400 -mt-2 mb-5">{{ $empresa->domi }}{{ $empresa->prov ? ' · '.$empresa->prov : '' }}</p>
 @endif
 
 {{-- KPIs ventas del mes --}}
@@ -26,7 +15,7 @@
 @endphp
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
 
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Vendido en {{ $mesLabel }}</p>
         <p class="text-2xl font-bold text-gray-900 mt-1">${{ number_format($totalMes, 0, ',', '.') }}</p>
         @if($variacion !== null)
@@ -36,19 +25,19 @@
         @endif
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pedidos en {{ $mesLabel }}</p>
         <p class="text-2xl font-bold text-gray-900 mt-1">{{ $cantMes }}</p>
         <p class="text-xs text-gray-400 mt-1.5">Ticket prom. ${{ number_format($ticketProm, 0, ',', '.') }}</p>
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conversión bot</p>
         <p class="text-2xl font-bold text-gray-900 mt-1">{{ $tasaConversion }}%</p>
         <p class="text-xs text-gray-400 mt-1.5">{{ $clientesConPedidoMes }} pedidos / {{ $clientesActivosMes }} chats</p>
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Inactivos +30 días</p>
         <p class="text-2xl font-bold mt-1 {{ $inactivosCount > 0 ? 'text-amber-500' : 'text-gray-900' }}">{{ number_format($inactivosCount) }}</p>
         @if($inactivosCount > 0)
@@ -61,7 +50,7 @@
 {{-- KPIs operativos --}}
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
 
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div class="flex items-start justify-between">
             <div>
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Clientes</p>
@@ -75,7 +64,7 @@
         </div>
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div class="flex items-start justify-between">
             <div>
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pedidos hoy</p>
@@ -89,7 +78,7 @@
         </div>
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div class="flex items-start justify-between">
             <div>
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pendientes</p>
@@ -108,7 +97,7 @@
         @endif
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div class="flex items-start justify-between">
             <div>
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Mensajes hoy</p>
@@ -125,7 +114,7 @@
 </div>
 
 {{-- Flujo de conversión bot --}}
-<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+<div class="card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
     <div class="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-700">Flujo de conversión — {{ $mesLabel }}</h2>
         <span class="text-xs text-gray-400">{{ $clientesActivosMes }} chats activos este mes</span>
@@ -286,12 +275,12 @@
 {{-- Gráficos fila 2 --}}
 <div class="grid md:grid-cols-2 gap-4 mb-6">
 
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h2 class="text-sm font-semibold text-gray-700 mb-4">Top productos pedidos <span class="text-gray-400 font-normal">(kg)</span></h2>
         <canvas id="chartArticulos" height="170"></canvas>
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h2 class="text-sm font-semibold text-gray-700 mb-4">Clientes nuevos <span class="text-gray-400 font-normal">— últimas 8 semanas</span></h2>
         <canvas id="chartClientes" height="170"></canvas>
     </div>
@@ -302,7 +291,7 @@
 <div class="grid md:grid-cols-2 gap-4 mb-4">
 
     {{-- Próximos 7 días --}}
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div class="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -338,7 +327,7 @@
     </div>
 
     {{-- Pendientes por localidad --}}
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div class="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/>
@@ -393,7 +382,7 @@
 
 {{-- Recordatorios de hoy --}}
 @if($recordatoriosHoy->isNotEmpty())
-<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+<div class="card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
     <div class="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
         <div class="flex items-center gap-2">
             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -440,7 +429,7 @@
 
 {{-- Seguimientos --}}
 @if($seguimientos->isNotEmpty())
-<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+<div class="card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
     <div class="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
         <div class="flex items-center gap-2">
             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -480,7 +469,7 @@
 @endif
 
 {{-- Pedidos recientes --}}
-<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+<div class="card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
     <div class="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
         <div class="flex items-center gap-2">
             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">

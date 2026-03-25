@@ -35,6 +35,7 @@
             color: #fff;
             border-left-color: #ef4444;
         }
+        .nav-link.active svg { color: #f87171; }
         .nav-link svg { flex-shrink: 0; width: 16px; height: 16px; }
 
         .nav-section {
@@ -45,6 +46,17 @@
             text-transform: uppercase;
             padding: 14px 14px 5px;
         }
+        .nav-section:first-child { padding-top: 6px; }
+
+        /* Scrollbar sidebar */
+        nav::-webkit-scrollbar { width: 3px; }
+        nav::-webkit-scrollbar-track { background: transparent; }
+        nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+        nav::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        /* Card hover */
+        .card { transition: box-shadow 0.18s, transform 0.18s; }
+        .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-1px); }
 
         #sidebar { transition: transform 0.25s ease; }
         @media (max-width: 1023px) {
@@ -155,8 +167,11 @@
             </div>
         </div>
 
-        {{-- Derecha: bot status --}}
+        {{-- Derecha: fecha + bot status --}}
         <div class="flex items-center gap-3">
+            <span class="hidden md:block text-xs text-gray-400 font-medium">
+                {{ now()->locale('es')->isoFormat('dddd D [de] MMMM') }}
+            </span>
             <div class="hidden sm:flex items-center gap-1.5 text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 Bot activo
