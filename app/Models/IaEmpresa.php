@@ -37,6 +37,7 @@ class IaEmpresa extends Model
         'notif_template_nombre',
         'bot_horarios',
         'bot_fechas_cerrado',
+        'bot_hora_corte',
     ];
 
     protected $casts = [

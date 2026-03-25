@@ -503,6 +503,7 @@ class AdminController extends Controller
             'pv'                     => $request->input('pv'),
             'bot_horarios'           => $this->parseHorarios($request->input('bot_horarios', '')),
             'bot_fechas_cerrado'     => $this->parseFechasCerradas($request->input('bot_fechas_cerrado', '')),
+            'bot_hora_corte'         => $request->input('bot_hora_corte') ?: null,
         ];
 
         if ($request->hasFile('imagen_bienvenida')) {
@@ -675,6 +676,21 @@ class AdminController extends Controller
             ]);
 
         return response()->json(['opciones' => $opciones]);
+    }
+
+    public function hojaDeRuta(Request $request)
+    {
+        $fecha = $request->input('fecha', today()->format('Y-m-d'));
+
+        $pedidos = Pedidosia::with(['items', 'cliente'])
+            ->whereDate('fecha', $fecha)
+            ->where('tipo_entrega', 'envio')
+            ->whereNotIn('estado', [Pedidosia::ESTADO_CANCELADO])
+            ->orderBy('localidad')
+            ->orderBy('nro')
+            ->get();
+
+        return view('admin.hoja_de_ruta', compact('pedidos', 'fecha'));
     }
 
     public function avanzarEstadoPedido(int $id, Request $request)

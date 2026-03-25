@@ -373,11 +373,19 @@ class BotService
         $fechasCerradas = $empresa?->bot_fechas_cerrado ?? [];
         $botHorarios    = $empresa?->bot_horarios ?? [];  // {"1":[{"de":"08:00","a":"12:00"}], ...}
 
-        // Próximo día de reparto para este cliente (respeta fechas cerradas)
+        // Próximo día de reparto para este cliente (respeta hora de corte y fechas cerradas)
+        $horaCorte           = $empresa?->bot_hora_corte ?? null;
+        $startDaysPrompt     = 1;
+        if ($horaCorte) {
+            $corteHoy = \Carbon\Carbon::today()->setTimeFromTimeString($horaCorte);
+            if (now()->lt($corteHoy)) {
+                $startDaysPrompt = 0;
+            }
+        }
         $proximoRepartoTexto = '';
         $proximoRepartoFecha = '';
         if (!empty($diasReparto)) {
-            for ($i = 1; $i <= 14; $i++) {
+            for ($i = $startDaysPrompt; $i <= 14; $i++) {
                 $candidato = now()->addDays($i);
                 $diaSemana = (int) $candidato->format('w');
                 $fechaStr  = $candidato->format('Y-m-d');
@@ -1248,7 +1256,17 @@ Herramientas disponibles:
             } catch (\Throwable) {}
         }
 
-        for ($i = 1; $i <= 14; $i++) {
+        // Si hay hora de corte y el pedido entra antes de ese horario, incluir hoy como candidato
+        $horaCorte  = $empresa?->bot_hora_corte ?? null;
+        $startDays  = 1; // Por defecto: desde mañana
+        if ($horaCorte) {
+            $corteHoy = \Carbon\Carbon::today()->setTimeFromTimeString($horaCorte);
+            if (now()->lt($corteHoy)) {
+                $startDays = 0; // Antes del corte: hoy es candidato
+            }
+        }
+
+        for ($i = $startDays; $i <= 14; $i++) {
             $candidato = now()->addDays($i);
             $diaSemana = (int) $candidato->format('w');
             $fechaStr  = $candidato->format('Y-m-d');
@@ -1800,6 +1818,13 @@ Herramientas disponibles:
     {
         if ($nro <= 0) {
             return 'Número de pedido inválido.';
+        }
+
+        // Verificar estado en ia_pedidos primero
+        $sia = Pedidosia::where('nro', $nro)->first();
+        if ($sia && $sia->estado !== Pedidosia::ESTADO_PENDIENTE) {
+            $label = $sia->estadoLabel();
+            return "El pedido #{$nro} está en estado *{$label}* y no puede modificarse.";
         }
 
         $codcli = $client->cuenta ? $client->cuenta->cod : $client->id;

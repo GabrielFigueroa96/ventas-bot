@@ -100,6 +100,23 @@
                 </div>
                 <p class="text-xs text-gray-400 mt-1">Si una localidad tiene días propios, se usan esos. Si no hay ninguno configurado, el bot no anuncia próxima fecha.</p>
             </div>
+
+            {{-- Hora de corte de pedidos --}}
+            <div class="pt-2 border-t border-gray-100">
+                <p class="text-xs font-medium text-gray-500 mb-1">Hora de corte de pedidos del día</p>
+                <div class="flex items-center gap-3">
+                    <input type="time" name="bot_hora_corte"
+                        value="{{ old('bot_hora_corte', $config->bot_hora_corte ?? '') }}"
+                        class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 w-36">
+                    <button type="button" onclick="document.querySelector('[name=bot_hora_corte]').value=''"
+                        class="text-xs text-gray-400 hover:text-red-500 transition">Quitar</button>
+                </div>
+                <p class="text-xs text-gray-400 mt-1">
+                    Si se configura (ej: 10:00), los pedidos que lleguen <strong>antes</strong> de ese horario se asignan para entrega <strong>hoy</strong>.
+                    Los que lleguen después se asignan al próximo día de reparto.
+                    Dejalo vacío para no usar esta función.
+                </p>
+            </div>
         </div>
 
           {{-- Pedido mínimo --}}
