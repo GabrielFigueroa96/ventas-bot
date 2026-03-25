@@ -1604,6 +1604,20 @@ Herramientas disponibles:
                 return "El pedido mínimo es $" . $this->fmt($pedidoMinimo) . ". Tu carrito suma $" . $this->fmt($totalCarrito) . ". Agregá más productos para poder confirmar.";
             }
         }
+
+        // Límite de pedidos pendientes por cliente
+        $maxPendientes = (int) ($config?->max_pedidos_pendientes ?? 0);
+        if ($maxPendientes > 0 && !$pedidoNroOriginal) {
+            $pendientes = Pedidosia::where('idcliente', $client->id)
+                ->where('estado', Pedidosia::ESTADO_PENDIENTE)
+                ->count();
+            if ($pendientes >= $maxPendientes) {
+                $txt = $maxPendientes === 1
+                    ? "Ya tenés un pedido pendiente de confirmar."
+                    : "Ya tenés {$pendientes} pedidos pendientes.";
+                return "{$txt} No podemos tomar un nuevo pedido hasta que el negocio procese los anteriores.";
+            }
+        }
         $suc    = $config?->suc ?? '';
         $pv     = $config?->pv ?? '';
 

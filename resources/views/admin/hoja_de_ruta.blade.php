@@ -105,7 +105,7 @@
     <div class="space-y-3">
     @foreach($items as $idx => $pedido)
     @php
-        $esEnReparto   = $pedido->estado === \App\Models\Pedidosia::ESTADO_EN_REPARTO;
+        $esEnReparto   = (int) $pedido->estado === \App\Models\Pedidosia::ESTADO_EN_REPARTO;
         $vmayoItems    = $vmayo[$pedido->nro] ?? null;
         $tieneVmayo    = $vmayoItems?->isNotEmpty() ?? false;
     @endphp

@@ -119,8 +119,8 @@
             </div>
         </div>
 
-          {{-- Pedido mínimo --}}
-        <div class="bg-white rounded-xl shadow p-5 space-y-3">
+        {{-- Pedido mínimo + límite pendientes --}}
+        <div class="bg-white rounded-xl shadow p-5 space-y-4">
             <h2 class="text-sm font-semibold text-gray-700">Pedido mínimo</h2>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Monto mínimo ($)</label>
@@ -132,6 +132,18 @@
                         class="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
                 </div>
                 <p class="text-xs text-gray-400 mt-1">Poner 0 para no exigir mínimo.</p>
+            </div>
+
+            <div class="pt-3 border-t border-gray-100">
+                <label class="block text-xs font-medium text-gray-500 mb-1">Máximo de pedidos pendientes por cliente</label>
+                <input type="number" name="max_pedidos_pendientes"
+                    value="{{ old('max_pedidos_pendientes', $config->max_pedidos_pendientes ?? 0) }}"
+                    min="0" step="1" placeholder="0"
+                    class="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                <p class="text-xs text-gray-400 mt-1">
+                    Si un cliente ya tiene esta cantidad de pedidos en estado <strong>Pendiente</strong>, el bot no acepta uno nuevo.
+                    Poner 0 para no limitar.
+                </p>
             </div>
         </div>
 

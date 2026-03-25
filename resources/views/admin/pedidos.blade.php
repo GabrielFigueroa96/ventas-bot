@@ -29,7 +29,7 @@
             <select name="estado" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
                 <option value="">Todos</option>
                 @foreach(\App\Models\Pedidosia::ESTADOS as $val => $info)
-                    <option value="{{ $val }}" {{ request('estado') == $val ? 'selected' : '' }}>{{ $info['label'] }}</option>
+                    <option value="{{ $val }}" {{ request('estado') !== '' && request('estado') !== null && (string)request('estado') === (string)$val ? 'selected' : '' }}>{{ $info['label'] }}</option>
                 @endforeach
             </select>
         </div>

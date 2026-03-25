@@ -38,6 +38,7 @@ class IaEmpresa extends Model
         'bot_horarios',
         'bot_fechas_cerrado',
         'bot_hora_corte',
+        'max_pedidos_pendientes',
     ];
 
     protected $casts = [
@@ -57,12 +58,12 @@ class IaEmpresa extends Model
         'pedido_minimo'          => 'float',
     ];
 
-    const DIAS_LABEL = [
+    public const DIAS_LABEL = [
         0 => 'Domingo', 1 => 'Lunes', 2 => 'Martes',
         3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado',
     ];
 
-    const MEDIOS_PAGO = [
+    public const MEDIOS_PAGO = [
         'efectivo'         => 'Efectivo',
         'transferencia'    => 'Transferencia',
         'cuenta_corriente' => 'Cuenta corriente',

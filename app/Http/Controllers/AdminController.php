@@ -504,6 +504,7 @@ class AdminController extends Controller
             'bot_horarios'           => $this->parseHorarios($request->input('bot_horarios', '')),
             'bot_fechas_cerrado'     => $this->parseFechasCerradas($request->input('bot_fechas_cerrado', '')),
             'bot_hora_corte'         => $request->input('bot_hora_corte') ?: null,
+            'max_pedidos_pendientes' => (int) $request->input('max_pedidos_pendientes', 0),
         ];
 
         if ($request->hasFile('imagen_bienvenida')) {
