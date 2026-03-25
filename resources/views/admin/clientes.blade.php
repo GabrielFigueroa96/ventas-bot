@@ -153,7 +153,7 @@
 {{-- Desktop: tabla --}}
 <div class="hidden sm:block bg-white rounded-xl shadow overflow-hidden">
     <table class="w-full text-sm">
-        <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
+        <thead class="bg-gray-50 text-gray-500 uppercase text-xs border-b border-gray-100">
             <tr>
                 <th class="px-5 py-3 text-left">Nombre</th>
                 <th class="px-5 py-3 text-left">Cuenta</th>
@@ -164,9 +164,10 @@
                 <th class="px-5 py-3"></th>
             </tr>
         </thead>
-        <tbody class="divide-y">
+        <tbody class="divide-y divide-gray-100">
             @forelse($clientes as $c)
-            <tr class="hover:bg-gray-50">
+            <tr class="hover:bg-red-50/40 cursor-pointer transition-colors duration-100"
+                onclick="window.location='{{ route('admin.cliente', $c) }}'">
                 <td class="px-5 py-3 font-medium text-gray-800">{{ $c->name ?? '—' }}</td>
                 <td class="px-5 py-3">
                     @if($c->cuenta)

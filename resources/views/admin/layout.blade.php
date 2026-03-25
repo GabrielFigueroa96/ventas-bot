@@ -193,6 +193,9 @@
 
 </div>
 
+{{-- ── Toast container ──────────────────────────────────────────── --}}
+<div id="toast-wrap" class="fixed z-[60] flex flex-col gap-2" style="top:4.5rem;right:1rem;width:300px;pointer-events:none"></div>
+
 <script>
 function openSidebar() {
     document.getElementById('sidebar').classList.add('open');
@@ -202,6 +205,87 @@ function closeSidebar() {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('overlay').classList.add('hidden');
 }
+
+// ── Toast system ──────────────────────────────────────────────────────────────
+(function () {
+    const wrap = document.getElementById('toast-wrap');
+    const cfg = {
+        success: { bg:'#059669', icon:'<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>' },
+        error:   { bg:'#dc2626', icon:'<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>' },
+        warning: { bg:'#b45309', icon:'<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>' },
+        info:    { bg:'#2563eb', icon:'<path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>' },
+    };
+
+    window.showToast = function (msg, type = 'success') {
+        const c = cfg[type] ?? cfg.success;
+        const t = document.createElement('div');
+        t.style.cssText = [
+            'pointer-events:auto',
+            'display:flex',
+            'align-items:center',
+            'gap:10px',
+            'padding:11px 14px',
+            'border-radius:12px',
+            `background:${c.bg}`,
+            'color:#fff',
+            'font-size:13px',
+            'font-weight:500',
+            'box-shadow:0 4px 24px rgba(0,0,0,0.18)',
+            'transform:translateX(calc(100% + 1.5rem))',
+            'transition:transform 0.32s cubic-bezier(0.34,1.4,0.64,1)',
+            'font-family:inherit',
+        ].join(';');
+        t.innerHTML = `
+            <svg style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">${c.icon}</svg>
+            <span style="flex:1;line-height:1.4">${msg}</span>
+            <button onclick="dismissToast(this.parentNode)" style="opacity:.55;background:none;border:none;color:#fff;cursor:pointer;font-size:18px;line-height:1;padding:0 0 0 4px" title="Cerrar">×</button>`;
+        wrap.appendChild(t);
+        requestAnimationFrame(() => requestAnimationFrame(() => t.style.transform = 'translateX(0)'));
+        setTimeout(() => dismissToast(t), 4500);
+    };
+
+    window.dismissToast = function (t) {
+        if (!t || !t.parentNode) return;
+        t.style.transform = 'translateX(calc(100% + 1.5rem))';
+        setTimeout(() => t.remove(), 320);
+    };
+
+    // Flash messages del servidor
+    @if(session('ok'))
+    document.addEventListener('DOMContentLoaded', () => showToast(@json(session('ok')), 'success'));
+    @endif
+    @if(session('success'))
+    document.addEventListener('DOMContentLoaded', () => showToast(@json(session('success')), 'success'));
+    @endif
+    @if(session('error'))
+    document.addEventListener('DOMContentLoaded', () => showToast(@json(session('error')), 'error'));
+    @endif
+    @if(session('warning'))
+    document.addEventListener('DOMContentLoaded', () => showToast(@json(session('warning')), 'warning'));
+    @endif
+    @if(session('info'))
+    document.addEventListener('DOMContentLoaded', () => showToast(@json(session('info')), 'info'));
+    @endif
+})();
+
+// ── Form submit: deshabilitar botón al enviar ─────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form:not([data-no-loading])').forEach(form => {
+        form.addEventListener('submit', function () {
+            const btn = form.querySelector('button[type=submit], input[type=submit]');
+            if (!btn) return;
+            btn.disabled = true;
+            const orig = btn.innerHTML || btn.value;
+            if (btn.tagName === 'INPUT') {
+                btn.value = 'Guardando…';
+            } else {
+                btn.innerHTML = '<svg class="animate-spin inline w-4 h-4 mr-1.5 -mt-0.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>' + (btn.textContent.trim() || 'Guardando…');
+            }
+            // restaurar si hay error de validación (navegación hacia atrás)
+            window.addEventListener('pageshow', () => { btn.disabled = false; btn.innerHTML = orig; });
+        });
+    });
+});
 </script>
 @yield('scripts')
 </body>

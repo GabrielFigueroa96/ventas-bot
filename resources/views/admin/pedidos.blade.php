@@ -115,7 +115,7 @@ async function avanzarEstado(id, btn) {
             body,
         });
         const data = await res.json();
-        if (!res.ok) { alert(data.error ?? 'Error'); btn.disabled = false; btn.innerHTML = btn.dataset.label ?? '›'; return; }
+        if (!res.ok) { showToast(data.error ?? 'Error al actualizar el pedido', 'error'); btn.disabled = false; btn.innerHTML = btn.dataset.label ?? '›'; return; }
 
         const badge = document.getElementById(`badge-sia-${id}`);
         if (badge) {
@@ -128,6 +128,8 @@ async function avanzarEstado(id, btn) {
         btn.dataset.estado = data.estado;
         actualizarTimeline(id, data.estado);
 
+        showToast('Estado actualizado: ' + data.label, 'success');
+
         if (data.estado >= max) {
             btn.remove();
         } else {
@@ -135,6 +137,7 @@ async function avanzarEstado(id, btn) {
             btn.innerHTML = btn.dataset.label ?? '›';
         }
     } catch (e) {
+        showToast('Error de conexión', 'error');
         btn.disabled = false; btn.innerHTML = btn.dataset.label ?? '›';
     }
 }
@@ -221,17 +224,19 @@ async function cancelarPedido(id, btn) {
             headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
         });
         const data = await res.json();
-        if (!res.ok) { alert(data.error ?? 'Error'); btn.disabled = false; btn.textContent = '✕'; return; }
+        if (!res.ok) { showToast(data.error ?? 'Error al cancelar el pedido', 'error'); btn.disabled = false; btn.textContent = '✕'; return; }
 
         const badge = document.getElementById(`badge-sia-${id}`);
         if (badge) {
             badge.textContent = data.label;
             badge.className   = `inline-flex items-center text-xs px-2.5 py-1 rounded-full font-semibold ${data.css}`;
         }
+        showToast('Pedido cancelado', 'warning');
         btn.remove();
         const avanzarBtn = document.querySelector(`[onclick="avanzarEstado(${id}, this)"]`);
         if (avanzarBtn) avanzarBtn.remove();
     } catch (e) {
+        showToast('Error de conexión', 'error');
         btn.disabled = false; btn.textContent = '✕';
     }
 }
