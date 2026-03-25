@@ -198,9 +198,10 @@ class ProductoController extends Controller
         $maxHeight = 800;
         $quality   = 80;
         $base      = "producto-images/{$tenantId}";
+        $ts        = time();
 
         if (!extension_loaded('gd')) {
-            $name = "{$base}/{$slug}.jpg";
+            $name = "{$base}/{$slug}-{$ts}.jpg";
             copy($srcPath, public_path($name));
             return $name;
         }
@@ -214,7 +215,7 @@ class ProductoController extends Controller
         };
 
         if (!$src) {
-            $name = "{$base}/{$slug}.jpg";
+            $name = "{$base}/{$slug}-{$ts}.jpg";
             copy($srcPath, public_path($name));
             return $name;
         }
@@ -229,7 +230,7 @@ class ProductoController extends Controller
         imagefill($dst, 0, 0, $white);
         imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
 
-        $name = "{$base}/{$slug}.jpg";
+        $name = "{$base}/{$slug}-{$ts}.jpg";
         imagejpeg($dst, public_path($name), $quality);
 
         return $name;

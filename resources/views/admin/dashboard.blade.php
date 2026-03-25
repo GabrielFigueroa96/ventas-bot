@@ -117,7 +117,7 @@
 <div class="card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
     <div class="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-700">Flujo de conversión — {{ $mesLabel }}</h2>
-        <span class="text-xs text-gray-400">{{ $clientesActivosMes }} chats activos este mes</span>
+        <span class="text-xs text-gray-400">{{ $clientesActivosMes }} chats · {{ $clientesConPedidoMes }} con pedido · {{ $totalPedidosMes }} pedidos</span>
     </div>
     <div class="px-6 py-6">
         @php
@@ -127,35 +127,23 @@
             $x1   = 8;
             $x2   = 260;
             $x3   = 480;
-            $svgW = 680;
-            $svgH = $fH + $pT;
+            $svgW = 700;
 
-            $chats     = max((int)$clientesActivosMes, 1);
-            $conPedido = min((int)$clientesConPedidoMes, $chats);
-            $sinPedido = max(0, $chats - $conPedido);
+            $totalChats   = max((int)$clientesActivosMes, 1);
+            $totalPedidos = max($totalPedidosMes, 1);
+            $pctConv      = round($clientesConPedidoMes / $totalChats * 100);
 
-            // Col 2
-            $c2ConH = (int)round($conPedido / $chats * $fH);
-            $c2SinH = $fH - $c2ConH;
-            $gY2    = ($c2ConH > 0 && $c2SinH > 0) ? 5 : 0;
-            $c2ConY = $pT;
-            $c2SinY = $pT + $c2ConH + $gY2;
-            $pctCon = round($conPedido / $chats * 100);
-            $pctSin = 100 - $pctCon;
-
-            // Col 3: todos los estados, proporcional al total de pedidos del mes
             $estadoCfg = [
-                0 => ['label' => 'Pendiente',        'fill' => '#f59e0b', 'ribbon' => '#fbbf24'],
-                1 => ['label' => 'Confirmado',       'fill' => '#3b82f6', 'ribbon' => '#60a5fa'],
-                2 => ['label' => 'Preparado',        'fill' => '#f97316', 'ribbon' => '#fb923c'],
-                3 => ['label' => 'En reparto',       'fill' => '#8b5cf6', 'ribbon' => '#a78bfa'],
-                4 => ['label' => 'Entregado',        'fill' => '#10b981', 'ribbon' => '#34d399'],
-                9 => ['label' => 'Cancelado',        'fill' => '#ef4444', 'ribbon' => '#f87171'],
+                0 => ['label' => 'Pendiente',   'fill' => '#f59e0b', 'ribbon' => '#fbbf24'],
+                1 => ['label' => 'Confirmado',  'fill' => '#3b82f6', 'ribbon' => '#60a5fa'],
+                2 => ['label' => 'Preparado',   'fill' => '#f97316', 'ribbon' => '#fb923c'],
+                3 => ['label' => 'En reparto',  'fill' => '#8b5cf6', 'ribbon' => '#a78bfa'],
+                4 => ['label' => 'Entregado',   'fill' => '#10b981', 'ribbon' => '#34d399'],
+                9 => ['label' => 'Cancelado',   'fill' => '#ef4444', 'ribbon' => '#f87171'],
             ];
-            $totalPedidosMes = max(array_sum($pedidosPorEstado), 1);
-            $gapBand = 3;
+            $gapBand = 4;
 
-            // Calcular alturas proporcionales dentro del espacio c2ConH
+            // Bandas col3: proporcionales al total real de pedidos
             $bands = [];
             foreach ($estadoCfg as $est => $cfg) {
                 $cnt = (int)($pedidosPorEstado[$est] ?? 0);
@@ -166,15 +154,24 @@
                     'fill'   => $cfg['fill'],
                     'ribbon' => $cfg['ribbon'],
                     'count'  => $cnt,
-                    'pct'    => round($cnt / $totalPedidosMes * 100),
-                    'h'      => (int)round($cnt / $totalPedidosMes * ($c2ConH - $gapBand * max(0, count(array_filter(array_values($pedidosPorEstado))) - 1))),
+                    'pct'    => round($cnt / $totalPedidos * 100),
+                    'h'      => 0,
+                    'y'      => 0,
                 ];
             }
-            // Corregir rounding: ajustar último band para que sumen exacto
-            $sumH = array_sum(array_column($bands, 'h')) + $gapBand * max(0, count($bands) - 1);
-            if (!empty($bands)) $bands[count($bands)-1]['h'] += ($c2ConH - $sumH);
+            $nBands    = count($bands);
+            $totalGaps = $gapBand * max(0, $nBands - 1);
+            $availH    = $fH - $totalGaps;
 
-            // Calcular Y positions (apiladas)
+            foreach ($bands as &$b) {
+                $b['h'] = max(6, (int)round($b['count'] / $totalPedidos * $availH));
+            }
+            unset($b);
+            // Corregir rounding en el último band
+            $sumH = array_sum(array_column($bands, 'h'));
+            if (!empty($bands)) $bands[$nBands-1]['h'] = max(6, $bands[$nBands-1]['h'] + ($availH - $sumH));
+
+            // Posiciones Y
             $curY = $pT;
             foreach ($bands as &$b) {
                 $b['y'] = $curY;
@@ -182,83 +179,70 @@
             }
             unset($b);
 
+            // Etiquetas col3 sin superposición (mínimo 26px entre centros)
+            $minLabelGap = 26;
+            $labelYs = array_map(fn($b) => (float)($b['y'] + $b['h'] / 2), $bands);
+            for ($i = 1; $i < count($labelYs); $i++) {
+                if ($labelYs[$i] - $labelYs[$i-1] < $minLabelGap) {
+                    $labelYs[$i] = $labelYs[$i-1] + $minLabelGap;
+                }
+            }
+
             $mx12 = ($x1 + $nW + $x2) / 2;
             $mx23 = ($x2 + $nW + $x3) / 2;
             $rib  = fn($sx,$sy1,$sy2,$tx,$ty1,$ty2,$mx)
                   => "M $sx $sy1 C $mx $sy1 $mx $ty1 $tx $ty1 L $tx $ty2 C $mx $ty2 $mx $sy2 $sx $sy2 Z";
 
-            // Source Y offset en col2 para ribbons col2→col3
-            $srcOffsetY = $pT;
+            $svgH = max($pT + $fH + 10, (!empty($labelYs) ? (int)end($labelYs) + 20 : $pT + $fH + 10));
         @endphp
 
         <svg viewBox="0 0 {{ $svgW }} {{ $svgH }}" width="100%" style="overflow:visible">
 
             {{-- Headers --}}
-            <text x="{{ $x1 + $nW/2 }}" y="13" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="600">CONVERSACIONES</text>
-            <text x="{{ $x1 + $nW/2 }}" y="27" text-anchor="middle" font-size="14" fill="#111827" font-weight="700">{{ number_format($chats) }}</text>
+            <text x="{{ $x1+$nW/2 }}" y="13" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="600">CONVERSACIONES</text>
+            <text x="{{ $x1+$nW/2 }}" y="27" text-anchor="middle" font-size="14" fill="#111827" font-weight="700">{{ number_format($totalChats) }}</text>
 
-            <text x="{{ $x2 + $nW/2 }}" y="13" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="600">PEDIDOS</text>
-            <text x="{{ $x2 + $nW/2 }}" y="27" text-anchor="middle" font-size="14" fill="#111827" font-weight="700">{{ number_format($conPedido) }}</text>
+            <text x="{{ $x2+$nW/2 }}" y="13" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="600">PEDIDOS</text>
+            <text x="{{ $x2+$nW/2 }}" y="27" text-anchor="middle" font-size="14" fill="#111827" font-weight="700">{{ number_format($totalPedidos) }}</text>
 
-            <text x="{{ $x3 + $nW/2 }}" y="13" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="600">ESTADO</text>
-            <text x="{{ $x3 + $nW/2 }}" y="27" text-anchor="middle" font-size="12" fill="#111827" font-weight="700">{{ number_format($totalPedidosMes) }}</text>
+            <text x="{{ $x3+$nW/2 }}" y="13" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="600">ESTADO</text>
+            <text x="{{ $x3+$nW/2 }}" y="27" text-anchor="middle" font-size="14" fill="#111827" font-weight="700">{{ number_format($totalPedidos) }}</text>
 
-            {{-- Ribbon col1 → col2: Con pedido --}}
-            @if($c2ConH > 0)
-            <path d="{{ $rib($x1+$nW, $pT, $pT+$c2ConH, $x2, $c2ConY, $c2ConY+$c2ConH, $mx12) }}" fill="#34d399" opacity="0.18"/>
-            @endif
-            {{-- Ribbon col1 → col2: Sin pedido --}}
-            @if($c2SinH > 0)
-            <path d="{{ $rib($x1+$nW, $pT+$c2ConH, $pT+$fH, $x2, $c2SinY, $c2SinY+$c2SinH, $mx12) }}" fill="#d1d5db" opacity="0.4"/>
-            @endif
+            {{-- Ribbon col1 → col2 (ancho completo) --}}
+            <path d="{{ $rib($x1+$nW, $pT, $pT+$fH, $x2, $pT, $pT+$fH, $mx12) }}" fill="#60a5fa" opacity="0.15"/>
 
             {{-- Ribbons col2 → col3: uno por estado --}}
             @php $srcY = $pT; @endphp
             @foreach($bands as $b)
-            @php
-                $srcH = $b['h'];
-                $tgtY = $b['y'];
-                $tgtH = $b['h'];
-            @endphp
-            <path d="{{ $rib($x2+$nW, $srcY, $srcY+$srcH, $x3, $tgtY, $tgtY+$tgtH, $mx23) }}" fill="{{ $b['ribbon'] }}" opacity="0.2"/>
-            @php $srcY += $srcH + $gapBand; @endphp
+            <path d="{{ $rib($x2+$nW, $srcY, $srcY+$b['h'], $x3, $b['y'], $b['y']+$b['h'], $mx23) }}" fill="{{ $b['ribbon'] }}" opacity="0.25"/>
+            @php $srcY += $b['h'] + $gapBand; @endphp
             @endforeach
 
-            {{-- Nodo col1 --}}
+            {{-- Col1: barra conversaciones --}}
             <rect x="{{ $x1 }}" y="{{ $pT }}" width="{{ $nW }}" height="{{ $fH }}" fill="#60a5fa" rx="5"/>
 
-            {{-- Nodos col2 --}}
-            @if($c2ConH > 0)
-            <rect x="{{ $x2 }}" y="{{ $c2ConY }}" width="{{ $nW }}" height="{{ $c2ConH }}" fill="#34d399" rx="5"/>
-            @endif
-            @if($c2SinH > 0)
-            <rect x="{{ $x2 }}" y="{{ $c2SinY }}" width="{{ $nW }}" height="{{ $c2SinH }}" fill="#e5e7eb" rx="5"/>
-            @endif
+            {{-- Col2: barra pedidos (altura completa) --}}
+            <rect x="{{ $x2 }}" y="{{ $pT }}" width="{{ $nW }}" height="{{ $fH }}" fill="#34d399" rx="5"/>
+            <text x="{{ $x2+$nW/2 }}" y="{{ $pT+$fH/2-3 }}" text-anchor="middle" font-size="9" fill="white" font-weight="700" opacity="0.9">{{ $pctConv }}%</text>
+            <text x="{{ $x2+$nW/2 }}" y="{{ $pT+$fH/2+9 }}" text-anchor="middle" font-size="8" fill="white" opacity="0.7">conv.</text>
 
-            {{-- Nodos col3: uno por estado --}}
+            {{-- Col3: barras por estado --}}
             @foreach($bands as $b)
             <rect x="{{ $x3 }}" y="{{ $b['y'] }}" width="{{ $nW }}" height="{{ $b['h'] }}" fill="{{ $b['fill'] }}" rx="4"/>
             @endforeach
 
-            {{-- Labels col2 (fondo blanco — caen dentro de la banda) --}}
-            @if($c2ConH > 0)
-            @php $lY = $c2ConY + $c2ConH / 2; @endphp
-            <rect x="{{ $x2+$nW+5 }}" y="{{ $lY-18 }}" width="110" height="30" fill="white" opacity="0.85" rx="3"/>
-            <text x="{{ $x2+$nW+9 }}" y="{{ $lY-6 }}" font-size="11" fill="#374151" font-weight="600">Con pedido</text>
-            <text x="{{ $x2+$nW+9 }}" y="{{ $lY+7 }}" font-size="10" fill="#6b7280">{{ $conPedido }} ({{ $pctCon }}%)</text>
+            {{-- Labels col3: no superpuestas, con línea conectora si están desplazadas --}}
+            @foreach($bands as $i => $b)
+            @php
+                $lY    = $labelYs[$i];
+                $bandCY = $b['y'] + $b['h'] / 2;
+            @endphp
+            @if(abs($lY - $bandCY) > 6)
+            <line x1="{{ $x3+$nW+3 }}" y1="{{ $bandCY }}" x2="{{ $x3+$nW+10 }}" y2="{{ $lY }}"
+                  stroke="#d1d5db" stroke-width="0.8" stroke-dasharray="2,2"/>
             @endif
-            @if($c2SinH > 0)
-            @php $lY2 = $c2SinY + $c2SinH / 2; @endphp
-            <rect x="{{ $x2+$nW+5 }}" y="{{ $lY2-18 }}" width="110" height="30" fill="white" opacity="0.85" rx="3"/>
-            <text x="{{ $x2+$nW+9 }}" y="{{ $lY2-6 }}" font-size="11" fill="#9ca3af">Sin pedido</text>
-            <text x="{{ $x2+$nW+9 }}" y="{{ $lY2+7 }}" font-size="10" fill="#9ca3af">{{ $sinPedido }} ({{ $pctSin }}%)</text>
-            @endif
-
-            {{-- Labels col3: uno por estado --}}
-            @foreach($bands as $b)
-            @php $lY3 = $b['y'] + $b['h'] / 2; @endphp
-            <text x="{{ $x3+$nW+9 }}" y="{{ $lY3-5 }}" font-size="11" fill="#374151" font-weight="600">{{ $b['label'] }}</text>
-            <text x="{{ $x3+$nW+9 }}" y="{{ $lY3+8 }}" font-size="10" fill="#6b7280">{{ $b['count'] }} ({{ $b['pct'] }}%)</text>
+            <text x="{{ $x3+$nW+13 }}" y="{{ $lY-4 }}" font-size="11" fill="#374151" font-weight="600">{{ $b['label'] }}</text>
+            <text x="{{ $x3+$nW+13 }}" y="{{ $lY+9 }}" font-size="10" fill="#6b7280">{{ $b['count'] }} · {{ $b['pct'] }}%</text>
             @endforeach
 
         </svg>

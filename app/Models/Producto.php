@@ -78,6 +78,7 @@ class Producto extends Model
                 'ia_productos.descripcion',
                 'ia_productos.imagen',
                 'ia_productos.notas_ia',
+                'ia_productos.updated_at as imagen_updated_at',
             );
     }
 }

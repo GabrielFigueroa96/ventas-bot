@@ -104,7 +104,7 @@
                 {{-- Imagen --}}
                 @if($producto->imagen)
                     <div class="aspect-square bg-gray-50 overflow-hidden">
-                        <img src="{{ asset($producto->imagen) }}" alt="{{ $producto->des }}"
+                        <img src="{{ asset($producto->imagen) }}?v={{ $producto->imagen_updated_at ? strtotime($producto->imagen_updated_at) : 0 }}" alt="{{ $producto->des }}"
                             class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                             loading="lazy">
                     </div>

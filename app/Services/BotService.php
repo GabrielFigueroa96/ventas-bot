@@ -498,8 +498,8 @@ Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
 1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación extra ni resumas antes. Si el cliente dice si, dale, esta bien o similar con una cantidad implícita o explícita → accioná.
 2. Podés agregar múltiples productos en una sola llamada a agregar_al_carrito.
-3. Mostrá el resumen con ver_carrito. Si hay alertas de precio (⚠️) o producto no disponible (❌), ofrecé actualizar o eliminar el ítem antes de continuar.
-4. Cuando el carrito esté listo, preguntá si el cliente confirma. Podés mencionar la próxima fecha de entrega ({$paso3Fecha}). Luego llamá DIRECTAMENTE crear_pedido pasando tipo_entrega y forma_pago si el cliente ya los mencionó en la conversación — si no, el sistema los pedirá con un menú interactivo. No los preguntes vos si no los sabés.
+3. Mostrá el resumen con ver_carrito. Si hay alertas de precio (⚠️), ofrecé actualizar y cuando el cliente confirme llamá actualizar_precios_carrito (NO ver_carrito). Si hay ❌ producto no disponible, ofrecé eliminar el ítem con agregar_al_carrito cantidad 0.
+4. Cuando el carrito esté listo, preguntá si el cliente confirma. Podés mencionar la próxima fecha de entrega ({$paso3Fecha}). Luego llamá DIRECTAMENTE crear_pedido. NUNCA preguntes forma de pago ni tipo de entrega antes de llamar crear_pedido — el sistema envía botones interactivos para eso. Solo pasá tipo_entrega o forma_pago como argumento si el cliente los mencionó explícitamente en esta conversación.
 5. Una vez creado el pedido (ves 'Botones enviados' en la respuesta del sistema), no envíes ningún mensaje: el cliente ya está viendo los botones de confirmación.
 6. Si el cliente dice el horario o turno preferido, guardalo en obs (no en fecha_entrega).
 
@@ -739,6 +739,14 @@ Herramientas disponibles:
             [
                 'type'     => 'function',
                 'function' => [
+                    'name'        => 'actualizar_precios_carrito',
+                    'description' => 'Actualiza todos los precios del carrito a los valores actuales. Usá esta herramienta cuando el cliente confirma que quiere actualizar los precios (después de ver alertas ⚠️). NUNCA uses ver_carrito para actualizar precios.',
+                    'parameters'  => ['type' => 'object', 'properties' => new \stdClass()],
+                ],
+            ],
+            [
+                'type'     => 'function',
+                'function' => [
                     'name'        => 'ver_producto',
                     'description' => 'Muestra los detalles y la imagen de un producto cuando el cliente pregunta por él específicamente.',
                     'parameters'  => [
@@ -801,16 +809,17 @@ Herramientas disponibles:
 
                 try {
                     $result = match ($funcName) {
-                        'agregar_al_carrito' => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
-                        'ver_carrito'        => $this->verCarrito($cliente),
-                        'vaciar_carrito'     => $this->vaciarCarrito($cliente),
-                        'crear_pedido'       => $this->iniciarConfirmacionPedido($cliente, $args),
-                        'ver_pedidos'        => $this->orderStatus($cliente),
-                        'ver_precios'        => $this->priceList($cliente),
-                        'ver_producto'       => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false), $puedePedir),
-                        'cancelar_pedido'    => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
-                        'editar_pedido'      => $this->editOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
-                        default              => 'Función desconocida.',
+                        'agregar_al_carrito'         => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
+                        'ver_carrito'                => $this->verCarrito($cliente),
+                        'vaciar_carrito'             => $this->vaciarCarrito($cliente),
+                        'crear_pedido'               => $this->iniciarConfirmacionPedido($cliente, $args),
+                        'ver_pedidos'                => $this->orderStatus($cliente),
+                        'ver_precios'                => $this->priceList($cliente),
+                        'ver_producto'               => $this->verProducto($cliente, $args['nombre'] ?? '', (bool) ($args['solicita_precio'] ?? false), $puedePedir),
+                        'cancelar_pedido'            => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
+                        'editar_pedido'              => $this->editOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
+                        'actualizar_precios_carrito' => $this->actualizarPreciosCarrito($cliente),
+                        default                      => 'Función desconocida.',
                     };
                 } catch (\Throwable $e) {
                     Log::error("handleToolCalls [{$funcName}] error: " . $e->getMessage());
@@ -961,27 +970,36 @@ Herramientas disponibles:
             }
         }
 
-        DB::transaction(function () use ($client, $carrito, &$registro) {
-            $bloqueado = Carrito::where('cliente_id', $client->id)
-                ->where('expires_at', '>', now())
-                ->latest()
-                ->lockForUpdate()
-                ->first();
+        $lock = Cache::lock('carrito_write_' . $client->id, 10);
+        $lock->block(5);
+        try {
+            DB::transaction(function () use ($client, $carrito, &$registro) {
+                // Obtener TODOS los carritos activos y quedarse solo con el último
+                $activos = Carrito::where('cliente_id', $client->id)
+                    ->where('expires_at', '>', now())
+                    ->orderByDesc('id')
+                    ->lockForUpdate()
+                    ->get();
 
-            if ($bloqueado) {
-                $bloqueado->update([
-                    'items'      => $carrito,
-                    'expires_at' => now()->addMinutes(60),
-                ]);
-                $registro = $bloqueado;
-            } else {
-                $registro = Carrito::create([
-                    'cliente_id' => $client->id,
-                    'items'      => $carrito,
-                    'expires_at' => now()->addMinutes(60),
-                ]);
-            }
-        });
+                if ($activos->isNotEmpty()) {
+                    // Limpiar duplicados: conservar solo el más reciente
+                    Carrito::whereIn('id', $activos->slice(1)->pluck('id'))->delete();
+                    $activos->first()->update([
+                        'items'      => $carrito,
+                        'expires_at' => now()->addMinutes(60),
+                    ]);
+                    $registro = $activos->first();
+                } else {
+                    $registro = Carrito::create([
+                        'cliente_id' => $client->id,
+                        'items'      => $carrito,
+                        'expires_at' => now()->addMinutes(60),
+                    ]);
+                }
+            });
+        } finally {
+            $lock->release();
+        }
 
         $resultado = $this->formatCarrito($carrito);
 
@@ -1028,6 +1046,46 @@ Herramientas disponibles:
     {
         Carrito::where('cliente_id', $client->id)->delete();
         return 'Carrito vaciado.';
+    }
+
+    private function actualizarPreciosCarrito($client): string
+    {
+        $registro = $this->getCarrito($client);
+        if (!$registro || empty($registro->items)) {
+            return 'El carrito está vacío.';
+        }
+
+        $costoExtra = $this->costoExtraCliente($client);
+        $cods       = array_column($registro->items, 'cod');
+        $productos  = Producto::paraBot()
+            ->whereIn('tablaplu.cod', $cods)
+            ->get()
+            ->keyBy('cod');
+
+        $carrito      = $registro->items;
+        $actualizados = [];
+
+        foreach ($carrito as $key => $item) {
+            if (!isset($item['cod']) || !$productos->has($item['cod'])) {
+                continue;
+            }
+            $precioNuevo = (float) $productos[$item['cod']]->precio + $costoExtra;
+            if (abs($precioNuevo - (float) $item['precio']) > 0.01) {
+                $actualizados[] = $item['des'];
+            }
+            $base              = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
+            $carrito[$key]['precio'] = $precioNuevo;
+            $carrito[$key]['neto']   = round($precioNuevo * $base, 2);
+        }
+
+        $registro->update(['items' => $carrito, 'expires_at' => now()->addMinutes(60)]);
+
+        $resultado = $this->formatCarrito($carrito);
+        $prefijo   = !empty($actualizados)
+            ? '✅ Precios actualizados: ' . implode(', ', $actualizados) . ".\n\n"
+            : "Los precios ya estaban al día.\n\n";
+
+        return $prefijo . $resultado;
     }
 
     private function costoExtraCliente($client): float
@@ -1257,12 +1315,16 @@ Herramientas disponibles:
         if (!$permiteEnvio && $permiteRetiro)  $tipoProvisto = 'retiro';
 
         // Forma de pago provista por la IA
+        $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
         $pagoProvisto = null;
         if (!empty($args['forma_pago'])) {
-            $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
             if (in_array($args['forma_pago'], $mediosHabilitados)) {
                 $pagoProvisto = $args['forma_pago'];
             }
+        }
+        // Si solo hay una forma de pago, seleccionarla automáticamente
+        if ($pagoProvisto === null && count($mediosHabilitados) === 1) {
+            $pagoProvisto = $mediosHabilitados[0];
         }
 
         // Si ya tenemos tipo de entrega, calcular fecha y armar datos

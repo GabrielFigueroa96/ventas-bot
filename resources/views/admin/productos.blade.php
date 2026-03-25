@@ -48,7 +48,7 @@
         $ia         = $producto->iaProducto;
         $enCatalogo = $ia !== null;
         $imgPath    = $ia?->imagen;
-        $imgUrl     = ($imgPath && file_exists(public_path($imgPath))) ? asset($imgPath) : null;
+        $imgUrl     = ($imgPath && file_exists(public_path($imgPath))) ? asset($imgPath) . '?v=' . ($ia?->updated_at?->timestamp ?? 0) : null;
         $cod        = $producto->cod;
     @endphp
 
