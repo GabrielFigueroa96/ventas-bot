@@ -685,12 +685,15 @@ class AdminController extends Controller
         $pedidos = Pedidosia::with(['items', 'cliente'])
             ->whereDate('fecha', $fecha)
             ->where('tipo_entrega', 'envio')
-            ->where('estado', Pedidosia::ESTADO_EN_CAMINO)   // Solo "Preparado"
+            ->whereIn('estado', [Pedidosia::ESTADO_EN_CAMINO, Pedidosia::ESTADO_EN_REPARTO])
             ->orderBy('localidad')
             ->orderBy('nro')
             ->get();
 
-        return view('admin.hoja_de_ruta', compact('pedidos', 'fecha'));
+        // Cargar ítems reales de vmayo para los pedidos que lo tienen vinculado
+        $vmayo = $this->loadVmayo($pedidos->keyBy('nro'));
+
+        return view('admin.hoja_de_ruta', compact('pedidos', 'vmayo', 'fecha'));
     }
 
     public function hojaDeRutaMarcarReparto(Request $request)
@@ -699,7 +702,7 @@ class AdminController extends Controller
 
         $pedidos = Pedidosia::whereDate('fecha', $fecha)
             ->where('tipo_entrega', 'envio')
-            ->where('estado', Pedidosia::ESTADO_EN_CAMINO)
+            ->where('estado', Pedidosia::ESTADO_EN_CAMINO)   // Solo los Preparado pendientes de salir
             ->get();
 
         foreach ($pedidos as $sia) {

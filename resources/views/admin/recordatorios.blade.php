@@ -177,6 +177,8 @@
                         {{ $rec->activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
                     {{ $rec->activo ? 'Activo' : 'Pausado' }}
                 </button>
+                <button onclick="abrirProbar({{ $rec->id }}, '{{ addslashes($rec->nombre) }}')"
+                    class="text-xs text-indigo-600 hover:underline">Probar</button>
                 <a href="{{ route('admin.recordatorios.edit', $rec) }}"
                     class="text-xs text-blue-600 hover:underline">Editar</a>
                 <form method="POST" action="{{ route('admin.recordatorios.destroy', $rec) }}"
@@ -193,10 +195,91 @@
         @endforelse
     </div>
 </div>
+
+{{-- Modal probar recordatorio --}}
+<div id="modal-probar" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-4">
+        <div>
+            <h3 class="text-sm font-semibold text-gray-800">Probar recordatorio</h3>
+            <p id="modal-probar-nombre" class="text-xs text-gray-400 mt-0.5"></p>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Número de WhatsApp</label>
+            <input type="tel" id="probar-phone" placeholder="5491123456789"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            <p class="text-xs text-gray-400 mt-1">Con código de país, sin el +. Ej: 5491123456789</p>
+        </div>
+        <div id="probar-preview" class="hidden bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap border border-gray-200 max-h-36 overflow-y-auto"></div>
+        <div class="flex gap-2 pt-1">
+            <button id="probar-btn" onclick="enviarPrueba()"
+                class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 rounded-lg transition">
+                Enviar prueba
+            </button>
+            <button onclick="cerrarProbar()"
+                class="px-4 text-sm text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
+                Cancelar
+            </button>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('scripts')
 <script>
+const CSRF = document.querySelector('meta[name=csrf-token]').content;
+let probarRecId = null;
+
+function abrirProbar(id, nombre) {
+    probarRecId = id;
+    document.getElementById('modal-probar-nombre').textContent = nombre;
+    document.getElementById('probar-phone').value = '';
+    document.getElementById('probar-preview').classList.add('hidden');
+    document.getElementById('probar-preview').textContent = '';
+    document.getElementById('modal-probar').classList.remove('hidden');
+    setTimeout(() => document.getElementById('probar-phone').focus(), 50);
+}
+
+function cerrarProbar() {
+    document.getElementById('modal-probar').classList.add('hidden');
+    probarRecId = null;
+}
+
+async function enviarPrueba() {
+    const phone = document.getElementById('probar-phone').value.trim().replace(/\D/g, '');
+    if (!phone) { showToast('Ingresá un número de teléfono.', 'warning'); return; }
+
+    const btn = document.getElementById('probar-btn');
+    btn.disabled = true;
+    btn.textContent = 'Enviando…';
+
+    try {
+        const res  = await fetch(`/admin/recordatorios/${probarRecId}/probar`, {
+            method : 'POST',
+            headers: { 'X-CSRF-TOKEN': CSRF, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body   : JSON.stringify({ phone }),
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+            showToast('Mensaje enviado correctamente.', 'success');
+            const preview = document.getElementById('probar-preview');
+            preview.textContent = data.mensaje;
+            preview.classList.remove('hidden');
+        } else {
+            showToast(data.error ?? 'Error al enviar.', 'error');
+        }
+    } catch {
+        showToast('Error de red.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Enviar prueba';
+    }
+}
+
+// Cerrar modal al hacer click fuera
+document.getElementById('modal-probar').addEventListener('click', function(e) {
+    if (e.target === this) cerrarProbar();
+});
+
 function toggleActivo(id, btn) {
     fetch(`/admin/recordatorios/${id}/toggle`, {
         method: 'PATCH',

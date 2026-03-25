@@ -56,6 +56,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::put   ('/recordatorios/{rec}',    [RecordatorioController::class, 'update'])->name('recordatorios.update');
     Route::delete('/recordatorios/{rec}',    [RecordatorioController::class, 'destroy'])->name('recordatorios.destroy');
     Route::patch ('/recordatorios/{rec}/toggle',[RecordatorioController::class, 'toggle'])->name('recordatorios.toggle');
+    Route::post  ('/recordatorios/{rec}/probar',[RecordatorioController::class, 'probar'])->name('recordatorios.probar');
 
     // Uso IA
     Route::get('/uso-ia', [AdminController::class, 'usoIa'])->name('uso_ia');
