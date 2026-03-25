@@ -88,17 +88,31 @@ class AdminController extends Controller
 
         // ── Nuevas métricas ──────────────────────────────────────────────────────
 
-        // Total vendido este mes (pedidos no cancelados)
+        // Total vendido este mes — pedidos ya procesados/entregados/retirados, monto real de vmayo
         $inicioMes = now()->startOfMonth();
-        $totalMes  = Pedidosia::where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
-            ->where('pedido_at', '>=', $inicioMes)
-            ->sum('total');
-        $totalMesAnterior = Pedidosia::where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
-            ->whereBetween('pedido_at', [now()->subMonth()->startOfMonth(), now()->subMonth()->endOfMonth()])
-            ->sum('total');
+        $estadosProcesados = [
+            Pedidosia::ESTADO_EN_CAMINO,
+            Pedidosia::ESTADO_EN_REPARTO,
+            Pedidosia::ESTADO_ENTREGADO,
+        ];
+
+        $totalMes = DB::table('vmayo')
+            ->join('ia_pedidos', 'ia_pedidos.vmayo_nro', '=', 'vmayo.nro')
+            ->whereIn('ia_pedidos.estado', $estadosProcesados)
+            ->where('ia_pedidos.pedido_at', '>=', $inicioMes)
+            ->sum('vmayo.NETO');
+
+        $totalMesAnterior = DB::table('vmayo')
+            ->join('ia_pedidos', 'ia_pedidos.vmayo_nro', '=', 'vmayo.nro')
+            ->whereIn('ia_pedidos.estado', $estadosProcesados)
+            ->whereBetween('ia_pedidos.pedido_at', [
+                now()->subMonth()->startOfMonth(),
+                now()->subMonth()->endOfMonth(),
+            ])
+            ->sum('vmayo.NETO');
 
         // Ticket promedio este mes
-        $cantMes    = Pedidosia::where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
+        $cantMes    = Pedidosia::whereIn('estado', $estadosProcesados)
             ->where('pedido_at', '>=', $inicioMes)->count();
         $ticketProm = $cantMes > 0 ? round($totalMes / $cantMes) : 0;
 
@@ -115,12 +129,10 @@ class AdminController extends Controller
         $clientesHumano = Cliente::where('estado', 'humano')
             ->orderByDesc('updated_at')->take(10)->get();
 
-        // Clientes inactivos: tienen cuenta pero no piden hace más de 30 días
+        // Clientes inactivos: han comprado alguna vez pero no en los últimos 30 días
         $inactivosCount = Cliente::whereNotNull('phone')
-            ->where(function ($q) {
-                $q->whereNull('last_order_at')
-                  ->orWhere('last_order_at', '<', now()->subDays(30));
-            })
+            ->whereNotNull('last_order_at')
+            ->where('last_order_at', '<', now()->subDays(30))
             ->whereNotNull('name')
             ->count();
 
@@ -205,20 +217,28 @@ class AdminController extends Controller
 
     public function clientes(Request $request)
     {
-        $search = $request->input('search');
+        $search    = $request->input('search');
+        $filtro    = $request->input('filtro'); // humano | inactivo | sin_cuenta
 
         $clientes = Cliente::withCount('messages')
             ->with('cuenta')
             ->when($search, fn($q) =>
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%")
+                $q->where(fn($q2) =>
+                    $q2->where('name', 'like', "%{$search}%")
+                       ->orWhere('phone', 'like', "%{$search}%")
+                )
             )
+            ->when($filtro === 'humano',    fn($q) => $q->where('estado', 'humano'))
+            ->when($filtro === 'inactivo',  fn($q) => $q->where(fn($q2) =>
+                $q2->whereNull('last_order_at')->orWhere('last_order_at', '<', now()->subDays(30))
+            )->whereNotNull('name'))
+            ->when($filtro === 'sin_cuenta', fn($q) => $q->whereNull('cuenta_cod'))
             ->latest()
             ->paginate(20);
 
         $localidades = Localidad::orderBy('nombre')->get();
 
-        return view('admin.clientes', compact('clientes', 'localidades'));
+        return view('admin.clientes', compact('clientes', 'localidades', 'filtro'));
     }
 
     public function storeCliente(Request $request)

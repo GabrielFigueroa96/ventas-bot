@@ -124,6 +124,131 @@
 
 </div>
 
+{{-- Flujo de conversión bot --}}
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+    <div class="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-700">Flujo de conversión — {{ $mesLabel }}</h2>
+        <span class="text-xs text-gray-400">{{ $clientesActivosMes }} chats activos este mes</span>
+    </div>
+    <div class="px-6 py-6">
+        @php
+            $fH  = 160;  // chart height in SVG units
+            $nW  = 48;   // node width
+            $pT  = 40;   // top padding (headers)
+            $x1  = 8;
+            $x2  = 280;
+            $x3  = 530;
+            $svgW = 710;
+            $svgH = $fH + $pT;
+
+            $chats      = max((int)$clientesActivosMes, 1);
+            $conPedido  = min((int)$clientesConPedidoMes, $chats);
+            $sinPedido  = max(0, $chats - $conPedido);
+            $entregados = (int)$cantMes;
+            $pendientes = (int)$stats['pedidos_pend'];
+
+            // Col 2 heights
+            $c2ConH = (int)round($conPedido / $chats * $fH);
+            $c2SinH = $fH - $c2ConH;
+            $gY2    = ($c2ConH > 0 && $c2SinH > 0) ? 6 : 0;
+            $c2ConY = $pT;
+            $c2SinY = $pT + $c2ConH + $gY2;
+
+            // Col 3 heights (within ConPedido band)
+            $c3EntH  = $c2ConH > 0 ? (int)round(min($entregados, $conPedido) / max($conPedido,1) * $c2ConH) : 0;
+            $c3PendH = max(0, $c2ConH - $c3EntH);
+            $gY3     = ($c3EntH > 0 && $c3PendH > 0) ? 6 : 0;
+            $c3EntY  = $pT;
+            $c3PendY = $pT + $c3EntH + $gY3;
+
+            // Bezier mid-x
+            $mx12 = ($x1 + $nW + $x2) / 2;
+            $mx23 = ($x2 + $nW + $x3) / 2;
+
+            // Percentages
+            $pctCon  = round($conPedido / $chats * 100);
+            $pctSin  = 100 - $pctCon;
+            $pctEnt  = $conPedido > 0 ? round($entregados  / $conPedido * 100) : 0;
+            $pctPend = $conPedido > 0 ? round($pendientes   / $conPedido * 100) : 0;
+
+            // Helper: filled ribbon path between two vertical segments
+            $rib = fn($sx,$sy1,$sy2,$tx,$ty1,$ty2,$mx)
+                => "M $sx $sy1 C $mx $sy1 $mx $ty1 $tx $ty1 L $tx $ty2 C $mx $ty2 $mx $sy2 $sx $sy2 Z";
+        @endphp
+
+        <svg viewBox="0 0 {{ $svgW }} {{ $svgH }}" width="100%" style="overflow:visible">
+
+            {{-- Column headers --}}
+            <text x="{{ $x1 + $nW/2 }}" y="13" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="600">CHATS ACTIVOS</text>
+            <text x="{{ $x1 + $nW/2 }}" y="27" text-anchor="middle" font-size="14" fill="#111827" font-weight="700">{{ number_format($chats) }}</text>
+
+            <text x="{{ $x2 + $nW/2 }}" y="13" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="600">PEDIDOS GENERADOS</text>
+            <text x="{{ $x2 + $nW/2 }}" y="27" text-anchor="middle" font-size="14" fill="#111827" font-weight="700">{{ number_format($conPedido) }}</text>
+
+            <text x="{{ $x3 + $nW/2 }}" y="13" text-anchor="middle" font-size="9" fill="#9ca3af" font-weight="600">ESTADO</text>
+
+            {{-- Ribbons (behind nodes) --}}
+            @if($c2ConH > 0)
+            <path d="{{ $rib($x1+$nW, $pT, $pT+$c2ConH, $x2, $c2ConY, $c2ConY+$c2ConH, $mx12) }}" fill="#34d399" opacity="0.22"/>
+            @endif
+            @if($c2SinH > 0)
+            <path d="{{ $rib($x1+$nW, $pT+$c2ConH, $pT+$fH, $x2, $c2SinY, $c2SinY+$c2SinH, $mx12) }}" fill="#d1d5db" opacity="0.5"/>
+            @endif
+            @if($c3EntH > 0)
+            <path d="{{ $rib($x2+$nW, $c2ConY, $c2ConY+$c3EntH, $x3, $c3EntY, $c3EntY+$c3EntH, $mx23) }}" fill="#10b981" opacity="0.22"/>
+            @endif
+            @if($c3PendH > 0)
+            <path d="{{ $rib($x2+$nW, $c2ConY+$c3EntH, $c2ConY+$c2ConH, $x3, $c3PendY, $c3PendY+$c3PendH, $mx23) }}" fill="#f59e0b" opacity="0.3"/>
+            @endif
+
+            {{-- Nodes --}}
+            {{-- Col 1: Chats --}}
+            <rect x="{{ $x1 }}" y="{{ $pT }}" width="{{ $nW }}" height="{{ $fH }}" fill="#60a5fa" rx="5"/>
+
+            {{-- Col 2 --}}
+            @if($c2ConH > 0)
+            <rect x="{{ $x2 }}" y="{{ $c2ConY }}" width="{{ $nW }}" height="{{ $c2ConH }}" fill="#34d399" rx="5"/>
+            @endif
+            @if($c2SinH > 0)
+            <rect x="{{ $x2 }}" y="{{ $c2SinY }}" width="{{ $nW }}" height="{{ $c2SinH }}" fill="#e5e7eb" rx="5"/>
+            @endif
+
+            {{-- Col 3 --}}
+            @if($c3EntH > 0)
+            <rect x="{{ $x3 }}" y="{{ $c3EntY }}" width="{{ $nW }}" height="{{ $c3EntH }}" fill="#10b981" rx="5"/>
+            @endif
+            @if($c3PendH > 0)
+            <rect x="{{ $x3 }}" y="{{ $c3PendY }}" width="{{ $nW }}" height="{{ $c3PendH }}" fill="#f59e0b" rx="5"/>
+            @endif
+
+            {{-- Labels col 2 --}}
+            @if($c2ConH > 0)
+            @php $lY = $c2ConY + $c2ConH / 2; @endphp
+            <text x="{{ $x2 + $nW + 10 }}" y="{{ $lY - 5 }}" font-size="11" fill="#374151" font-weight="600">Con pedido</text>
+            <text x="{{ $x2 + $nW + 10 }}" y="{{ $lY + 9 }}" font-size="10" fill="#6b7280">{{ $conPedido }} ({{ $pctCon }}%)</text>
+            @endif
+            @if($c2SinH > 0)
+            @php $lY2 = $c2SinY + $c2SinH / 2; @endphp
+            <text x="{{ $x2 + $nW + 10 }}" y="{{ $lY2 - 5 }}" font-size="11" fill="#9ca3af">Sin pedido</text>
+            <text x="{{ $x2 + $nW + 10 }}" y="{{ $lY2 + 9 }}" font-size="10" fill="#9ca3af">{{ $sinPedido }} ({{ $pctSin }}%)</text>
+            @endif
+
+            {{-- Labels col 3 --}}
+            @if($c3EntH > 0)
+            @php $lY3 = $c3EntY + $c3EntH / 2; @endphp
+            <text x="{{ $x3 + $nW + 10 }}" y="{{ $lY3 - 5 }}" font-size="11" fill="#374151" font-weight="600">Entregados</text>
+            <text x="{{ $x3 + $nW + 10 }}" y="{{ $lY3 + 9 }}" font-size="10" fill="#6b7280">{{ $entregados }} ({{ $pctEnt }}%)</text>
+            @endif
+            @if($c3PendH > 0)
+            @php $lY4 = $c3PendY + $c3PendH / 2; @endphp
+            <text x="{{ $x3 + $nW + 10 }}" y="{{ $lY4 - 5 }}" font-size="11" fill="#374151" font-weight="600">Pendientes</text>
+            <text x="{{ $x3 + $nW + 10 }}" y="{{ $lY4 + 9 }}" font-size="10" fill="#6b7280">{{ $pendientes }} ({{ $pctPend }}%)</text>
+            @endif
+
+        </svg>
+    </div>
+</div>
+
 {{-- Gráficos fila 1 --}}
 <div class="grid lg:grid-cols-3 gap-4 mb-4">
 
