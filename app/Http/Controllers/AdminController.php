@@ -685,12 +685,42 @@ class AdminController extends Controller
         $pedidos = Pedidosia::with(['items', 'cliente'])
             ->whereDate('fecha', $fecha)
             ->where('tipo_entrega', 'envio')
-            ->whereNotIn('estado', [Pedidosia::ESTADO_CANCELADO])
+            ->where('estado', Pedidosia::ESTADO_EN_CAMINO)   // Solo "Preparado"
             ->orderBy('localidad')
             ->orderBy('nro')
             ->get();
 
         return view('admin.hoja_de_ruta', compact('pedidos', 'fecha'));
+    }
+
+    public function hojaDeRutaMarcarReparto(Request $request)
+    {
+        $fecha = $request->input('fecha', today()->format('Y-m-d'));
+
+        $pedidos = Pedidosia::whereDate('fecha', $fecha)
+            ->where('tipo_entrega', 'envio')
+            ->where('estado', Pedidosia::ESTADO_EN_CAMINO)
+            ->get();
+
+        foreach ($pedidos as $sia) {
+            $sia->estado = Pedidosia::ESTADO_EN_REPARTO;
+            $sia->save();
+
+            // Notificar al cliente si está habilitado
+            $notifica = IaEmpresa::value('bot_notifica_estados') ?? true;
+            if ($notifica && $sia->cliente?->phone) {
+                $mensaje = $sia->mensajeParaEstado(Pedidosia::ESTADO_EN_REPARTO);
+                if ($mensaje) {
+                    try {
+                        app(BotService::class)->sendWhatsapp($sia->cliente->phone, $mensaje);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error("hojaDeRutaMarcarReparto WA error: " . $e->getMessage());
+                    }
+                }
+            }
+        }
+
+        return response()->json(['avanzados' => $pedidos->count()]);
     }
 
     public function avanzarEstadoPedido(int $id, Request $request)

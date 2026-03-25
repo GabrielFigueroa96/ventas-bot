@@ -27,6 +27,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::put ('/clientes/{cliente}', [AdminController::class, 'updateCliente'])->name('cliente.update');
     Route::get  ('/pedidos',                             [AdminController::class, 'pedidos'])->name('pedidos');
     Route::get  ('/pedidos/hoja-de-ruta',                [AdminController::class, 'hojaDeRuta'])->name('pedidos.hoja_de_ruta');
+    Route::post ('/pedidos/hoja-de-ruta/marcar-reparto', [AdminController::class, 'hojaDeRutaMarcarReparto'])->name('pedidos.hoja_de_ruta.marcar_reparto');
     Route::patch('/pedidos/ia/{id}/estado',              [AdminController::class, 'avanzarEstadoPedido'])->name('pedidos.ia.estado');
     Route::patch('/pedidos/ia/{id}/cancelar',            [AdminController::class, 'cancelarPedido'])->name('pedidos.ia.cancelar');
     Route::get  ('/pedidos/ia/{id}/vmayo-opciones',      [AdminController::class, 'vmayoOpciones'])->name('pedidos.ia.vmayo');
