@@ -338,6 +338,7 @@ class AdminController extends Controller
             'localidad_id' => $localidadId,
             'localidad'    => $localidad ? $localidad->nombre : null,
             'provincia'    => $localidad ? $localidad->provincia : null,
+            'memoria_ia'   => $request->input('memoria_ia') ?: null,
         ]);
 
         return redirect()->route('admin.cliente', $clienteModel->id)->with('ok', 'Cliente actualizado.');
@@ -732,12 +733,23 @@ class AdminController extends Controller
     {
         $sia = Pedidosia::findOrFail($id);
 
-        $nextEstado = $sia->estado + 1;
+        // Desde Confirmado se puede elegir destino: Preparado (siguiente) o Entregado (salto)
+        if ($sia->estado === Pedidosia::ESTADO_CONFIRMADO && $request->filled('estado_destino')) {
+            $destino = (int) $request->input('estado_destino');
+            $validos = [Pedidosia::ESTADO_EN_CAMINO, Pedidosia::ESTADO_ENTREGADO];
+            if (!in_array($destino, $validos) || $destino > $sia->estadoMax()) {
+                return response()->json(['error' => 'Estado destino no válido.'], 422);
+            }
+            $nextEstado = $destino;
+        } else {
+            $nextEstado = $sia->estado + 1;
+        }
+
         if ($nextEstado > $sia->estadoMax()) {
             return response()->json(['error' => 'Ya está en el estado final.'], 422);
         }
 
-        // Al pasar de Confirmado → Preparado, verificar que tenga cuenta vinculada
+        // Al pasar de Confirmado → Preparado o Entregado, verificar cuenta y vmayo
         if ($sia->estado === Pedidosia::ESTADO_CONFIRMADO) {
             if (!$sia->cliente?->cuenta_cod) {
                 return response()->json(['error' => 'El cliente no tiene cuenta vinculada. Vinculá una cuenta antes de avanzar.'], 422);

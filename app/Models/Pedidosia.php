@@ -101,30 +101,18 @@ class Pedidosia extends Model
 
     public function mensajeParaEstado(int $estado): string
     {
-        if ($estado === self::ESTADO_EN_CAMINO) {
-            $detalle = '';
-            if ($this->vmayo_nro) {
-                $items = Vmayo::where('nro', $this->vmayo_nro)->get();
-                if ($items->isNotEmpty()) {
-                    $lineas = $items->map(function ($v) {
-                        $cant = '';
-                        if ($v->cant > 0 && $v->kilos > 0) {
-                            $cant = (int) $v->cant . 'u · ' . number_format($v->kilos, 3, ',', '.') . 'kg';
-                        } elseif ($v->kilos > 0) {
-                            $cant = number_format($v->kilos, 3, ',', '.') . ' kg';
-                        } else {
-                            $cant = (int) $v->cant . ' u';
-                        }
-                        return "• {$v->descrip}: {$cant} — $" . number_format($v->NETO, 2, ',', '.');
-                    })->implode("\n");
-                    $total = number_format($items->sum('NETO'), 2, ',', '.');
-                    $detalle = "\n\n*Detalle:*\n{$lineas}\n*Total: \${$total}*";
+        if ($estado === self::ESTADO_EN_CAMINO || $estado === self::ESTADO_ENTREGADO) {
+            $detalle = $this->detalleVmayo();
+
+            if ($estado === self::ESTADO_EN_CAMINO) {
+                if ($this->tipo_entrega === 'retiro') {
+                    return "🏪 Tu pedido #{$this->nro} está *listo para retirar*. ¡Te esperamos!{$detalle}";
                 }
+                return "📦 Tu pedido #{$this->nro} está *preparado* y próximamente saldrá para entrega.{$detalle}";
             }
-            if ($this->tipo_entrega === 'retiro') {
-                return "🏪 Tu pedido #{$this->nro} está *listo para retirar*. ¡Te esperamos!{$detalle}";
-            }
-            return "📦 Tu pedido #{$this->nro} está *preparado* y próximamente saldrá para entrega.{$detalle}";
+
+            // ESTADO_ENTREGADO
+            return "✅ Tu pedido #{$this->nro} fue *entregado*. ¡Gracias por tu compra!{$detalle}";
         }
         if ($estado === self::ESTADO_EN_REPARTO) {
             if ($this->tipo_entrega === 'retiro') {
@@ -132,11 +120,30 @@ class Pedidosia extends Model
             }
             return "🚚 Tu pedido #{$this->nro} está *en camino*. ¡Ya salió para entrega!";
         }
-        if ($estado === self::ESTADO_ENTREGADO) {
-            return "✅ Tu pedido #{$this->nro} fue *entregado*. ¡Gracias por tu compra!";
-        }
         $plantilla = self::MENSAJES_ESTADO[$estado] ?? '';
         return str_replace('{nro}', $this->nro, $plantilla);
+    }
+
+    private function detalleVmayo(): string
+    {
+        if (!$this->vmayo_nro) return '';
+
+        $items = Vmayo::where('nro', $this->vmayo_nro)->get();
+        if ($items->isEmpty()) return '';
+
+        $lineas = $items->map(function ($v) {
+            if ($v->cant > 0 && $v->kilos > 0) {
+                $cant = (int) $v->cant . 'u · ' . number_format($v->kilos, 3, ',', '.') . 'kg';
+            } elseif ($v->kilos > 0) {
+                $cant = number_format($v->kilos, 3, ',', '.') . ' kg';
+            } else {
+                $cant = (int) $v->cant . ' u';
+            }
+            return "• {$v->descrip}: {$cant} — $" . number_format($v->NETO, 2, ',', '.');
+        })->implode("\n");
+
+        $total = number_format($items->sum('NETO'), 2, ',', '.');
+        return "\n\n*Detalle:*\n{$lineas}\n*Total: \${$total}*";
     }
 
     public function cliente()

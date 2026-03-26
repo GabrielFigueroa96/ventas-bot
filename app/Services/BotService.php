@@ -45,6 +45,48 @@ class BotService
         return config('api.whatsapp.phone_number_id');
     }
 
+    /**
+     * Usa la IA para extraer solo el dato relevante de un mensaje conversacional.
+     * Ej: "soy Juan" → "Juan", "vivo en Italia 1234" → "Italia 1234"
+     */
+    private function extraerDatoConIA(string $tipo, string $input): string
+    {
+        $prompts = [
+            'nombre' => 'El usuario respondió a la pregunta "¿Cuál es tu nombre?". '
+                . 'Extrae únicamente el nombre propio de la respuesta, sin saludos ni explicaciones. '
+                . 'Si dice "soy Juan" devuelve "Juan". Si dice "me llamo María García" devuelve "María García". '
+                . 'Devuelve solo el nombre, nada más.',
+
+            'calle' => 'El usuario respondió a la pregunta "¿Cuál es tu calle y número?". '
+                . 'Extrae únicamente la calle y número de la respuesta, sin frases adicionales. '
+                . 'Si dice "vivo en Italia 1234" devuelve "Italia 1234". Si dice "mi dirección es Av. Colón 500" devuelve "Av. Colón 500". '
+                . 'Devuelve solo la dirección, nada más.',
+        ];
+
+        $systemPrompt = $prompts[$tipo] ?? 'Extrae el dato principal del mensaje y devuélvelo sin explicaciones.';
+
+        try {
+            $response = Http::withToken($this->openaiKey())
+                ->timeout(10)
+                ->post(self::OPENAI_URL, [
+                    'model'       => 'gpt-4.1-mini',
+                    'messages'    => [
+                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'user',   'content' => $input],
+                    ],
+                    'max_tokens'  => 50,
+                    'temperature' => 0,
+                ])
+                ->json();
+
+            $extraido = trim($response['choices'][0]['message']['content'] ?? '');
+            return $extraido !== '' ? $extraido : $input;
+        } catch (\Throwable $e) {
+            Log::warning("extraerDatoConIA({$tipo}) falló: " . $e->getMessage());
+            return $input;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Punto de entrada principal
     // -------------------------------------------------------------------------
@@ -93,11 +135,27 @@ class BotService
                 $this->sendReply($client, $response);
                 return $response;
             } else {
-                $nombre = ucfirst(strtolower(trim($message)));
+                $nombre = ucwords(strtolower($this->extraerDatoConIA('nombre', trim($message))));
+                Cache::put('reg_nombre_' . $client->id, $nombre, now()->addMinutes(15));
+                $client->update(['estado' => 'verificando_nombre']);
+                $response = "¿Tu nombre es *{$nombre}*? (respondé *sí* o *no*)";
+            }
+            $this->sendReply($client, $response);
+            return $response;
+        }
+
+        if ($client->estado === 'verificando_nombre') {
+            $input = strtolower(trim($message));
+            if (preg_match('/^(s[ií]|si|yes|ok|correcto|dale|exacto)$/i', $input)) {
+                $nombre = Cache::pull('reg_nombre_' . $client->id) ?? $input;
                 $client->update(['name' => $nombre, 'estado' => 'esperando_localidad']);
                 $localidades = Localidad::where('activo', true)->pluck('nombre')->implode(', ');
-                $response = "¡Hola, {$nombre}! ¿En qué localidad estás?"
+                $response = "¡Perfecto, {$nombre}! ¿En qué localidad estás?"
                     . ($localidades ? " (Repartimos en: {$localidades})" : '');
+            } else {
+                Cache::forget('reg_nombre_' . $client->id);
+                $client->update(['estado' => 'esperando_nombre']);
+                $response = "Sin problema, ¿cuál es tu nombre?";
             }
             $this->sendReply($client, $response);
             return $response;
@@ -112,42 +170,88 @@ class BotService
             );
 
             if ($match) {
-                $client->update([
-                    'localidad'    => $match->nombre,
-                    'localidad_id' => $match->id,
-                    'estado'       => 'esperando_calle',
-                ]);
-                $diasLabel = IaEmpresa::DIAS_LABEL;
-                $dias      = $match->dias_reparto ?? [];
-                $diasTexto = !empty($dias)
-                    ? 'Repartimos en tu zona los: ' . implode(', ', array_map(fn($d) => $diasLabel[$d], $dias)) . '. '
-                    : '';
-                $response = "{$diasTexto}¿Cuál es tu calle y número de entrega? (ej: Italia 1234)";
+                Cache::put('reg_localidad_' . $client->id, ['nombre' => $match->nombre, 'id' => $match->id], now()->addMinutes(15));
+                $client->update(['estado' => 'verificando_localidad']);
+                $response = "¿Tu localidad es *{$match->nombre}*? (respondé *sí* o *no*)";
             } else {
-                $client->update([
-                    'localidad'    => ucwords(strtolower($input)),
-                    'localidad_id' => null,
-                    'estado'       => 'activo',
-                ]);
-                $lista    = $localidades->pluck('nombre')->implode(', ');
-                $response = "Anotado, {$client->name}. Por el momento no tenemos reparto a tu zona."
-                    . ($lista ? " Repartimos en: {$lista}." : '')
-                    . " Podés pasar a retirar al local. ¿En qué puedo ayudarte?";
+                $localidadTexto = ucwords(strtolower($input));
+                Cache::put('reg_localidad_' . $client->id, ['nombre' => $localidadTexto, 'id' => null], now()->addMinutes(15));
+                $client->update(['estado' => 'verificando_localidad']);
+                $response = "¿Tu localidad es *{$localidadTexto}*? (respondé *sí* o *no*)";
             }
 
             $this->sendReply($client, $response);
             return $response;
         }
 
-        if ($client->estado === 'esperando_calle') {
-            // Intenta separar "Calle 1234" → calle=Calle, numero=1234
-            $input = trim($message);
-            if (preg_match('/^(.+?)\s+(\d[\w-]*)$/', $input, $m)) {
-                $client->update(['calle' => trim($m[1]), 'numero' => $m[2], 'estado' => 'esperando_dato_extra']);
+        if ($client->estado === 'verificando_localidad') {
+            $input = strtolower(trim($message));
+            if (preg_match('/^(s[ií]|si|yes|ok|correcto|dale|exacto)$/i', $input)) {
+                $data = Cache::pull('reg_localidad_' . $client->id) ?? [];
+                $localidades = Localidad::where('activo', true)->get();
+                $client->update([
+                    'localidad'    => $data['nombre'] ?? '',
+                    'localidad_id' => $data['id'] ?? null,
+                    'estado'       => $data['id'] ? 'esperando_calle' : 'activo',
+                ]);
+                if ($data['id']) {
+                    $match     = $localidades->firstWhere('id', $data['id']);
+                    $diasLabel = IaEmpresa::DIAS_LABEL;
+                    $dias      = $match->dias_reparto ?? [];
+                    $diasTexto = !empty($dias)
+                        ? 'Repartimos en tu zona los: ' . implode(', ', array_map(fn($d) => $diasLabel[$d], $dias)) . '. '
+                        : '';
+                    $response = "{$diasTexto}¿Cuál es tu calle y número de entrega? (ej: Italia 1234)";
+                } else {
+                    $lista    = $localidades->pluck('nombre')->implode(', ');
+                    $response = "Anotado, {$client->name}. Por el momento no tenemos reparto a tu zona."
+                        . ($lista ? " Repartimos en: {$lista}." : '')
+                        . " Podés pasar a retirar al local. ¿En qué puedo ayudarte?";
+                }
             } else {
-                $client->update(['calle' => $input, 'numero' => null, 'estado' => 'esperando_dato_extra']);
+                Cache::forget('reg_localidad_' . $client->id);
+                $client->update(['estado' => 'esperando_localidad']);
+                $localidades = Localidad::where('activo', true)->pluck('nombre')->implode(', ');
+                $response = "Sin problema, ¿en qué localidad estás?"
+                    . ($localidades ? " (Repartimos en: {$localidades})" : '');
             }
-            $response = "¿Tenés algún dato extra? (piso, depto, referencia) — respondé *no* para omitir.";
+            $this->sendReply($client, $response);
+            return $response;
+        }
+
+        if ($client->estado === 'esperando_calle') {
+            // Extrae la dirección limpia y luego separa "Calle 1234" → calle=Calle, numero=1234
+            $input = $this->extraerDatoConIA('calle', trim($message));
+            if (preg_match('/^(.+?)\s+(\d[\w-]*)$/', $input, $m)) {
+                $calle  = trim($m[1]);
+                $numero = $m[2];
+            } else {
+                $calle  = $input;
+                $numero = null;
+            }
+            $dirTexto = trim("{$calle} {$numero}");
+            Cache::put('reg_calle_' . $client->id, ['calle' => $calle, 'numero' => $numero], now()->addMinutes(15));
+            $client->update(['estado' => 'verificando_calle']);
+            $response = "¿Tu dirección de entrega es *{$dirTexto}*? (respondé *sí* o *no*)";
+            $this->sendReply($client, $response);
+            return $response;
+        }
+
+        if ($client->estado === 'verificando_calle') {
+            $input = strtolower(trim($message));
+            if (preg_match('/^(s[ií]|si|yes|ok|correcto|dale|exacto)$/i', $input)) {
+                $data = Cache::pull('reg_calle_' . $client->id) ?? [];
+                $client->update([
+                    'calle'  => $data['calle'] ?? '',
+                    'numero' => $data['numero'] ?? null,
+                    'estado' => 'esperando_dato_extra',
+                ]);
+                $response = "¿Tenés algún dato extra? (piso, depto, referencia) — respondé *no* para omitir.";
+            } else {
+                Cache::forget('reg_calle_' . $client->id);
+                $client->update(['estado' => 'esperando_calle']);
+                $response = "Sin problema, ¿cuál es tu calle y número de entrega? (ej: Italia 1234)";
+            }
             $this->sendReply($client, $response);
             return $response;
         }
@@ -194,10 +298,24 @@ class BotService
                 return '';
             }
 
+            $this->programarActualizacionMemoria($cliente);
             return $result;
         }
 
+        $this->programarActualizacionMemoria($cliente);
         return $choice['message']['content'];
+    }
+
+    /**
+     * Dispara el job de memoria con rate limiting: máximo una vez por hora por cliente.
+     */
+    private function programarActualizacionMemoria($cliente): void
+    {
+        $cacheKey = 'memoria_job_' . $cliente->id;
+        if (Cache::has($cacheKey)) return;
+
+        Cache::put($cacheKey, true, now()->addHour());
+        \App\Jobs\ActualizarMemoriaCliente::dispatch($cliente->id)->delay(now()->addMinutes(5));
     }
 
     // -------------------------------------------------------------------------
@@ -470,6 +588,9 @@ class BotService
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
         if ($instrucciones)      $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
 
+        $memoria = trim($cliente->memoria_ia ?? '');
+        if ($memoria)            $configNegocio .= "\n\n📝 Lo que sabés de este cliente (usalo para personalizar):\n{$memoria}";
+
         $nombreIa  = trim($empresa?->nombre_ia ?? '');
         $identidad = $nombreIa ? "Te llamás {$nombreIa}." : '';
 
@@ -642,7 +763,7 @@ Herramientas disponibles:
         // Si no puede pedir, solo expone las tools de consulta
         if (!$puedePedir) {
             return array_values(array_filter($this->allTools($tiposEntrega, $mediosPago), function ($tool) {
-                return in_array($tool['function']['name'], ['ver_producto', 'lista_productos']);
+                return in_array($tool['function']['name'], ['ver_producto', 'lista_productos', 'consultar_saldo']);
             }));
         }
 
@@ -806,6 +927,14 @@ Herramientas disponibles:
                     ],
                 ],
             ],
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'consultar_saldo',
+                    'description' => 'Muestra el saldo actual de la cuenta corriente del cliente (suma de débitos menos créditos). Usala cuando el cliente pregunta por su saldo, deuda, cuenta corriente o cuánto debe.',
+                    'parameters'  => ['type' => 'object', 'properties' => new \stdClass()],
+                ],
+            ],
         ];
     }
 
@@ -838,6 +967,7 @@ Herramientas disponibles:
                         'cancelar_pedido'            => $this->cancelOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
                         'editar_pedido'              => $this->editOrder($cliente, (int) $this->parsearNumero($args['nro'] ?? 0)),
                         'actualizar_precios_carrito' => $this->actualizarPreciosCarrito($cliente),
+                        'consultar_saldo'            => $this->consultarSaldo($cliente),
                         default                      => 'Función desconocida.',
                     };
                 } catch (\Throwable $e) {
@@ -870,6 +1000,34 @@ Herramientas disponibles:
     // -------------------------------------------------------------------------
     // Acciones del negocio
     // -------------------------------------------------------------------------
+
+    private function consultarSaldo($client): string
+    {
+        $codCuenta = $client->cuenta_cod;
+
+        if (empty($codCuenta)) {
+            return 'El cliente no tiene una cuenta corriente asociada. No se puede consultar el saldo.';
+        }
+
+        $row = DB::table('ctacteclie')
+            ->where('nrocuenta', $codCuenta)
+            ->selectRaw('SUM(debe) as total_debe, SUM(haber) as total_haber')
+            ->first();
+
+        $debe  = (float) ($row->total_debe  ?? 0);
+        $haber = (float) ($row->total_haber ?? 0);
+        $saldo = $debe - $haber;
+
+        $saldoFormateado = number_format(abs($saldo), 2, ',', '.');
+
+        if ($saldo > 0) {
+            return "Saldo de cuenta corriente (cuenta {$codCuenta}): debe \${$saldoFormateado}.";
+        } elseif ($saldo < 0) {
+            return "Saldo de cuenta corriente (cuenta {$codCuenta}): tiene saldo a favor de \${$saldoFormateado}.";
+        } else {
+            return "Saldo de cuenta corriente (cuenta {$codCuenta}): cuenta al día, sin saldo pendiente.";
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Carrito

@@ -143,6 +143,15 @@
                 </select>
             </div>
 
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">
+                    📝 Memoria del bot
+                    <span class="text-gray-400 font-normal">(se actualiza automáticamente, podés editar)</span>
+                </label>
+                <textarea name="memoria_ia" rows="4" placeholder="Ej:&#10;- Prefiere chorizo doble&#10;- Pide los martes&#10;- Paga con transferencia"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 resize-none">{{ old('memoria_ia', $cliente->memoria_ia) }}</textarea>
+            </div>
+
             <div class="flex gap-2 pt-1">
                 <button type="button" onclick="cerrarModalEditar()"
                     class="flex-1 border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm font-medium py-2 rounded-lg transition">

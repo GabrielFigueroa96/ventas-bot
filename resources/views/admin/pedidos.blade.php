@@ -156,6 +156,29 @@
     @include('admin.partials.pedidos', compact('pedidos', 'factventas', 'pedidosia', 'vmayo'))
 </div>
 
+{{-- Modal elegir estado destino (desde Confirmado) --}}
+<div id="modal-estado-destino" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-xs p-5 space-y-3">
+        <h3 class="text-sm font-semibold text-gray-800">¿A qué estado querés pasar?</h3>
+        <div class="flex flex-col gap-2 pt-1">
+            <button type="button" onclick="elegirEstadoDestino(2)"
+                class="w-full text-left px-4 py-3 rounded-lg border border-orange-200 hover:border-orange-400 hover:bg-orange-50 transition text-sm font-medium text-orange-700">
+                📦 Preparado
+            </button>
+            <button type="button" onclick="elegirEstadoDestino(4)"
+                class="w-full text-left px-4 py-3 rounded-lg border border-green-200 hover:border-green-400 hover:bg-green-50 transition text-sm font-medium text-green-700">
+                ✅ Entregado
+            </button>
+        </div>
+        <div class="pt-2 border-t border-gray-100">
+            <button id="estado-destino-cancelar" type="button"
+                class="w-full text-xs text-red-400 hover:text-red-600 border border-gray-200 rounded-lg py-2">
+                Cancelar
+            </button>
+        </div>
+    </div>
+</div>
+
 {{-- Modal vincular vmayo --}}
 <div id="modal-vmayo" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-3">
@@ -203,7 +226,17 @@ async function avanzarEstado(id, btn) {
     btn.innerHTML    = '<span class="animate-pulse">…</span>';
 
     let vmayoNro = null;
+    let estadoDestino = null;
+
     if (estadoActual === ESTADO_CONFIRMADO) {
+        // 1) Elegir destino: Preparado o Entregado
+        estadoDestino = await pedirEstadoDestino();
+        if (estadoDestino === false) {
+            btn.disabled  = false;
+            btn.innerHTML = btn.dataset.label ?? '›';
+            return;
+        }
+        // 2) Vincular vmayo
         vmayoNro = await pedirVmayo(id);
         if (vmayoNro === false) {
             btn.disabled  = false;
@@ -213,7 +246,11 @@ async function avanzarEstado(id, btn) {
     }
 
     try {
-        const body = vmayoNro != null ? JSON.stringify({ vmayo_nro: vmayoNro }) : null;
+        const payload = {};
+        if (vmayoNro != null)     payload.vmayo_nro      = vmayoNro;
+        if (estadoDestino != null) payload.estado_destino = estadoDestino;
+        const body = Object.keys(payload).length ? JSON.stringify(payload) : null;
+
         const res  = await fetch(`/admin/pedidos/ia/${id}/estado`, {
             method: 'PATCH',
             headers: {
@@ -250,6 +287,31 @@ async function avanzarEstado(id, btn) {
         btn.disabled = false; btn.innerHTML = btn.dataset.label ?? '›';
     }
 }
+
+// ── Selector de estado destino (desde Confirmado) ─────────────────────────────
+function pedirEstadoDestino() {
+    return new Promise(resolve => {
+        document.getElementById('estado-destino-cancelar').onclick = () => {
+            document.getElementById('modal-estado-destino').classList.add('hidden');
+            resolve(false);
+        };
+        window._estadoDestinoResolve = resolve;
+        document.getElementById('modal-estado-destino').classList.remove('hidden');
+    });
+}
+
+function elegirEstadoDestino(estado) {
+    document.getElementById('modal-estado-destino').classList.add('hidden');
+    if (window._estadoDestinoResolve) { window._estadoDestinoResolve(estado); window._estadoDestinoResolve = null; }
+}
+
+document.getElementById('modal-estado-destino')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        this.classList.add('hidden');
+        window._estadoDestinoResolve?.(false);
+        window._estadoDestinoResolve = null;
+    }
+});
 
 // ── Selector de vmayo ─────────────────────────────────────────────────────────
 async function pedirVmayo(id) {

@@ -24,7 +24,7 @@ class Cliente extends Model
     protected $fillable = [
         'phone', 'name',
         'localidad', 'provincia', 'localidad_id',
-        'calle', 'numero', 'dato_extra',
+        'calle', 'numero', 'dato_extra', 'memoria_ia',
         'estado', 'modo', 'last_order_at', 'cuenta_cod',
     ];
 

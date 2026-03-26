@@ -4,9 +4,9 @@
 @section('content')
 <div class="max-w-2xl mx-auto">
 
-    <div class="flex items-center gap-3 mb-6">
+    <div class="flex items-center gap-3 mb-6 fade-up">
         <a href="{{ route('tienda.index', ['slug' => $slug]) }}"
-            class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
+            class="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-700 hover:bg-white border border-transparent hover:border-gray-200 transition shadow-none hover:shadow-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
             </svg>
@@ -15,28 +15,29 @@
     </div>
 
     @if($pedidos->isEmpty())
-        <div class="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg class="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="bg-white rounded-2xl border border-gray-100 p-14 text-center shadow-sm fade-up">
+            <div class="w-16 h-16 bg-brand-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-brand/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                         d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                 </svg>
             </div>
-            <p class="text-gray-500 font-medium mb-1">Todavía no realizaste ningún pedido</p>
-            <p class="text-sm text-gray-400 mb-5">Explorá el catálogo y hacé tu primer pedido.</p>
+            <p class="text-gray-700 font-semibold mb-1">Todavía no realizaste ningún pedido</p>
+            <p class="text-sm text-gray-400 mb-6">Explorá el catálogo y contactanos por WhatsApp.</p>
             <a href="{{ route('tienda.index', ['slug' => $slug]) }}"
-                class="inline-flex items-center gap-2 bg-red-700 hover:bg-red-800 text-white text-sm font-semibold rounded-xl px-5 py-2.5 transition">
-                Ver productos
+                class="inline-flex items-center gap-2 bg-brand hover:bg-brand-dark text-white text-sm font-semibold rounded-xl px-5 py-2.5 transition shadow-sm">
+                Ver catálogo
             </a>
         </div>
     @else
         <div class="space-y-3">
-            @foreach($pedidos as $pedido)
+            @foreach($pedidos as $i => $pedido)
                 @php $items = $itemsPorNro[$pedido->nro] ?? collect(); @endphp
-                <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-shadow fade-up"
+                    style="animation-delay: {{ $i * 40 }}ms">
 
-                    {{-- Header --}}
-                    <div class="px-4 py-3 flex items-center justify-between gap-3 border-b border-gray-50">
+                    {{-- Header pedido --}}
+                    <div class="px-4 py-3.5 flex items-center justify-between gap-3">
                         <div>
                             <p class="text-sm font-bold text-gray-800">Pedido #{{ $pedido->nro }}</p>
                             <p class="text-xs text-gray-400 mt-0.5">
@@ -52,22 +53,22 @@
 
                     {{-- Items --}}
                     @if($items->isNotEmpty())
-                    <div class="px-4 py-3 space-y-2">
+                    <div class="px-4 pb-3 space-y-2 border-t border-gray-50 pt-3">
                         @foreach($items as $item)
-                            <div class="flex justify-between items-center text-sm">
-                                <div class="flex-1 pr-3">
+                            <div class="flex justify-between items-start gap-3 text-sm">
+                                <div class="flex-1 min-w-0">
                                     <span class="text-gray-700 font-medium">{{ $item->descrip }}</span>
                                     <span class="text-gray-400 text-xs ml-1.5">
                                         @if($item->cant > 0 && $item->kilos > 0)
-                                            × {{ (int) $item->cant }} u · {{ number_format($item->kilos, 2, ',', '.') }} kg
+                                            · {{ (int) $item->cant }}u · {{ number_format($item->kilos, 2, ',', '.') }}kg
                                         @elseif($item->kilos > 0)
-                                            × {{ number_format($item->kilos, 3, ',', '.') }} kg
+                                            · {{ number_format($item->kilos, 3, ',', '.') }} kg
                                         @else
-                                            × {{ (int) $item->cant }} u.
+                                            · {{ (int) $item->cant }} u.
                                         @endif
                                     </span>
                                 </div>
-                                <span class="text-gray-700 font-semibold whitespace-nowrap">
+                                <span class="text-gray-700 font-semibold whitespace-nowrap text-xs">
                                     ${{ number_format($item->neto, 2, ',', '.') }}
                                 </span>
                             </div>
@@ -76,23 +77,23 @@
                     @endif
 
                     {{-- Footer --}}
-                    <div class="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
-                        <div class="flex flex-wrap gap-3 text-xs text-gray-500">
-                            <span class="flex items-center gap-1">
+                    <div class="px-4 py-3 bg-gray-50/80 border-t border-gray-100 flex items-center justify-between gap-3">
+                        <div class="flex flex-wrap gap-3 text-xs text-gray-400">
+                            <span class="flex items-center gap-1.5">
                                 @if($pedido->tipo_entrega === 'retiro')
-                                    <span>🏪</span> Retiro en local
+                                    <span class="w-4 h-4 text-base leading-none">🏪</span> Retiro en local
                                 @else
-                                    <span>🚚</span> Envío
+                                    <span class="w-4 h-4 text-base leading-none">🚚</span> Envío a domicilio
                                 @endif
                             </span>
                             @if($pedido->forma_pago)
-                                <span class="flex items-center gap-1">
-                                    <span>💳</span>
+                                <span class="flex items-center gap-1.5">
+                                    <span class="text-base leading-none">💳</span>
                                     {{ \App\Models\IaEmpresa::MEDIOS_PAGO[$pedido->forma_pago] ?? $pedido->forma_pago }}
                                 </span>
                             @endif
                         </div>
-                        <p class="font-bold text-red-700 whitespace-nowrap text-sm">
+                        <p class="font-bold text-brand whitespace-nowrap text-sm">
                             ${{ number_format($pedido->total, 2, ',', '.') }}
                         </p>
                     </div>
