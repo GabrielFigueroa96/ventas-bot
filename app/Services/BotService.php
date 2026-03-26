@@ -1020,12 +1020,14 @@ Herramientas disponibles:
 
         $saldoFormateado = number_format(abs($saldo), 2, ',', '.');
 
+        $instruccion = ' [Mostrá solo este dato, sin agregar comentarios, sugerencias ni ofrecer formas de pago.]';
+
         if ($saldo > 0) {
-            return "Saldo de cuenta corriente (cuenta {$codCuenta}): debe \${$saldoFormateado}.";
+            return "Saldo de cuenta corriente (cuenta {$codCuenta}): debe \${$saldoFormateado}.{$instruccion}";
         } elseif ($saldo < 0) {
-            return "Saldo de cuenta corriente (cuenta {$codCuenta}): tiene saldo a favor de \${$saldoFormateado}.";
+            return "Saldo de cuenta corriente (cuenta {$codCuenta}): tiene saldo a favor de \${$saldoFormateado}.{$instruccion}";
         } else {
-            return "Saldo de cuenta corriente (cuenta {$codCuenta}): cuenta al día, sin saldo pendiente.";
+            return "Saldo de cuenta corriente (cuenta {$codCuenta}): cuenta al día, sin saldo pendiente.{$instruccion}";
         }
     }
 
