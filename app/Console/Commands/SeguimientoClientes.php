@@ -2,7 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Carrito;
 use App\Models\Cliente;
+use App\Models\IaEmpresa;
 use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Seguimiento;
@@ -13,36 +15,68 @@ use Illuminate\Support\Facades\Log;
 class SeguimientoClientes extends Command
 {
     protected $signature   = 'clientes:seguimiento';
-    protected $description = 'Envía WhatsApp a clientes que consultaron pero no pidieron, o que están inactivos';
+    protected $description = 'Envía WhatsApp a clientes según su actividad (carrito abandonado, sin pedido, inactivos)';
 
     public function handle(BotService $bot): void
     {
-        $this->procesarSinPedido($bot);
-        $this->procesarInactivos($bot);
+        $config = IaEmpresa::first();
+
+        if ($config->seguimiento_carrito_activo ?? true) {
+            $this->procesarCarritoAbandonado($bot, (int) ($config->seguimiento_carrito_horas ?? 2));
+        }
+        if ($config->seguimiento_sin_pedido_activo ?? true) {
+            $this->procesarSinPedido($bot, (int) ($config->seguimiento_sin_pedido_dias ?? 3));
+        }
+        if ($config->seguimiento_inactivo_activo ?? true) {
+            $this->procesarInactivos($bot, (int) ($config->seguimiento_inactivo_dias ?? 7));
+        }
     }
 
-    // Clientes que tuvieron conversación en los últimos 3 días pero no hicieron pedido
-    private function procesarSinPedido(BotService $bot): void
+    // Clientes con carrito activo que no confirmaron en X horas
+    private function procesarCarritoAbandonado(BotService $bot, int $horas): void
+    {
+        $carritos = Carrito::where('expires_at', '>', now())
+            ->where('updated_at', '<=', now()->subHours($horas))
+            ->whereRaw("JSON_LENGTH(items) > 0")
+            ->with('cliente')
+            ->get();
+
+        foreach ($carritos as $carrito) {
+            $cliente = $carrito->cliente;
+            if (!$cliente || $cliente->estado === 'humano' || $cliente->modo === 'humano') continue;
+
+            $yaEnviado = Seguimiento::where('cliente_id', $cliente->id)
+                ->where('tipo', 'carrito_abandonado')
+                ->where('enviado_at', '>=', now()->subHours(max($horas * 2, 12)))
+                ->exists();
+            if ($yaEnviado) continue;
+
+            $mensaje = $this->mensajeCarritoAbandonado($cliente, $carrito);
+            $this->enviar($bot, $cliente, 'carrito_abandonado', $mensaje);
+        }
+    }
+
+    // Clientes que tuvieron conversación en los últimos X días pero no hicieron pedido
+    private function procesarSinPedido(BotService $bot, int $dias): void
     {
         $clientes = Cliente::where('estado', 'activo')
+            ->where('modo', '!=', 'humano')
             ->whereHas('messages', fn($q) =>
                 $q->where('direction', 'incoming')
-                  ->where('created_at', '>=', now()->subDays(3))
+                  ->where('created_at', '>=', now()->subDays($dias))
             )
             ->with('cuenta')
             ->get();
 
         foreach ($clientes as $cliente) {
-            // Ya recibió seguimiento en los últimos 5 días
             $yaEnviado = Seguimiento::where('cliente_id', $cliente->id)
-                ->where('enviado_at', '>=', now()->subDays(5))
+                ->where('enviado_at', '>=', now()->subDays($dias * 2))
                 ->exists();
             if ($yaEnviado) continue;
 
-            // Verificar si hizo pedido en esos mismos 3 días
-            $codcli = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
+            $codcli     = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
             $hizoPedido = Pedido::where('codcli', $codcli)
-                ->where('fecha', '>=', now()->subDays(3)->format('Y-m-d'))
+                ->where('fecha', '>=', now()->subDays($dias)->format('Y-m-d'))
                 ->exists();
             if ($hizoPedido) continue;
 
@@ -51,18 +85,19 @@ class SeguimientoClientes extends Command
         }
     }
 
-    // Clientes que no escriben hace 7+ días
-    private function procesarInactivos(BotService $bot): void
+    // Clientes que no escriben hace X+ días
+    private function procesarInactivos(BotService $bot, int $dias): void
     {
         $clientes = Cliente::where('estado', 'activo')
+            ->where('modo', '!=', 'humano')
             ->whereHas('messages', fn($q) =>
                 $q->where('direction', 'incoming')
-                  ->where('created_at', '<', now()->subDays(7))
-                  ->where('created_at', '>=', now()->subDays(30)) // activos en el último mes
+                  ->where('created_at', '<', now()->subDays($dias))
+                  ->where('created_at', '>=', now()->subDays(90))
             )
             ->whereDoesntHave('messages', fn($q) =>
                 $q->where('direction', 'incoming')
-                  ->where('created_at', '>=', now()->subDays(7))
+                  ->where('created_at', '>=', now()->subDays($dias))
             )
             ->with('cuenta')
             ->get();
@@ -70,7 +105,7 @@ class SeguimientoClientes extends Command
         foreach ($clientes as $cliente) {
             $yaEnviado = Seguimiento::where('cliente_id', $cliente->id)
                 ->where('tipo', 'inactivo')
-                ->where('enviado_at', '>=', now()->subDays(14))
+                ->where('enviado_at', '>=', now()->subDays($dias * 2))
                 ->exists();
             if ($yaEnviado) continue;
 
@@ -79,12 +114,27 @@ class SeguimientoClientes extends Command
         }
     }
 
-    private function mensajeSinPedido(Cliente $cliente): string
+    private function mensajeCarritoAbandonado(Cliente $cliente, Carrito $carrito): string
     {
         $nombre = $cliente->name ?? 'cliente';
+        $items  = collect($carrito->items ?? []);
 
-        // Top producto que más pide este cliente
-        $codcli  = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
+        if ($items->isEmpty()) {
+            return "¡Hola {$nombre}! 🛒 Tenés productos guardados en el carrito. ¿Querés confirmar el pedido?";
+        }
+
+        $lista = $items->take(3)->map(fn($i) => "• {$i['descrip']}")->implode("\n");
+        if ($items->count() > 3) {
+            $lista .= "\n• ...y " . ($items->count() - 3) . " más";
+        }
+
+        return "¡Hola {$nombre}! 🛒 Dejaste estos productos en el carrito:\n{$lista}\n\n¿Querés que confirmemos el pedido?";
+    }
+
+    private function mensajeSinPedido(Cliente $cliente): string
+    {
+        $nombre   = $cliente->name ?? 'cliente';
+        $codcli   = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
         $favorito = Pedido::where('codcli', $codcli)
             ->selectRaw('descrip, COUNT(*) as veces')
             ->groupBy('descrip')
@@ -102,8 +152,8 @@ class SeguimientoClientes extends Command
 
     private function mensajeInactivo(Cliente $cliente): string
     {
-        $nombre  = $cliente->name ?? 'cliente';
-        $codcli  = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
+        $nombre   = $cliente->name ?? 'cliente';
+        $codcli   = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
         $favorito = Pedido::where('codcli', $codcli)
             ->selectRaw('descrip, COUNT(*) as veces')
             ->groupBy('descrip')
@@ -124,7 +174,6 @@ class SeguimientoClientes extends Command
         try {
             $bot->sendWhatsapp($cliente->phone, $mensaje);
 
-            // Grabar en la conversación para que se vea en el chat
             Message::create([
                 'cliente_id' => $cliente->id,
                 'message'    => $mensaje,

@@ -107,7 +107,8 @@ class BotService
         }
 
         // Registro inicial: nombre → localidad → provincia
-        if (empty($client->name) || $client->estado === 'esperando_nombre') {
+        $estadosVerificacion = ['verificando_nombre', 'verificando_localidad', 'verificando_calle', 'esperando_localidad', 'esperando_calle', 'esperando_dato_extra'];
+        if ((empty($client->name) || $client->estado === 'esperando_nombre') && !in_array($client->estado, $estadosVerificacion)) {
             if ($client->estado !== 'esperando_nombre') {
                 $config   = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
                 $nombreIa = trim($config?->nombre_ia ?? '');
@@ -124,7 +125,7 @@ class BotService
                     $saludo = $nombreIa
                         ? "¡Hola! Soy {$nombreIa}. En breve alguien del equipo te va a atender. ¡Gracias por escribirnos!"
                         : "¡Hola! En breve alguien del equipo te va a atender. ¡Gracias por escribirnos!";
-                    $client->update(['estado' => 'humano']);
+                    $client->update(['estado' => 'humano', 'modo' => 'humano']);
                     $this->sendReply($client, $saludo);
                     return $saludo;
                 }

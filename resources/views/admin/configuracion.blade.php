@@ -385,6 +385,74 @@
                 @endif
             </div>
 
+            {{-- Seguimientos automáticos --}}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-5">
+                <div>
+                    <h2 class="text-sm font-semibold text-gray-700">Seguimientos automáticos</h2>
+                    <p class="text-xs text-gray-400 mt-0.5">El bot envía mensajes automáticos a clientes según su actividad. Podés activar cada tipo y configurar el tiempo de espera.</p>
+                </div>
+
+                {{-- Carrito abandonado --}}
+                <div class="border border-gray-100 rounded-xl p-4 space-y-3">
+                    <label class="flex items-start gap-3 text-sm cursor-pointer">
+                        <input type="checkbox" name="seguimiento_carrito_activo" value="1" id="seg_carrito"
+                            {{ old('seguimiento_carrito_activo', $config->seguimiento_carrito_activo ?? true) ? 'checked' : '' }}
+                            class="mt-0.5 accent-red-600" onchange="toggleSeg('carrito', this.checked)">
+                        <span>
+                            <span class="font-medium text-gray-700">🛒 Carrito abandonado</span>
+                            <span class="block text-xs text-gray-400 mt-0.5">Avisa al cliente que dejó productos en el carrito sin confirmar el pedido.</span>
+                        </span>
+                    </label>
+                    <div id="seg-carrito-config" class="{{ old('seguimiento_carrito_activo', $config->seguimiento_carrito_activo ?? true) ? '' : 'hidden' }} flex items-center gap-2 pl-7">
+                        <span class="text-xs text-gray-500">Enviar después de</span>
+                        <input type="number" name="seguimiento_carrito_horas" min="1" max="48"
+                            value="{{ old('seguimiento_carrito_horas', $config->seguimiento_carrito_horas ?? 2) }}"
+                            class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-red-300">
+                        <span class="text-xs text-gray-500">horas sin confirmar.</span>
+                    </div>
+                </div>
+
+                {{-- Consultó sin pedir --}}
+                <div class="border border-gray-100 rounded-xl p-4 space-y-3">
+                    <label class="flex items-start gap-3 text-sm cursor-pointer">
+                        <input type="checkbox" name="seguimiento_sin_pedido_activo" value="1" id="seg_sinpedido"
+                            {{ old('seguimiento_sin_pedido_activo', $config->seguimiento_sin_pedido_activo ?? true) ? 'checked' : '' }}
+                            class="mt-0.5 accent-red-600" onchange="toggleSeg('sinpedido', this.checked)">
+                        <span>
+                            <span class="font-medium text-gray-700">💬 Consultó pero no pidió</span>
+                            <span class="block text-xs text-gray-400 mt-0.5">Avisa al cliente que tuvo conversación reciente pero no realizó ningún pedido.</span>
+                        </span>
+                    </label>
+                    <div id="seg-sinpedido-config" class="{{ old('seguimiento_sin_pedido_activo', $config->seguimiento_sin_pedido_activo ?? true) ? '' : 'hidden' }} flex items-center gap-2 pl-7">
+                        <span class="text-xs text-gray-500">Enviar si no pidió en los últimos</span>
+                        <input type="number" name="seguimiento_sin_pedido_dias" min="1" max="30"
+                            value="{{ old('seguimiento_sin_pedido_dias', $config->seguimiento_sin_pedido_dias ?? 3) }}"
+                            class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-red-300">
+                        <span class="text-xs text-gray-500">días.</span>
+                    </div>
+                </div>
+
+                {{-- Inactivos --}}
+                <div class="border border-gray-100 rounded-xl p-4 space-y-3">
+                    <label class="flex items-start gap-3 text-sm cursor-pointer">
+                        <input type="checkbox" name="seguimiento_inactivo_activo" value="1" id="seg_inactivo"
+                            {{ old('seguimiento_inactivo_activo', $config->seguimiento_inactivo_activo ?? true) ? 'checked' : '' }}
+                            class="mt-0.5 accent-red-600" onchange="toggleSeg('inactivo', this.checked)">
+                        <span>
+                            <span class="font-medium text-gray-700">😴 Cliente inactivo</span>
+                            <span class="block text-xs text-gray-400 mt-0.5">Avisa al cliente que no escribe ni pide desde hace un tiempo.</span>
+                        </span>
+                    </label>
+                    <div id="seg-inactivo-config" class="{{ old('seguimiento_inactivo_activo', $config->seguimiento_inactivo_activo ?? true) ? '' : 'hidden' }} flex items-center gap-2 pl-7">
+                        <span class="text-xs text-gray-500">Enviar si no escribe hace más de</span>
+                        <input type="number" name="seguimiento_inactivo_dias" min="1" max="90"
+                            value="{{ old('seguimiento_inactivo_dias', $config->seguimiento_inactivo_dias ?? 7) }}"
+                            class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-red-300">
+                        <span class="text-xs text-gray-500">días.</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
                 <h2 class="text-sm font-semibold text-gray-700">Notificaciones al cliente</h2>
                 <label class="flex items-start gap-3 text-sm cursor-pointer">
@@ -429,6 +497,12 @@
 
 @section('scripts')
 <script>
+// ─── Seguimientos toggle ──────────────────────────────────────────────────────
+function toggleSeg(tipo, activo) {
+    const el = document.getElementById('seg-' + tipo + '-config');
+    if (el) el.classList.toggle('hidden', !activo);
+}
+
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 function cambiarTab(id) {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
