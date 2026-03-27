@@ -1040,7 +1040,6 @@ Herramientas disponibles:
     private function getCarrito($client): ?Carrito
     {
         return Carrito::where('cliente_id', $client->id)
-            ->where('expires_at', '>', now())
             ->latest()
             ->first();
     }
@@ -1156,7 +1155,6 @@ Herramientas disponibles:
             DB::transaction(function () use ($client, $carrito, &$registro) {
                 // Obtener TODOS los carritos activos y quedarse solo con el último
                 $activos = Carrito::where('cliente_id', $client->id)
-                    ->where('expires_at', '>', now())
                     ->orderByDesc('id')
                     ->lockForUpdate()
                     ->get();
@@ -1166,14 +1164,14 @@ Herramientas disponibles:
                     Carrito::whereIn('id', $activos->slice(1)->pluck('id'))->delete();
                     $activos->first()->update([
                         'items'      => $carrito,
-                        'expires_at' => now()->addMinutes(60),
+                        'expires_at' => now()->addYears(100),
                     ]);
                     $registro = $activos->first();
                 } else {
                     $registro = Carrito::create([
                         'cliente_id' => $client->id,
                         'items'      => $carrito,
-                        'expires_at' => now()->addMinutes(60),
+                        'expires_at' => now()->addYears(100),
                     ]);
                 }
             });
@@ -1202,15 +1200,6 @@ Herramientas disponibles:
 
         $resultado = $this->formatCarrito($registro->items);
 
-        // Tiempo restante
-        $minutos = max(0, (int) now()->diffInMinutes($registro->expires_at, false));
-        if ($minutos <= 0) {
-            $resultado .= "\n\n⏱ El carrito está por vencer. Confirmá tu pedido ahora.";
-        } elseif ($minutos <= 5) {
-            $resultado .= "\n\n⏱ El carrito vence en {$minutos} min. Confirmá pronto.";
-        } else {
-            $resultado .= "\n\n⏱ El carrito vence en {$minutos} min.";
-        }
 
         // Validar existencia y precios actuales
         $alertas = $this->validarCarrito($registro->items, $costoExtra);
@@ -1312,6 +1301,43 @@ Herramientas disponibles:
         $lineas[] = 'TOTAL aprox.: $' . $this->fmt($total) . ' _(puede variar según el peso final)_';
 
         return implode("\n", $lineas);
+    }
+
+    /**
+     * Actualiza precios del carrito y devuelve alertas de cambios/no disponibles.
+     * Guarda el carrito con precios actualizados.
+     */
+    public function verificarCarritoAbandonado(Carrito $carrito, $cliente): array
+    {
+        $costoExtra = $this->costoExtraCliente($cliente);
+        $items      = $carrito->items ?? [];
+        $cods       = array_filter(array_column($items, 'cod'));
+
+        $productos = Producto::paraBot()
+            ->whereIn('tablaplu.cod', $cods)
+            ->get()
+            ->keyBy('cod');
+
+        $alertas     = [];
+        $itemsActualizados = $items;
+
+        foreach ($items as $key => $item) {
+            if (!isset($item['cod']) || !$productos->has($item['cod'])) {
+                $alertas[] = "❌ {$item['des']}: no disponible actualmente";
+                continue;
+            }
+            $precioNuevo = (float) $productos[$item['cod']]->precio + $costoExtra;
+            if (abs($precioNuevo - (float) $item['precio']) > 0.01) {
+                $alertas[] = "⚠️ {$item['des']}: precio actualizado a $" . $this->fmt($precioNuevo);
+            }
+            $base = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
+            $itemsActualizados[$key]['precio'] = $precioNuevo;
+            $itemsActualizados[$key]['neto']   = round($precioNuevo * $base, 2);
+        }
+
+        $carrito->update(['items' => $itemsActualizados]);
+
+        return $alertas;
     }
 
     private function validarCarrito(array $carrito, float $costoExtra = 0): array
@@ -2045,7 +2071,7 @@ Herramientas disponibles:
             'cliente_id' => $client->id,
             'items'      => $carritoItems,
             'pedido_nro' => $nro,
-            'expires_at' => now()->addMinutes(15),
+            'expires_at' => now()->addYears(100),
         ]);
 
         $count = count($carritoItems);

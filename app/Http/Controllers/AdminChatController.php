@@ -12,11 +12,51 @@ use App\Models\Vmayo;
 use App\Services\BotService;
 use App\Services\TenantManager;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class AdminChatController extends Controller
 {
+    public function conversaciones()
+    {
+        $clientes = Cliente::selectRaw('ia_clientes.*')
+            ->selectSub(
+                Message::select('message')->whereColumn('cliente_id', 'ia_clientes.id')->latest('id')->limit(1),
+                'last_message'
+            )
+            ->selectSub(
+                Message::select('direction')->whereColumn('cliente_id', 'ia_clientes.id')->latest('id')->limit(1),
+                'last_direction'
+            )
+            ->selectSub(
+                Message::select('created_at')->whereColumn('cliente_id', 'ia_clientes.id')->latest('id')->limit(1),
+                'last_message_at'
+            )
+            ->whereHas('messages')
+            ->orderByDesc('last_message_at')
+            ->get();
+
+        return view('admin.conversaciones', compact('clientes'));
+    }
+
+    public function conversacionPanel(int $id)
+    {
+        $cliente  = Cliente::findOrFail($id);
+        $mensajes = Message::where('cliente_id', $cliente->id)->oldest('id')->get();
+        $lastId   = $mensajes->last()?->id ?? 0;
+
+        return response()->json([
+            'html'   => view('admin.partials.conversacion-panel', compact('cliente', 'mensajes'))->render(),
+            'lastId' => $lastId,
+            'modo'   => $cliente->modo,
+            'pollUrl'  => route('admin.chat.mensajes', $cliente),
+            'enviarUrl' => route('admin.chat.enviar', $cliente),
+            'tomarUrl'  => route('admin.chat.tomar', $cliente),
+            'liberarUrl' => route('admin.chat.liberar', $cliente),
+        ]);
+    }
+
     public function imprimir(Request $request, int $id)
     {
         $cliente = Cliente::findOrFail($id);

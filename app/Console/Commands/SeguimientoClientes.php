@@ -51,7 +51,8 @@ class SeguimientoClientes extends Command
                 ->exists();
             if ($yaEnviado) continue;
 
-            $mensaje = $this->mensajeCarritoAbandonado($cliente, $carrito);
+            $alertas = $bot->verificarCarritoAbandonado($carrito, $cliente);
+            $mensaje = $this->mensajeCarritoAbandonado($cliente, $carrito, $alertas);
             $this->enviar($bot, $cliente, 'carrito_abandonado', $mensaje);
         }
     }
@@ -114,7 +115,7 @@ class SeguimientoClientes extends Command
         }
     }
 
-    private function mensajeCarritoAbandonado(Cliente $cliente, Carrito $carrito): string
+    private function mensajeCarritoAbandonado(Cliente $cliente, Carrito $carrito, array $alertas = []): string
     {
         $nombre = $cliente->name ?? 'cliente';
         $items  = collect($carrito->items ?? []);
@@ -123,12 +124,18 @@ class SeguimientoClientes extends Command
             return "¡Hola {$nombre}! 🛒 Tenés productos guardados en el carrito. ¿Querés confirmar el pedido?";
         }
 
-        $lista = $items->take(3)->map(fn($i) => "• {$i['descrip']}")->implode("\n");
+        $lista = $items->take(3)->map(fn($i) => "• {$i['des']}")->implode("\n");
         if ($items->count() > 3) {
             $lista .= "\n• ...y " . ($items->count() - 3) . " más";
         }
 
-        return "¡Hola {$nombre}! 🛒 Dejaste estos productos en el carrito:\n{$lista}\n\n¿Querés que confirmemos el pedido?";
+        $mensaje = "¡Hola {$nombre}! 🛒 Dejaste estos productos en el carrito:\n{$lista}\n\n¿Querés que confirmemos el pedido?";
+
+        if (!empty($alertas)) {
+            $mensaje .= "\n\n_Nota: algunos productos cambiaron:_\n" . implode("\n", $alertas);
+        }
+
+        return $mensaje;
     }
 
     private function mensajeSinPedido(Cliente $cliente): string

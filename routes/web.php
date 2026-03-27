@@ -32,6 +32,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::patch('/pedidos/ia/{id}/cancelar',            [AdminController::class, 'cancelarPedido'])->name('pedidos.ia.cancelar');
     Route::get  ('/pedidos/ia/{id}/vmayo-opciones',      [AdminController::class, 'vmayoOpciones'])->name('pedidos.ia.vmayo');
 
+    // Conversaciones (vista estilo WhatsApp)
+    Route::get ('/conversaciones',               [AdminChatController::class, 'conversaciones'])->name('conversaciones');
+    Route::get ('/conversaciones/{cliente}/panel',[AdminChatController::class, 'conversacionPanel'])->name('conversaciones.panel');
+
     // Control manual del chat
     Route::get ('/clientes/{cliente}/mensajes',      [AdminChatController::class, 'mensajesNuevos'])->name('chat.mensajes');
     Route::get ('/clientes/{cliente}/imprimir',      [AdminChatController::class, 'imprimir'])->name('chat.imprimir');

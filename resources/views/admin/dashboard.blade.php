@@ -315,7 +315,7 @@
             @forelse($proximosDias as $dia)
             <div class="px-5 py-3 flex items-center justify-between gap-3">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 text-center">
+                    <div class="w-24 shrink-0">
                         <p class="text-xs font-bold {{ $dia['label'] === 'Hoy' ? 'text-red-600' : ($dia['label'] === 'Mañana' ? 'text-amber-600' : 'text-gray-500') }}">
                             {{ $dia['label'] }}
                         </p>

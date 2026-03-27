@@ -27,6 +27,6 @@ class Carrito extends Model
 
     public function expirado(): bool
     {
-        return $this->expires_at->isPast();
+        return false;
     }
 }
