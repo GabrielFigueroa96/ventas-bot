@@ -11,6 +11,22 @@
         overflow: hidden !important;
     }
     #conv-wrapper { flex: 1; min-height: 0; }
+
+    /* Mobile: fijar la cadena de altura para que el chat ocupe la pantalla completa */
+    @media (max-width: 1023px) {
+        html { height: 100%; }
+        body {
+            height: 100vh;
+            height: 100dvh;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+        body > .flex-1 {
+            min-height: 0;
+            overflow: hidden;
+        }
+    }
 </style>
 @endpush
 

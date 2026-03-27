@@ -1164,14 +1164,14 @@ Herramientas disponibles:
                     Carrito::whereIn('id', $activos->slice(1)->pluck('id'))->delete();
                     $activos->first()->update([
                         'items'      => $carrito,
-                        'expires_at' => now()->addYears(100),
+                        'expires_at' => now()->addYear(),
                     ]);
                     $registro = $activos->first();
                 } else {
                     $registro = Carrito::create([
                         'cliente_id' => $client->id,
                         'items'      => $carrito,
-                        'expires_at' => now()->addYears(100),
+                        'expires_at' => now()->addYear(),
                     ]);
                 }
             });
@@ -2071,7 +2071,7 @@ Herramientas disponibles:
             'cliente_id' => $client->id,
             'items'      => $carritoItems,
             'pedido_nro' => $nro,
-            'expires_at' => now()->addYears(100),
+            'expires_at' => now()->addYear(),
         ]);
 
         $count = count($carritoItems);

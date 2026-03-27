@@ -59,10 +59,23 @@
         .card { transition: box-shadow 0.18s, transform 0.18s; }
         .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-1px); }
 
-        #sidebar { transition: transform 0.25s ease; }
+        #sidebar { transition: width 0.22s ease, transform 0.25s ease; }
         @media (max-width: 1023px) {
             #sidebar { transform: translateX(-100%); position: fixed; z-index: 50; height: 100vh; }
             #sidebar.open { transform: translateX(0); }
+        }
+        /* ── Sidebar colapsado (solo desktop) ── */
+        @media (min-width: 1024px) {
+            #sidebar.collapsed { width: 4rem; }
+            #sidebar.collapsed .sb-text { display: none; }
+            #sidebar.collapsed .sb-section { opacity: 0; height: 0; padding: 0; overflow: hidden; margin: 0; }
+            #sidebar.collapsed .nav-link { justify-content: center; padding: 8px 0; gap: 0; border-left-color: transparent; }
+            #sidebar.collapsed .nav-link.active { border-right: 2px solid #ef4444; }
+            #sidebar.collapsed .nav-link svg { width: 20px; height: 20px; }
+            #sidebar.collapsed .sb-header { justify-content: center; padding: 1rem 0; }
+            #sidebar.collapsed .sb-footer-row { flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px; }
+            #sidebar.collapsed #sb-toggle svg { transform: rotate(180deg); }
+            #sidebar.collapsed nav { padding-left: 0; padding-right: 0; }
         }
     </style>
 </head>
@@ -101,31 +114,40 @@
 <aside id="sidebar" class="w-56 flex flex-col shrink-0 lg:sticky lg:top-0 lg:h-screen" style="background:#0d1829">
 
     {{-- Header --}}
-    <div class="px-4 py-4" style="border-bottom:1px solid rgba(255,255,255,0.07)">
-        <p class="text-xs font-semibold mb-2" style="color:rgba(255,255,255,0.28);letter-spacing:.06em">PANEL ADMIN</p>
-        <div class="flex items-center gap-2.5">
+    <div class="px-4 py-4 relative" style="border-bottom:1px solid rgba(255,255,255,0.07)">
+        <p class="sb-text text-xs font-semibold mb-2" style="color:rgba(255,255,255,0.28);letter-spacing:.06em">PANEL ADMIN</p>
+        <div class="sb-header flex items-center gap-2.5">
             @if(!empty($logoTienda))
                 <img src="{{ asset($logoTienda) }}" alt="{{ $empresaNombre }}"
                      class="w-7 h-7 rounded-lg object-cover shrink-0">
             @else
                 <div class="w-7 h-7 rounded-lg flex items-center justify-center text-sm shrink-0" style="background:rgba(239,68,68,0.2)">🥩</div>
             @endif
-            <p class="text-white font-semibold text-sm truncate">{{ $empresaNombre }}</p>
+            <p class="sb-text text-white font-semibold text-sm truncate">{{ $empresaNombre }}</p>
         </div>
+        {{-- Toggle colapsar (solo desktop) --}}
+        <button id="sb-toggle" onclick="toggleSidebar()" title="Retraer menú"
+            class="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 items-center justify-center w-6 h-6 rounded-md transition-colors"
+            style="color:rgba(255,255,255,0.3)" onmouseover="this.style.color='rgba(255,255,255,0.7)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'">
+            <svg class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </button>
     </div>
 
     {{-- Nav --}}
     <nav class="flex-1 px-2 py-2 overflow-y-auto">
         @foreach($sections as $sectionLabel => $items)
-            <p class="nav-section">{{ $sectionLabel }}</p>
+            <p class="nav-section sb-section">{{ $sectionLabel }}</p>
             @foreach($items as $item)
             <a href="{{ route($item['route']) }}"
                class="nav-link {{ request()->routeIs($item['match']) ? 'active' : '' }}"
+               title="{{ $item['label'] }}"
                onclick="closeSidebar()">
                 <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                     {!! $item['icon'] !!}
                 </svg>
-                {{ $item['label'] }}
+                <span class="sb-text">{{ $item['label'] }}</span>
             </a>
             @endforeach
         @endforeach
@@ -133,11 +155,11 @@
 
     {{-- Footer usuario --}}
     <div class="px-3 py-3" style="border-top:1px solid rgba(255,255,255,0.07)">
-        <div class="flex items-center gap-2.5 px-2 py-2 rounded-lg" style="background:rgba(255,255,255,0.05)">
+        <div class="sb-footer-row flex items-center gap-2.5 px-2 py-2 rounded-lg" style="background:rgba(255,255,255,0.05)">
             <div class="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style="background:#b91c1c">
                 {{ strtoupper(substr($userName, 0, 1)) }}
             </div>
-            <span class="text-xs font-medium truncate flex-1" style="color:rgba(255,255,255,0.55)">{{ $userName }}</span>
+            <span class="sb-text text-xs font-medium truncate flex-1" style="color:rgba(255,255,255,0.55)">{{ $userName }}</span>
             <a href="{{ route('admin.cuenta') }}" title="Cambiar contraseña" class="transition-colors shrink-0"
                style="color:rgba(255,255,255,0.3)"
                onmouseover="this.style.color='rgba(255,255,255,0.7)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'">
@@ -214,6 +236,17 @@ function closeSidebar() {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('overlay').classList.add('hidden');
 }
+function toggleSidebar() {
+    const sb = document.getElementById('sidebar');
+    const collapsed = sb.classList.toggle('collapsed');
+    localStorage.setItem('sb_collapsed', collapsed ? '1' : '0');
+}
+// Restaurar estado al cargar
+(function () {
+    if (window.innerWidth >= 1024 && localStorage.getItem('sb_collapsed') === '1') {
+        document.getElementById('sidebar').classList.add('collapsed');
+    }
+})();
 
 // ── Toast system ──────────────────────────────────────────────────────────────
 (function () {
