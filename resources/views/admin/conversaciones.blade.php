@@ -3,12 +3,19 @@
 
 @push('styles')
 <style>
-    #conv-wrapper { height: calc(100vh - 4rem); }
+    main {
+        max-width: none !important;
+        padding: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+    }
+    #conv-wrapper { flex: 1; min-height: 0; }
 </style>
 @endpush
 
 @section('content')
-<div id="conv-wrapper" class="flex overflow-hidden rounded-xl shadow border border-gray-100 -mx-4 sm:-mx-6 -mt-4">
+<div id="conv-wrapper" class="flex overflow-hidden border-t border-gray-200">
 
     {{-- ── Panel izquierdo: lista de clientes ─────────────────────────── --}}
     <div id="panel-lista" class="w-full md:w-80 shrink-0 flex flex-col border-r border-gray-100 bg-white">
@@ -35,6 +42,13 @@
                         <span class="text-xs text-gray-400 shrink-0">
                             {{ $cli->last_message_at ? \Carbon\Carbon::parse($cli->last_message_at)->format('d/m H:i') : '' }}
                         </span>
+                    </div>
+                    <div class="flex items-center gap-1 text-xs text-gray-400 truncate">
+                        <span class="truncate">{{ $cli->phone }}</span>
+                        @if($cli->localidad)
+                            <span class="shrink-0">·</span>
+                            <span class="truncate">{{ $cli->localidad }}</span>
+                        @endif
                     </div>
                     <div class="flex items-center gap-1 mt-0.5">
                         @if($cli->modo === 'humano')
@@ -69,7 +83,7 @@
 </div>
 @endsection
 
-@push('scripts')
+@section('scripts')
 <script>
 const csrfToken  = document.querySelector('meta[name=csrf-token]').content;
 let chatInterval = null;
@@ -336,4 +350,4 @@ function clearFile() {
     document.getElementById('file-preview')?.classList.add('hidden');
 }
 </script>
-@endpush
+@endsection
