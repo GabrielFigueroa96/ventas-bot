@@ -101,14 +101,14 @@ class AdminChatController extends Controller
     {
         $cliente = Cliente::findOrFail($id);
         $cliente->update(['modo' => 'humano']);
-        return back()->with('success', 'Tomaste el control del chat.');
+        return response()->json(['ok' => true]);
     }
 
     public function liberarControl(int $id)
     {
         $cliente = Cliente::findOrFail($id);
         $cliente->update(['modo' => 'bot']);
-        return back()->with('success', 'El bot retomó el control.');
+        return response()->json(['ok' => true]);
     }
 
     public function enviar(Request $request, int $id)

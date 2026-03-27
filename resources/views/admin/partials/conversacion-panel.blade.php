@@ -1,6 +1,12 @@
 {{-- Header del cliente --}}
 <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white shrink-0">
     <div class="flex items-center gap-3">
+        {{-- Botón volver (solo mobile) --}}
+        <button onclick="volverALista()" class="md:hidden text-gray-400 hover:text-gray-600 mr-1" aria-label="Volver">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </button>
         <div class="w-9 h-9 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-sm font-bold shrink-0">
             {{ strtoupper(substr($cliente->name ?? '?', 0, 1)) }}
         </div>
@@ -26,15 +32,15 @@
             </button>
         @endif
         <a href="{{ route('admin.cliente', $cliente) }}" target="_blank"
-            class="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 transition">
+            class="hidden sm:inline-flex text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 transition">
             Ver perfil
         </a>
     </div>
 </div>
 
 {{-- Mensajes --}}
-<div class="relative flex-1 min-h-0">
-    <div id="chat-box" class="p-4 space-y-3 overflow-y-auto h-full">
+<div class="relative flex-1 min-h-0 overflow-hidden">
+    <div id="chat-box" class="absolute inset-0 p-4 space-y-3 overflow-y-auto">
         @forelse($mensajes as $msg)
         <div class="flex {{ $msg->direction === 'outgoing' ? 'justify-end' : 'justify-start' }}" data-id="{{ $msg->id }}">
             <div class="max-w-sm px-4 py-2 rounded-2xl text-sm

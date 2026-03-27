@@ -3,7 +3,6 @@
 
 @push('styles')
 <style>
-    /* Ocupa toda la altura disponible */
     #conv-wrapper { height: calc(100vh - 4rem); }
 </style>
 @endpush
@@ -12,7 +11,7 @@
 <div id="conv-wrapper" class="flex overflow-hidden rounded-xl shadow border border-gray-100 -mx-4 sm:-mx-6 -mt-4">
 
     {{-- ── Panel izquierdo: lista de clientes ─────────────────────────── --}}
-    <div class="w-80 shrink-0 flex flex-col border-r border-gray-100 bg-white">
+    <div id="panel-lista" class="w-full md:w-80 shrink-0 flex flex-col border-r border-gray-100 bg-white">
         {{-- Header --}}
         <div class="px-4 py-3 border-b border-gray-100">
             <h2 class="text-sm font-semibold text-gray-700">Conversaciones</h2>
@@ -55,7 +54,7 @@
     </div>
 
     {{-- ── Panel derecho: chat ──────────────────────────────────────────── --}}
-    <div id="chat-panel" class="flex-1 flex flex-col bg-gray-50 min-w-0">
+    <div id="chat-panel" class="hidden md:flex flex-1 flex-col bg-gray-50 min-w-0">
         {{-- Estado vacío --}}
         <div id="chat-empty" class="flex-1 flex items-center justify-center text-gray-300">
             <div class="text-center space-y-2">
@@ -92,6 +91,16 @@ document.getElementById('buscar-cliente').addEventListener('input', function () 
     });
 });
 
+// ── Responsive: volver a la lista en mobile ───────────────────────────────────
+function volverALista() {
+    document.getElementById('panel-lista').classList.remove('hidden');
+    document.getElementById('chat-panel').classList.add('hidden');
+    document.getElementById('chat-panel').classList.remove('flex');
+    clearInterval(chatInterval);
+    currentId = null;
+    document.querySelectorAll('.conv-item').forEach(b => b.classList.remove('bg-red-50', 'border-l-2', 'border-red-500'));
+}
+
 // ── Seleccionar cliente ───────────────────────────────────────────────────────
 async function seleccionarCliente(id, btn) {
     if (currentId === id) return;
@@ -100,6 +109,14 @@ async function seleccionarCliente(id, btn) {
     // Marcar activo
     document.querySelectorAll('.conv-item').forEach(b => b.classList.remove('bg-red-50', 'border-l-2', 'border-red-500'));
     btn.classList.add('bg-red-50', 'border-l-2', 'border-red-500');
+
+    // En mobile: ocultar lista y mostrar chat
+    const esMobile = window.innerWidth < 768;
+    if (esMobile) {
+        document.getElementById('panel-lista').classList.add('hidden');
+        document.getElementById('chat-panel').classList.remove('hidden');
+        document.getElementById('chat-panel').classList.add('flex');
+    }
 
     // Detener polling anterior
     clearInterval(chatInterval);
@@ -111,35 +128,47 @@ async function seleccionarCliente(id, btn) {
             <span class="animate-pulse text-sm">Cargando...</span>
         </div>`;
 
-    const res  = await fetch(`/admin/conversaciones/${id}/panel`);
-    const data = await res.json();
+    try {
+        const res  = await fetch(`/admin/conversaciones/${id}/panel`);
+        if (!res.ok) throw new Error(`Error ${res.status}`);
+        const data = await res.json();
 
-    // Inyectar HTML
-    panel.innerHTML = data.html;
+        // Inyectar HTML
+        panel.innerHTML = data.html;
 
-    // Inicializar estado
-    lastMsgId  = data.lastId;
-    pollUrl    = data.pollUrl;
-    enviarUrl  = data.enviarUrl;
-    tomarUrl   = data.tomarUrl;
-    liberarUrl = data.liberarUrl;
-    atBottom   = true;
+        // Inicializar estado
+        lastMsgId  = data.lastId;
+        pollUrl    = data.pollUrl;
+        enviarUrl  = data.enviarUrl;
+        tomarUrl   = data.tomarUrl;
+        liberarUrl = data.liberarUrl;
+        atBottom   = true;
 
-    scrollBottom();
-    iniciarPolling();
-    bindFormEnvio();
+        scrollBottom();
+        iniciarPolling();
+        bindFormEnvio();
 
-    // Scroll chat box listener
-    const box = document.getElementById('chat-box');
-    box?.addEventListener('scroll', () => {
-        atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-    });
+        // Scroll chat box listener
+        const box = document.getElementById('chat-box');
+        box?.addEventListener('scroll', () => {
+            atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+        });
 
-    document.getElementById('nuevo-msg')?.addEventListener('click', () => {
-        atBottom = true;
-        scrollBottom(true);
-        document.getElementById('nuevo-msg').classList.add('hidden');
-    });
+        document.getElementById('nuevo-msg')?.addEventListener('click', () => {
+            atBottom = true;
+            scrollBottom(true);
+            document.getElementById('nuevo-msg').classList.add('hidden');
+        });
+    } catch (err) {
+        panel.innerHTML = `
+            <div class="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3">
+                <p class="text-sm">Error al cargar la conversación.</p>
+                <button onclick="seleccionarCliente(${id}, document.querySelector('[data-id=\\'${id}\\']'))"
+                    class="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 transition">
+                    Reintentar
+                </button>
+            </div>`;
+    }
 }
 
 // ── Scroll ────────────────────────────────────────────────────────────────────
@@ -277,20 +306,22 @@ async function liberarControl() {
 async function recargarPanel() {
     if (!currentId) return;
     clearInterval(chatInterval);
-    const res  = await fetch(`/admin/conversaciones/${currentId}/panel`);
-    const data = await res.json();
-    document.getElementById('chat-panel').innerHTML = data.html;
-    enviarUrl  = data.enviarUrl;
-    tomarUrl   = data.tomarUrl;
-    liberarUrl = data.liberarUrl;
-    atBottom   = true;
-    scrollBottom();
-    iniciarPolling();
-    bindFormEnvio();
-    const box = document.getElementById('chat-box');
-    box?.addEventListener('scroll', () => {
-        atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-    });
+    try {
+        const res  = await fetch(`/admin/conversaciones/${currentId}/panel`);
+        const data = await res.json();
+        document.getElementById('chat-panel').innerHTML = data.html;
+        enviarUrl  = data.enviarUrl;
+        tomarUrl   = data.tomarUrl;
+        liberarUrl = data.liberarUrl;
+        atBottom   = true;
+        scrollBottom();
+        iniciarPolling();
+        bindFormEnvio();
+        const box = document.getElementById('chat-box');
+        box?.addEventListener('scroll', () => {
+            atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+        });
+    } catch (_) {}
 }
 
 // ── Adjunto ───────────────────────────────────────────────────────────────────
