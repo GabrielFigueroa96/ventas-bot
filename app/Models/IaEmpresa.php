@@ -41,6 +41,7 @@ class IaEmpresa extends Model
         'two_factor_enabled',
         'notif_negocio_enabled',
         'notif_template_nombre',
+        'notif_estado_template',
         'bot_horarios',
         'bot_fechas_cerrado',
         'bot_hora_corte',

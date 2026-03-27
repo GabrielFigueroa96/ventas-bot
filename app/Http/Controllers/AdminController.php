@@ -11,6 +11,7 @@ use App\Models\IaEmpresa;
 use App\Models\Vmayo;
 use App\Models\Message;
 use App\Models\Pedido;
+use App\Models\PedidoNotificacion;
 use App\Models\Pedidosia;
 use App\Models\Seguimiento;
 use App\Services\BotService;
@@ -775,7 +776,18 @@ class AdminController extends Controller
             $mensaje = $sia->mensajeParaEstado($nextEstado);
             if ($mensaje) {
                 try {
-                    app(BotService::class)->sendWhatsapp($sia->cliente->phone, $mensaje);
+                    $nombre = $sia->cliente->name ?? $sia->nomcli;
+                    app(BotService::class)->enviarNotifEstadoPedido($sia->cliente->phone, $nombre, $mensaje);
+
+                    // Registrar para que el cron no vuelva a notificar este estado
+                    PedidoNotificacion::firstOrCreate([
+                        'nro'               => $sia->nro,
+                        'pv'                => 'sia',
+                        'estado_notificado' => $nextEstado,
+                    ], [
+                        'phone'      => $sia->cliente->phone,
+                        'enviado_at' => now(),
+                    ]);
                 } catch (\Throwable $e) {
                     \Illuminate\Support\Facades\Log::error("avanzarEstadoPedido WA error: " . $e->getMessage());
                 }

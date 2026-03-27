@@ -64,6 +64,7 @@
                             data-max="{{ $sia->estadoMax() }}"
                             data-estado="{{ $siaEstado }}"
                             data-label="{{ $nextLabel ?? '›' }}"
+                            data-tipo-entrega="{{ $sia->tipo_entrega }}"
                             class="inline-flex items-center text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1 rounded-full transition-colors">
                             {{ $nextLabel ?? '›' }}
                         </button>
@@ -98,6 +99,7 @@
                     data-max="{{ $sia->estadoMax() }}"
                     data-estado="{{ $siaEstado }}"
                     data-label="{{ $nextLabel ?? '›' }}"
+                    data-tipo-entrega="{{ $sia->tipo_entrega }}"
                     class="flex-1 text-sm font-semibold bg-gray-800 hover:bg-gray-700 text-white py-2.5 px-4 rounded-xl transition-colors">
                     {{ $nextLabel ?? '›' }}
                 </button>

@@ -161,11 +161,11 @@
     <div class="bg-white rounded-xl shadow-xl w-full max-w-xs p-5 space-y-3">
         <h3 class="text-sm font-semibold text-gray-800">¿A qué estado querés pasar?</h3>
         <div class="flex flex-col gap-2 pt-1">
-            <button type="button" onclick="elegirEstadoDestino(2)"
+            <button type="button" id="estado-destino-preparado"
                 class="w-full text-left px-4 py-3 rounded-lg border border-orange-200 hover:border-orange-400 hover:bg-orange-50 transition text-sm font-medium text-orange-700">
                 📦 Preparado
             </button>
-            <button type="button" onclick="elegirEstadoDestino(4)"
+            <button type="button" id="estado-destino-final"
                 class="w-full text-left px-4 py-3 rounded-lg border border-green-200 hover:border-green-400 hover:bg-green-50 transition text-sm font-medium text-green-700">
                 ✅ Entregado
             </button>
@@ -229,14 +229,20 @@ async function avanzarEstado(id, btn) {
     let estadoDestino = null;
 
     if (estadoActual === ESTADO_CONFIRMADO) {
-        // 1) Elegir destino: Preparado o Entregado
-        estadoDestino = await pedirEstadoDestino();
-        if (estadoDestino === false) {
-            btn.disabled  = false;
-            btn.innerHTML = btn.dataset.label ?? '›';
-            return;
+        const tipoEntrega = btn.dataset.tipoEntrega ?? 'envio';
+
+        // Envío: elegir entre Preparado o Entregado
+        if (tipoEntrega === 'envio') {
+            estadoDestino = await pedirEstadoDestino(max, tipoEntrega);
+            if (estadoDestino === false) {
+                btn.disabled  = false;
+                btn.innerHTML = btn.dataset.label ?? '›';
+                return;
+            }
         }
-        // 2) Vincular vmayo
+        // Retiro: avanza directo a "Listo para retirar" (estado 2), sin elección
+
+        // Vincular vmayo en ambos casos
         vmayoNro = await pedirVmayo(id);
         if (vmayoNro === false) {
             btn.disabled  = false;
@@ -289,7 +295,16 @@ async function avanzarEstado(id, btn) {
 }
 
 // ── Selector de estado destino (desde Confirmado) ─────────────────────────────
-function pedirEstadoDestino() {
+function pedirEstadoDestino(max, tipoEntrega) {
+    const esRetiro = tipoEntrega === 'retiro';
+    const btnPreparado = document.getElementById('estado-destino-preparado');
+    const btnFinal     = document.getElementById('estado-destino-final');
+
+    btnPreparado.textContent = esRetiro ? '🏪 Listo para retirar' : '📦 Preparado';
+    btnFinal.textContent     = esRetiro ? '✅ Retirado' : '✅ Entregado';
+    btnPreparado.onclick = () => elegirEstadoDestino(2);
+    btnFinal.onclick     = () => elegirEstadoDestino(max);
+
     return new Promise(resolve => {
         document.getElementById('estado-destino-cancelar').onclick = () => {
             document.getElementById('modal-estado-destino').classList.add('hidden');

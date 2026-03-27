@@ -65,6 +65,7 @@ class Pedidosia extends Model
         1 => "✅ Tu pedido #{nro} fue *confirmado* y está siendo preparado. ¡Gracias!",
         2 => "📦 Tu pedido #{nro} está *preparado*. ¡Pronto lo recibirás!",
         3 => "✅ Tu pedido #{nro} fue *entregado*. ¡Gracias por tu compra!",
+        9 => "❌ Tu pedido #{nro} fue *cancelado*. Si tenés alguna consulta, escribinos.",
     ];
 
     /**
@@ -97,6 +98,15 @@ class Pedidosia extends Model
             return 'bg-green-100 text-green-700';
         }
         return self::ESTADOS[$this->estado]['css'] ?? 'bg-gray-100 text-gray-600';
+    }
+
+    public function esEstadoNotificable(): bool
+    {
+        $estados = $this->tipo_entrega === 'retiro'
+            ? [self::ESTADO_CONFIRMADO, self::ESTADO_EN_CAMINO, self::ESTADO_CANCELADO]
+            : [self::ESTADO_CONFIRMADO, self::ESTADO_EN_REPARTO, self::ESTADO_ENTREGADO, self::ESTADO_CANCELADO];
+
+        return in_array((int) $this->estado, $estados);
     }
 
     public function mensajeParaEstado(int $estado): string

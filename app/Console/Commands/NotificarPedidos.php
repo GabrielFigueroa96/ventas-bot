@@ -20,12 +20,72 @@ class NotificarPedidos extends Command
     private const MSG_ENVIO  = "¡Hola {nombre}! 🎉 Tu pedido #{nro} ya está listo y en camino a tu domicilio. ¡Gracias!";
     private const MSG_RETIRO = "¡Hola {nombre}! 🎉 Tu pedido #{nro} ya está listo. Podés pasar a retirarlo cuando quieras. ¡Gracias!";
 
+    // Todos los estados que pueden ser notificables (el filtro fino lo hace esEstadoNotificable())
+    private const ESTADOS_SIA = [
+        Pedidosia::ESTADO_CONFIRMADO,
+        Pedidosia::ESTADO_EN_CAMINO,
+        Pedidosia::ESTADO_EN_REPARTO,
+        Pedidosia::ESTADO_ENTREGADO,
+        Pedidosia::ESTADO_CANCELADO,
+    ];
+
     public function handle(): void
     {
         $tenants = DB::connection('mysql')->table('ia_tenants')->where('activo', true)->get();
         foreach ($tenants as $tenant) {
             app(TenantManager::class)->loadById($tenant->id);
-            $this->procesarEstado(app(BotService::class), Pedido::ESTADO_FINALIZADO);
+            $bot = app(BotService::class);
+            $this->procesarEstado($bot, Pedido::ESTADO_FINALIZADO);
+            $this->procesarPedidosSia($bot);
+        }
+    }
+
+    private function procesarPedidosSia(BotService $bot): void
+    {
+        $pedidos = Pedidosia::whereIn('estado', self::ESTADOS_SIA)->with('cliente')->get();
+
+        foreach ($pedidos as $pedido) {
+            $yaNotificado = PedidoNotificacion::where('nro', $pedido->nro)
+                ->where('pv', 'sia')
+                ->where('estado_notificado', $pedido->estado)
+                ->exists();
+
+            if ($yaNotificado) {
+                continue;
+            }
+
+            $cliente = $pedido->cliente;
+
+            if (!$cliente || !$cliente->phone) {
+                Log::warning("NotificarPedidos SIA: sin cliente/phone para nro={$pedido->nro}");
+                continue;
+            }
+
+            if (!$pedido->esEstadoNotificable()) {
+                continue;
+            }
+
+            $mensaje = $pedido->mensajeParaEstado($pedido->estado);
+
+            if (!$mensaje) {
+                continue;
+            }
+
+            try {
+                $bot->enviarNotifEstadoPedido($cliente->phone, $cliente->name ?? $pedido->nomcli, $mensaje);
+
+                PedidoNotificacion::create([
+                    'nro'               => $pedido->nro,
+                    'pv'                => 'sia',
+                    'estado_notificado' => $pedido->estado,
+                    'phone'             => $cliente->phone,
+                    'enviado_at'        => now(),
+                ]);
+
+                $this->line("✓ Notificado SIA: pedido #{$pedido->nro} estado={$pedido->estado} → {$cliente->phone}");
+            } catch (\Throwable $e) {
+                Log::error("NotificarPedidos SIA error nro={$pedido->nro}: {$e->getMessage()}");
+            }
         }
     }
 

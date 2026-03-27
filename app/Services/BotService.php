@@ -2463,6 +2463,18 @@ Herramientas disponibles:
         }
     }
 
+    public function enviarNotifEstadoPedido(string $phone, string $nombre, string $mensaje): void
+    {
+        $config   = IaEmpresa::first();
+        $template = trim($config?->notif_estado_template ?? '');
+
+        if ($template) {
+            $this->sendRecordatorioTemplate($phone, $template, $nombre, $mensaje);
+        } else {
+            $this->sendWhatsapp($phone, $mensaje);
+        }
+    }
+
     public function sendInteractiveButtons(string $phone, string $body, string $footer, array $buttons): void
     {
         $btnPayload = array_map(fn($b) => [
