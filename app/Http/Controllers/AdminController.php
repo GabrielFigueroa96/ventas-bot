@@ -490,6 +490,7 @@ class AdminController extends Controller
                 ? $request->boolean('notif_negocio_enabled')
                 : ($config->notif_negocio_enabled ?? true),
             'notif_template_nombre'  => $request->input('notif_template_nombre'),
+            'notif_estado_template'  => $request->input('notif_estado_template'),
             'bot_info'           => $request->input('bot_info'),
             'bot_instrucciones'  => $request->input('bot_instrucciones'),
             'bot_permite_retiro'     => $request->boolean('bot_permite_retiro'),

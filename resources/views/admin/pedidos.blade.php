@@ -330,11 +330,19 @@ document.getElementById('modal-estado-destino')?.addEventListener('click', funct
 
 // ── Selector de vmayo ─────────────────────────────────────────────────────────
 async function pedirVmayo(id) {
-    const res      = await fetch(`/admin/pedidos/ia/${id}/vmayo-opciones`);
-    const data     = await res.json();
-    const opciones = data.opciones ?? [];
+    const res  = await fetch(`/admin/pedidos/ia/${id}/vmayo-opciones`);
+    const data = await res.json();
 
-    if (opciones.length === 0) return null;
+    if (!res.ok) {
+        showToast(data.error ?? 'Error al cargar registros de vmayo', 'error');
+        return false;
+    }
+
+    const opciones = data.opciones ?? [];
+    if (opciones.length === 0) {
+        showToast('No hay registros de vmayo disponibles para este cliente', 'error');
+        return false;
+    }
 
     return new Promise(resolve => {
         const lista = document.getElementById('vmayo-lista');

@@ -385,6 +385,31 @@
                 @endif
             </div>
 
+            {{-- Notificaciones de estado de pedidos --}}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+                <h2 class="text-sm font-semibold text-gray-700">Notificaciones de estado de pedidos</h2>
+                <p class="text-xs text-gray-400">Se envía al cliente cuando su pedido cambia a un estado relevante (Confirmado, En camino, Entregado, Cancelado).</p>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Nombre del template de WhatsApp <span class="text-gray-400 font-normal">(opcional)</span></label>
+                    <input type="text" name="notif_estado_template" value="{{ old('notif_estado_template', $config->notif_estado_template) }}"
+                        placeholder="Ej: estado_pedido  o  estado_pedido|es_AR"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                    <p class="text-xs text-gray-400 mt-1">Podés agregar el código de idioma separado por <code>|</code>. Por defecto usa <code>es_AR</code>.</p>
+                    <div class="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
+                        <p class="font-semibold">Cómo crear el template en Meta Business Manager:</p>
+                        <ol class="list-decimal list-inside space-y-0.5 ml-1">
+                            <li>Categoría <strong>Utilidad</strong>, idioma <strong>Español (ARG)</strong></li>
+                            <li>Cuerpo con dos parámetros:<br>
+                                <code class="block mt-1 bg-white border border-amber-200 rounded px-2 py-1 font-mono text-xs">Hola &#123;&#123;1&#125;&#125;, &#123;&#123;2&#125;&#125;</code>
+                            </li>
+                            <li><code>&#123;&#123;1&#125;&#125;</code> = nombre del cliente, <code>&#123;&#123;2&#125;&#125;</code> = mensaje del estado</li>
+                            <li>Una vez aprobada, ingresá el nombre arriba</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+
             {{-- Seguimientos automáticos --}}
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-5">
                 <div>
