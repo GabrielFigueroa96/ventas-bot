@@ -1330,7 +1330,7 @@ Herramientas disponibles:
             if (abs($precioNuevo - (float) $item['precio']) > 0.01) {
                 $alertas[] = "⚠️ {$item['des']}: precio actualizado a $" . $this->fmt($precioNuevo);
             }
-            $base = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
+            $base = ($item['tipo'] ?? '') !== 'Unidad' ? ($item['kilos'] ?? 0) : ($item['cant'] ?? 0);
             $itemsActualizados[$key]['precio'] = $precioNuevo;
             $itemsActualizados[$key]['neto']   = round($precioNuevo * $base, 2);
         }
