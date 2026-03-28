@@ -37,7 +37,9 @@ class AdminChatController extends Controller
             ->orderByDesc('last_message_at')
             ->get();
 
-        return view('admin.conversaciones', compact('clientes'));
+        $localidades = $clientes->pluck('localidad')->filter()->unique()->sort()->values();
+
+        return view('admin.conversaciones', compact('clientes', 'localidades'));
     }
 
     public function conversacionPanel(int $id)

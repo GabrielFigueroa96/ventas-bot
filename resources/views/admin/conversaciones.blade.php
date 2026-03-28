@@ -11,6 +11,23 @@
         overflow: hidden !important;
     }
     #conv-wrapper { flex: 1; min-height: 0; }
+    .scrollbar-none { scrollbar-width: none; }
+    .scrollbar-none::-webkit-scrollbar { display: none; }
+
+    /* Desktop: fijar cadena de altura para scroll independiente por panel */
+    @media (min-width: 1024px) {
+        html, body {
+            height: 100vh;
+            overflow: hidden;
+        }
+        body {
+            min-height: 0 !important;
+        }
+        body > .flex-1 {
+            min-height: 0;
+            overflow: hidden;
+        }
+    }
 
     /* Mobile: fijar la cadena de altura para que el chat ocupe la pantalla completa */
     @media (max-width: 1023px) {
@@ -44,6 +61,22 @@
             <h2 class="text-sm font-semibold text-gray-700">Conversaciones</h2>
             <input type="text" id="buscar-cliente" placeholder="Buscar..." autocomplete="off"
                 class="mt-2 w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+            @if($localidades->isNotEmpty())
+            <div class="flex gap-1.5 mt-2 overflow-x-auto pb-0.5 scrollbar-none">
+                <button type="button" onclick="filtrarLocalidad(null, this)"
+                    class="localidad-chip shrink-0 text-xs px-3 py-1 rounded-full border transition whitespace-nowrap
+                           bg-red-600 text-white border-red-600">
+                    Todos
+                </button>
+                @foreach($localidades as $loc)
+                <button type="button" onclick="filtrarLocalidad('{{ $loc }}', this)"
+                    class="localidad-chip shrink-0 text-xs px-3 py-1 rounded-full border transition whitespace-nowrap
+                           bg-white text-gray-600 border-gray-200 hover:border-red-400 hover:text-red-600">
+                    {{ $loc }}
+                </button>
+                @endforeach
+            </div>
+            @endif
         </div>
 
         {{-- Lista --}}
@@ -51,6 +84,7 @@
             @foreach($clientes as $cli)
             <button type="button"
                 data-id="{{ $cli->id }}"
+                data-localidad="{{ $cli->localidad }}"
                 onclick="seleccionarCliente({{ $cli->id }}, this)"
                 class="conv-item w-full text-left px-4 py-3 hover:bg-red-50 transition flex items-center gap-3">
                 <div class="w-9 h-9 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-sm font-bold shrink-0">
@@ -116,14 +150,32 @@ let liberarUrl   = null;
 let pollUrl      = null;
 let pollingMsg   = false;
 
-// ── Buscar en lista ───────────────────────────────────────────────────────────
-document.getElementById('buscar-cliente').addEventListener('input', function () {
-    const q = this.value.toLowerCase();
+// ── Buscar y filtrar lista ────────────────────────────────────────────────────
+let filtroLocalidad = null;
+
+function aplicarFiltros() {
+    const q = document.getElementById('buscar-cliente').value.toLowerCase();
     document.querySelectorAll('.conv-item').forEach(btn => {
         const texto = btn.textContent.toLowerCase();
-        btn.style.display = texto.includes(q) ? '' : 'none';
+        const loc   = (btn.dataset.localidad ?? '').toLowerCase();
+        const pasaBusqueda  = !q || texto.includes(q);
+        const pasaLocalidad = !filtroLocalidad || loc === filtroLocalidad.toLowerCase();
+        btn.style.display = pasaBusqueda && pasaLocalidad ? '' : 'none';
     });
-});
+}
+
+function filtrarLocalidad(localidad, chip) {
+    filtroLocalidad = localidad;
+    document.querySelectorAll('.localidad-chip').forEach(c => {
+        c.classList.remove('bg-red-600', 'text-white', 'border-red-600');
+        c.classList.add('bg-white', 'text-gray-600', 'border-gray-200');
+    });
+    chip.classList.remove('bg-white', 'text-gray-600', 'border-gray-200');
+    chip.classList.add('bg-red-600', 'text-white', 'border-red-600');
+    aplicarFiltros();
+}
+
+document.getElementById('buscar-cliente').addEventListener('input', aplicarFiltros);
 
 // ── Responsive: volver a la lista en mobile ───────────────────────────────────
 function volverALista() {
