@@ -36,4 +36,9 @@ class IaProducto extends Model
     {
         return $this->belongsTo(Producto::class, 'cod', 'cod');
     }
+
+    public function localidades()
+    {
+        return $this->hasMany(ProductoLocalidad::class, 'cod', 'cod');
+    }
 }

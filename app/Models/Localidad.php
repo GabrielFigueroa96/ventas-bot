@@ -23,7 +23,18 @@ class Localidad extends Model
     public function diasTexto(): string
     {
         if (empty($this->dias_reparto)) return 'Usa días globales';
-        $labels = Empresa::DIAS_LABEL;
-        return implode(', ', array_map(fn($d) => $labels[$d] ?? $d, $this->dias_reparto));
+        $labels = \App\Models\IaEmpresa::DIAS_LABEL;
+        return implode(', ', collect($this->dias_reparto)->map(function ($d) use ($labels) {
+            $dia = is_array($d) ? $d['dia'] : (int) $d;
+            return $labels[$dia] ?? $dia;
+        })->toArray());
+    }
+
+    /** Devuelve el config normalizado: siempre array de arrays con clave 'dia'. */
+    public function diasConfig(): array
+    {
+        return collect($this->dias_reparto ?? [])->map(function ($d) {
+            return is_array($d) ? $d : ['dia' => (int) $d];
+        })->toArray();
     }
 }

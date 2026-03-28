@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\IaProducto;
+use App\Models\Localidad;
 use App\Models\Producto;
+use App\Models\ProductoLocalidad;
 use App\Services\TenantManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -18,7 +20,7 @@ class ProductoController extends Controller
         $filtroCat  = $request->input('catalogo');   // 'si' | 'no' | null
         $filtroDisp = $request->input('disponible'); // 'si' | 'no' | null
 
-        $productos = Producto::with('iaProducto')
+        $productos = Producto::with(['iaProducto', 'iaProducto.localidades.localidad'])
             ->when($search, fn($q) => $q->where('des', 'like', "%{$search}%"))
             ->when($filtroCat === 'si',  fn($q) => $q->whereHas('iaProducto'))
             ->when($filtroCat === 'no',  fn($q) => $q->whereDoesntHave('iaProducto'))
@@ -27,7 +29,9 @@ class ProductoController extends Controller
             ->orderBy('des')
             ->get();
 
-        return view('admin.productos', compact('productos'));
+        $localidades = Localidad::where('activo', true)->orderBy('nombre')->get();
+
+        return view('admin.productos', compact('productos', 'localidades'));
     }
 
     /** Agrega el producto al catálogo del bot (crea ia_productos si no existe). */
@@ -173,6 +177,48 @@ class ProductoController extends Controller
         // productos_bot_precios ya cubierto por limpiarCacheProductos
 
         return back()->with('success', "Imagen eliminada.");
+    }
+
+    public function storeLocalidad(Request $request, $cod)
+    {
+        $data = $request->validate([
+            'localidad_id' => 'required|integer',
+            'precio'       => 'nullable|numeric|min:0',
+            'dias_reparto' => 'nullable|array',
+        ]);
+
+        ProductoLocalidad::updateOrCreate(
+            ['cod' => $cod, 'localidad_id' => $data['localidad_id']],
+            [
+                'precio'       => isset($data['precio']) && $data['precio'] !== '' ? $data['precio'] : null,
+                'dias_reparto' => !empty($data['dias_reparto']) ? $data['dias_reparto'] : null,
+            ]
+        );
+
+        $this->limpiarCacheProductos();
+        return response()->json(['ok' => true]);
+    }
+
+    public function patchLocalidad(Request $request, $cod, $localidad_id)
+    {
+        $pl = ProductoLocalidad::where('cod', $cod)->where('localidad_id', $localidad_id)->firstOrFail();
+        $data = $request->validate([
+            'precio'       => 'nullable|numeric|min:0',
+            'dias_reparto' => 'nullable|array',
+        ]);
+        $pl->update([
+            'precio'       => isset($data['precio']) && $data['precio'] !== '' ? $data['precio'] : null,
+            'dias_reparto' => !empty($data['dias_reparto']) ? $data['dias_reparto'] : null,
+        ]);
+        $this->limpiarCacheProductos();
+        return response()->json(['ok' => true]);
+    }
+
+    public function destroyLocalidad($cod, $localidad_id)
+    {
+        ProductoLocalidad::where('cod', $cod)->where('localidad_id', $localidad_id)->delete();
+        $this->limpiarCacheProductos();
+        return response()->json(['ok' => true]);
     }
 
     // -------------------------------------------------------------------

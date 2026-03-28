@@ -434,7 +434,8 @@ class BotService
         if ($localidadObj && !$cliente->localidad_id) {
             $cliente->update(['localidad_id' => $localidadObj->id]);
         }
-        $diasReparto   = array_map('intval', $localidadObj?->dias_reparto ?? []);
+        $diasConfig  = $localidadObj ? $localidadObj->diasConfig() : [];
+        $diasReparto = array_map(fn($d) => (int) $d['dia'], $diasConfig);
         if (!empty($diasReparto)) {
             $diasNombres = implode(', ', array_map(fn($d) => $diasLabel[$d] ?? $d, $diasReparto));
             $diasTexto   = $localidad
@@ -492,43 +493,97 @@ class BotService
         $fechasCerradas = $empresa?->bot_fechas_cerrado ?? [];
         $botHorarios    = $empresa?->bot_horarios ?? [];  // {"1":[{"de":"08:00","a":"12:00"}], ...}
 
-        // Próximo día de reparto para este cliente (respeta hora de corte y fechas cerradas)
-        $horaCorte           = $empresa?->bot_hora_corte ?? null;
-        $startDaysPrompt     = 1;
-        if ($horaCorte) {
-            $corteHoy = \Carbon\Carbon::today()->setTimeFromTimeString($horaCorte);
-            if (now()->lt($corteHoy)) {
-                $startDaysPrompt = 0;
-            }
-        }
+        // Próximo reparto: busca el candidato más próximo respetando la ventana por día
+        // diasConfig = [{dia:3, desde_dia:1, desde_hora:"08:00", hasta_dia:2, hasta_hora:"20:00"}, ...]
+        $diasConfigMap = collect($diasConfig)->keyBy('dia'); // indexado por número de día (0=dom)
+        $globalHoraCorte = $empresa?->bot_hora_corte ?? null;
+
         $proximoRepartoTexto = '';
         $proximoRepartoFecha = '';
+        $corteAviso          = '';
+
         if (!empty($diasReparto)) {
-            for ($i = $startDaysPrompt; $i <= 14; $i++) {
-                $candidato = now()->addDays($i);
-                $diaSemana = (int) $candidato->format('w');
-                $fechaStr  = $candidato->format('Y-m-d');
-                if (\in_array($diaSemana, $diasReparto, true) && !\in_array($fechaStr, $fechasCerradas, true)) {
+            for ($i = 0; $i <= 21; $i++) {
+                $candidato  = now()->addDays($i);
+                $diaSemana  = (int) $candidato->format('w');
+                $fechaStr   = $candidato->format('Y-m-d');
+
+                if (!\in_array($diaSemana, $diasReparto, true)) continue;
+                if (\in_array($fechaStr, $fechasCerradas, true)) continue;
+
+                $cfg = $diasConfigMap->get($diaSemana);
+
+                // Verificar si estamos dentro de la ventana de pedido para este día de reparto
+                $dentroDeVentana = true;
+                $avisoCorte      = '';
+
+                if (!empty($cfg['hasta_dia']) || !empty($cfg['hasta_hora'])) {
+                    // Tiene cierre configurado: calcular cuándo cierra para este reparto
+                    // El "hasta_dia" es relativo a la semana del reparto (antes del día de reparto)
+                    $hastaNum  = isset($cfg['hasta_dia']) && $cfg['hasta_dia'] !== '' ? (int) $cfg['hasta_dia'] : null;
+                    $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
+
+                    if ($hastaNum !== null) {
+                        // Calcular la fecha de cierre: es el $hastaNum más reciente ANTES del candidato
+                        $diff = ($diaSemana - $hastaNum + 7) % 7;
+                        $diff = $diff === 0 ? 7 : $diff; // si es el mismo día, es la semana anterior
+                        $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
+
+                        if (now()->gt($fechaCierre)) {
+                            $dentroDeVentana = false;
+                            $avisoCorte = "⚠️ CIERRE DE PEDIDOS: Los pedidos para el reparto del "
+                                . $candidato->locale('es')->isoFormat('dddd D [de] MMMM')
+                                . " cerraron el {$diasLabel[$hastaNum]} a las " . \Carbon\Carbon::today()->setTimeFromTimeString($hastaHora)->format('H:i') . "hs.";
+                        }
+                    }
+                } elseif ($globalHoraCorte && $i === 0) {
+                    // Sin config específica: usa hora de corte global solo para hoy
+                    $corteHoy = \Carbon\Carbon::today()->setTimeFromTimeString($globalHoraCorte);
+                    if (now()->gt($corteHoy)) {
+                        $dentroDeVentana = false;
+                        $avisoCorte = "⚠️ HORARIO DE CORTE: Los pedidos para hoy cerraron a las "
+                            . $corteHoy->format('H:i') . "hs.";
+                    }
+                }
+
+                // Verificar apertura
+                if ($dentroDeVentana && !empty($cfg['desde_dia']) || (!empty($cfg['desde_hora']) && $dentroDeVentana)) {
+                    $desdeNum  = isset($cfg['desde_dia']) && $cfg['desde_dia'] !== '' ? (int) $cfg['desde_dia'] : null;
+                    $desdeHora = !empty($cfg['desde_hora']) ? $cfg['desde_hora'] : '00:00';
+
+                    if ($desdeNum !== null) {
+                        $diff = ($diaSemana - $desdeNum + 7) % 7;
+                        $diff = $diff === 0 ? 7 : $diff;
+                        $fechaApertura = $candidato->copy()->subDays($diff)->setTimeFromTimeString($desdeHora);
+                        if (now()->lt($fechaApertura)) {
+                            $dentroDeVentana = false; // Todavía no abrió
+                        }
+                    }
+                }
+
+                if ($dentroDeVentana) {
                     $proximoRepartoTexto = $candidato->locale('es')->isoFormat('dddd D [de] MMMM');
                     $proximoRepartoFecha = $fechaStr;
                     break;
+                } elseif (!$proximoRepartoTexto) {
+                    // Guardamos el aviso del primer día que encontramos pero ya cerró
+                    $corteAviso = $avisoCorte . ($proximoRepartoTexto
+                        ? " El próximo reparto disponible es el {$proximoRepartoTexto}."
+                        : '');
                 }
             }
+            // Si encontramos fecha pero no seteamos corteAviso, lo completamos ahora
+            if ($proximoRepartoTexto && $corteAviso) {
+                $corteAviso .= " El próximo reparto disponible es el {$proximoRepartoTexto}.";
+            }
         }
+
+        // Fallback: hora de corte global si no hay config por día
+        $horaCorte = $globalHoraCorte;
 
         // Guardar la fecha calculada en cache para que iniciarConfirmacionPedido use la misma
         if ($proximoRepartoFecha) {
             Cache::put('proxima_fecha_entrega_' . $cliente->id, $proximoRepartoFecha, now()->addMinutes(30));
-        }
-
-        // Aviso de horario de corte superado
-        $corteAviso = '';
-        if ($horaCorte && $startDaysPrompt === 1) {
-            $corteHoraFmt = \Carbon\Carbon::today()->setTimeFromTimeString($horaCorte)->format('H:i');
-            $corteAviso   = "⚠️ HORARIO DE CORTE: Los pedidos para el día de hoy se reciben hasta las {$corteHoraFmt}hs. Ya pasó ese horario, por lo que NO se puede pedir para hoy. "
-                          . ($proximoRepartoTexto
-                              ? "Si el cliente quiere pedir para hoy, informale amablemente que no va a llegar y que el próximo reparto disponible es el {$proximoRepartoTexto}."
-                              : "Si el cliente quiere pedir para hoy, informale amablemente que no va a llegar y que debe esperar al próximo día de reparto.");
         }
 
         // Texto dinámico para el paso 3 del flujo de pedido

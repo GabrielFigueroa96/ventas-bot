@@ -88,6 +88,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::delete('/productos/{cod}/catalogo',        [ProductoController::class, 'quitarCatalogo'])->name('productos.catalogo.quitar');
     Route::patch ('/productos/{cod}/disponible',      [ProductoController::class, 'toggleDisponible'])->name('productos.disponible');
     Route::post  ('/productos/{cod}/sugerir-descripcion', [ProductoController::class, 'sugerirDescripcion'])->name('productos.sugerir_descripcion');
+    Route::post  ('/productos/{cod}/localidades',                [ProductoController::class, 'storeLocalidad'])->name('productos.localidades.store');
+    Route::patch ('/productos/{cod}/localidades/{localidad_id}', [ProductoController::class, 'patchLocalidad'])->name('productos.localidades.patch');
+    Route::delete('/productos/{cod}/localidades/{localidad_id}', [ProductoController::class, 'destroyLocalidad'])->name('productos.localidades.destroy');
 });
 
 // Tienda online pública (multi-tenant por slug)
