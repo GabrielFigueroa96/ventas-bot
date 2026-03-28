@@ -166,10 +166,10 @@
     </div>
 </div>
 
-<div class="grid md:grid-cols-2 gap-6 items-start">
+<div class="grid md:grid-cols-2 gap-6 items-start overflow-x-hidden">
 
     {{-- Conversación + envío --}}
-    <div class="bg-white rounded-xl shadow flex flex-col" style="height: calc(100vh - 220px);">
+    <div class="bg-white rounded-xl shadow flex flex-col min-w-0" style="height: calc(100vh - 220px);">
         <div class="px-5 py-4 border-b font-semibold text-gray-700 flex items-center justify-between shrink-0">
             <span>Conversación</span>
             <div class="flex items-center gap-3">
@@ -306,7 +306,7 @@
     </div>
 
     {{-- Info del cliente + Pedidos --}}
-    <div class="space-y-4">
+    <div class="space-y-4 min-w-0">
 
         {{-- Tarjeta info --}}
         <div class="bg-white rounded-xl shadow p-4 grid grid-cols-2 gap-3 text-sm">

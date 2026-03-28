@@ -84,13 +84,14 @@ class AdminChatController extends Controller
         $mensajes = Message::where('cliente_id', $cliente->id)
             ->where('id', '>', $desdeId)
             ->oldest('id')
-            ->get(['id', 'message', 'direction', 'type', 'media_path', 'created_at'])
+            ->get(['id', 'message', 'direction', 'type', 'media_path', 'status', 'created_at'])
             ->map(fn($m) => [
                 'id'         => $m->id,
                 'message'    => $m->message,
                 'direction'  => $m->direction,
                 'type'       => $m->type,
                 'media_path' => $m->media_path ? asset($m->media_path) : null,
+                'status'     => $m->status,
                 'created_at' => $m->fecha,
             ]);
 
@@ -177,6 +178,7 @@ class AdminChatController extends Controller
                 'direction'  => $msg->direction,
                 'type'       => $msg->type,
                 'media_path' => $msg->media_path ? asset($msg->media_path) : null,
+                'status'     => $msg->status,
                 'created_at' => $msg->fecha,
             ]);
         }

@@ -14,10 +14,14 @@
 
     /* Mobile: fijar la cadena de altura para que el chat ocupe la pantalla completa */
     @media (max-width: 1023px) {
-        html { height: 100%; }
-        body {
+        html {
             height: 100vh;
             height: 100dvh;
+            overflow: hidden;
+        }
+        body {
+            height: 100%;
+            min-height: 0 !important;
             display: flex !important;
             flex-direction: column !important;
             overflow: hidden !important;
@@ -174,7 +178,7 @@ async function seleccionarCliente(id, btn) {
         liberarUrl = data.liberarUrl;
         atBottom   = true;
 
-        scrollBottom();
+        requestAnimationFrame(() => requestAnimationFrame(() => scrollBottom()));
         iniciarPolling();
         bindFormEnvio();
 
@@ -242,10 +246,16 @@ function bubbleHtml(msg) {
     let content  = '';
     if (msg.media_path) content += `<img src="${msg.media_path}" class="rounded-lg max-w-full mb-1 cursor-pointer" onclick="window.open(this.src)" alt="Imagen">`;
     if (msg.message)    content += `<p class="leading-snug">${formatWpp(msg.message)}</p>`;
+    let tick = '';
+    if (isOut) {
+        if      (msg.status === 'read')      tick = '<span class="text-blue-300">✓✓</span>';
+        else if (msg.status === 'delivered') tick = '<span class="opacity-80">✓✓</span>';
+        else if (msg.status === 'sent')      tick = '<span class="opacity-80">✓</span>';
+    }
     return `<div class="flex ${align}" data-id="${msg.id}">
         <div class="max-w-sm px-4 py-2 rounded-2xl text-sm ${bubble}">
             ${content}
-            <p class="text-xs mt-1 opacity-60">${msg.created_at}</p>
+            <p class="text-xs mt-1 opacity-60 flex items-center gap-1">${msg.created_at} ${tick}</p>
         </div>
     </div>`;
 }
@@ -344,7 +354,7 @@ async function recargarPanel() {
         tomarUrl   = data.tomarUrl;
         liberarUrl = data.liberarUrl;
         atBottom   = true;
-        scrollBottom();
+        requestAnimationFrame(() => requestAnimationFrame(() => scrollBottom()));
         iniciarPolling();
         bindFormEnvio();
         const box = document.getElementById('chat-box');

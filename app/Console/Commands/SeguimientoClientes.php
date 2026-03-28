@@ -9,7 +9,9 @@ use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Seguimiento;
 use App\Services\BotService;
+use App\Services\TenantManager;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class SeguimientoClientes extends Command
@@ -17,26 +19,32 @@ class SeguimientoClientes extends Command
     protected $signature   = 'clientes:seguimiento';
     protected $description = 'Envía WhatsApp a clientes según su actividad (carrito abandonado, sin pedido, inactivos)';
 
-    public function handle(BotService $bot): void
+    public function handle(): void
     {
-        $config = IaEmpresa::first();
+        $tenants = DB::connection('mysql')->table('ia_tenants')->where('activo', true)->get();
 
-        if ($config->seguimiento_carrito_activo ?? true) {
-            $this->procesarCarritoAbandonado($bot, (int) ($config->seguimiento_carrito_horas ?? 2));
-        }
-        if ($config->seguimiento_sin_pedido_activo ?? true) {
-            $this->procesarSinPedido($bot, (int) ($config->seguimiento_sin_pedido_dias ?? 3));
-        }
-        if ($config->seguimiento_inactivo_activo ?? true) {
-            $this->procesarInactivos($bot, (int) ($config->seguimiento_inactivo_dias ?? 7));
+        foreach ($tenants as $tenant) {
+            app(TenantManager::class)->loadById($tenant->id);
+            $bot    = app(BotService::class);
+            $config = IaEmpresa::first();
+
+            if ($config->seguimiento_carrito_activo ?? true) {
+                $this->procesarCarritoAbandonado($bot, (int) ($config->seguimiento_carrito_horas ?? 2));
+            }
+            if ($config->seguimiento_sin_pedido_activo ?? true) {
+                $this->procesarSinPedido($bot, (int) ($config->seguimiento_sin_pedido_dias ?? 3));
+            }
+            if ($config->seguimiento_inactivo_activo ?? true) {
+                $this->procesarInactivos($bot, (int) ($config->seguimiento_inactivo_dias ?? 7));
+            }
         }
     }
 
     // Clientes con carrito activo que no confirmaron en X horas
     private function procesarCarritoAbandonado(BotService $bot, int $horas): void
     {
-        $carritos = Carrito::where('expires_at', '>', now())
-            ->where('updated_at', '<=', now()->subHours($horas))
+        $carritos = Carrito::where('expires_at', '<=', now())
+            ->where('expires_at', '>', now()->subDay())
             ->whereRaw("JSON_LENGTH(items) > 0")
             ->with('cliente')
             ->get();

@@ -246,6 +246,8 @@ function toggleSidebar() {
     if (window.innerWidth >= 1024 && localStorage.getItem('sb_collapsed') === '1') {
         document.getElementById('sidebar').classList.add('collapsed');
     }
+    const nav = document.querySelector('#sidebar nav');
+    if (nav) nav.scrollTop = nav.scrollHeight;
 })();
 
 // ── Toast system ──────────────────────────────────────────────────────────────

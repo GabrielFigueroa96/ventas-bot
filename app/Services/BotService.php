@@ -1164,14 +1164,14 @@ Herramientas disponibles:
                     Carrito::whereIn('id', $activos->slice(1)->pluck('id'))->delete();
                     $activos->first()->update([
                         'items'      => $carrito,
-                        'expires_at' => now()->addYear(),
+                        'expires_at' => now()->addMinutes(60),
                     ]);
                     $registro = $activos->first();
                 } else {
                     $registro = Carrito::create([
                         'cliente_id' => $client->id,
                         'items'      => $carrito,
-                        'expires_at' => now()->addYear(),
+                        'expires_at' => now()->addMinutes(60),
                     ]);
                 }
             });
@@ -1247,7 +1247,7 @@ Herramientas disponibles:
             $carrito[$key]['neto']   = round($precioNuevo * $base, 2);
         }
 
-        $registro->update(['items' => $carrito, 'expires_at' => now()->addMinutes(60)]);
+        $registro->update(['items' => $carrito, 'expires_at' => now()->addYear()]);
 
         $resultado = $this->formatCarrito($carrito);
         $prefijo   = !empty($actualizados)
@@ -2071,7 +2071,7 @@ Herramientas disponibles:
             'cliente_id' => $client->id,
             'items'      => $carritoItems,
             'pedido_nro' => $nro,
-            'expires_at' => now()->addYear(),
+            'expires_at' => now()->addMinutes(60),
         ]);
 
         $count = count($carritoItems);
