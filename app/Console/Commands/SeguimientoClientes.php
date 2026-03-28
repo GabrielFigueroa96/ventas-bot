@@ -188,14 +188,23 @@ class SeguimientoClientes extends Command
     {
         try {
             $bot->sendWhatsapp($cliente->phone, $mensaje);
+        } catch (\Throwable $e) {
+            Log::error("SeguimientoClientes envío WA cliente {$cliente->id}: {$e->getMessage()}");
+            return;
+        }
 
+        try {
             Message::create([
                 'cliente_id' => $cliente->id,
                 'message'    => $mensaje,
                 'direction'  => 'outgoing',
                 'type'       => 'text',
             ]);
+        } catch (\Throwable $e) {
+            Log::error("SeguimientoClientes Message::create cliente {$cliente->id}: {$e->getMessage()}");
+        }
 
+        try {
             Seguimiento::create([
                 'cliente_id'      => $cliente->id,
                 'tipo'            => $tipo,
@@ -203,10 +212,10 @@ class SeguimientoClientes extends Command
                 'respondio'       => false,
                 'enviado_at'      => now(),
             ]);
-
-            $this->line("✓ [{$tipo}] {$cliente->name} ({$cliente->phone})");
         } catch (\Throwable $e) {
-            Log::error("SeguimientoClientes error cliente {$cliente->id}: {$e->getMessage()}");
+            Log::error("SeguimientoClientes Seguimiento::create cliente {$cliente->id}: {$e->getMessage()}");
         }
+
+        $this->line("✓ [{$tipo}] {$cliente->name} ({$cliente->phone})");
     }
 }
