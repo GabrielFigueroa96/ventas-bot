@@ -10,7 +10,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     @stack('styles')
+    <script>
+        if (window.innerWidth >= 1024 && localStorage.getItem('sb_collapsed') === '1') {
+            document.documentElement.classList.add('sb-pre-collapsed');
+        }
+    </script>
     <style>
+        html.sb-pre-collapsed #sidebar { width: 4rem; }
+        html.sb-pre-collapsed #sidebar .sb-text,
+        html.sb-pre-collapsed #sidebar .sb-section { display: none; }</style>
         body { font-family: 'Inter', sans-serif; }
 
         .nav-link {
@@ -60,6 +68,7 @@
         .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-1px); }
 
         #sidebar { transition: width 0.22s ease, transform 0.25s ease; }
+        html.sb-pre-collapsed #sidebar { transition: none; }
         @media (max-width: 1023px) {
             #sidebar { transform: translateX(-100%); position: fixed; z-index: 50; height: 100vh; }
             #sidebar.open { transform: translateX(0); }
@@ -246,6 +255,7 @@ function toggleSidebar() {
     if (window.innerWidth >= 1024 && localStorage.getItem('sb_collapsed') === '1') {
         document.getElementById('sidebar').classList.add('collapsed');
     }
+    document.documentElement.classList.remove('sb-pre-collapsed');
     const nav = document.querySelector('#sidebar nav');
     if (nav) nav.scrollTop = nav.scrollHeight;
 })();

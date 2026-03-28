@@ -73,6 +73,12 @@ class NotificarPedidos extends Command
 
             try {
                 $bot->enviarNotifEstadoPedido($cliente->phone, $cliente->name ?? $pedido->nomcli, $mensaje);
+                \App\Models\Message::create([
+                    'cliente_id' => $cliente->id,
+                    'message'    => $mensaje,
+                    'direction'  => 'outgoing',
+                    'type'       => 'text',
+                ]);
 
                 PedidoNotificacion::create([
                     'nro'               => $pedido->nro,
@@ -128,6 +134,12 @@ class NotificarPedidos extends Command
 
             try {
                 $bot->sendWhatsapp($cliente->phone, $mensaje);
+                \App\Models\Message::create([
+                    'cliente_id' => $cliente->id,
+                    'message'    => $mensaje,
+                    'direction'  => 'outgoing',
+                    'type'       => 'text',
+                ]);
 
                 PedidoNotificacion::create([
                     'nro'              => $pedido->nro,
