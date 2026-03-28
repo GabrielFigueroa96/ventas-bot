@@ -18,7 +18,7 @@
     <style>
         html.sb-pre-collapsed #sidebar { width: 4rem; }
         html.sb-pre-collapsed #sidebar .sb-text,
-        html.sb-pre-collapsed #sidebar .sb-section { display: none; }</style>
+        html.sb-pre-collapsed #sidebar .sb-section { display: none; }
         body { font-family: 'Inter', sans-serif; }
 
         .nav-link {
