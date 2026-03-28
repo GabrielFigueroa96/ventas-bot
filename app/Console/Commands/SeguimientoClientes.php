@@ -43,8 +43,8 @@ class SeguimientoClientes extends Command
     // Clientes con carrito activo que no confirmaron en X horas
     private function procesarCarritoAbandonado(BotService $bot, int $horas): void
     {
-        $carritos = Carrito::where('expires_at', '<=', now())
-            ->where('expires_at', '>', now()->subDay())
+        $carritos = Carrito::where('updated_at', '<=', now()->subHours($horas))
+            ->where('updated_at', '>', now()->subDays(7))
             ->whereRaw("JSON_LENGTH(items) > 0")
             ->with('cliente')
             ->get();
