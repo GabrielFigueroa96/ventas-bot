@@ -1,9 +1,10 @@
 @php
-$configuredLocIds = $ia->localidades->pluck('localidad_id')->toArray();
-$availableLocs    = $localidades->whereNotIn('id', $configuredLocIds);
-$diasLabel        = [0=>'Dom',1=>'Lun',2=>'Mar',3=>'Mié',4=>'Jue',5=>'Vie',6=>'Sáb'];
-$prefix           = $prefix ?? 'd';
-$uid              = $prefix . '_' . $cod;
+    $diasLabel = \App\Models\IaEmpresa::DIAS_LABEL;
+    $diasLabelCorto = [0=>'Dom',1=>'Lun',2=>'Mar',3=>'Mié',4=>'Jue',5=>'Vie',6=>'Sáb'];
+    $configuredLocIds = $ia->localidades->pluck('localidad_id')->toArray();
+    $availableLocs    = $localidades->whereNotIn('id', $configuredLocIds);
+    $prefix           = $prefix ?? 'd';
+    $uid              = $prefix . '_' . $cod;
 @endphp
 
 <div class="mt-3 pt-3 border-t border-gray-100">
@@ -20,28 +21,44 @@ $uid              = $prefix . '_' . $cod;
     {{-- Rows existentes --}}
     <div class="space-y-1">
         @forelse($ia->localidades as $pl)
-        <div class="flex flex-wrap items-center gap-1.5 text-xs bg-white border border-gray-100 rounded-lg px-2 py-1.5">
-            <span class="font-medium text-gray-700 min-w-[80px]">{{ $pl->localidad?->nombre ?? '—' }}</span>
-            <div class="flex items-center gap-1">
-                <span class="text-gray-400 text-xs">$</span>
-                <input type="number" step="0.01" min="0"
-                    placeholder="{{ number_format($ia->precio, 2, '.', '') }}"
-                    value="{{ $pl->precio !== null ? number_format($pl->precio, 2, '.', '') : '' }}"
-                    data-cod="{{ $cod }}" data-loc="{{ $pl->localidad_id }}"
-                    class="pl-loc-precio w-20 border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-blue-300">
-                <span class="pl-precio-ok text-green-500 hidden text-xs">✓</span>
+        @php
+            $rowDias = collect($pl->dias_reparto ?? [])->map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d)->toArray();
+            $locDias = collect($pl->localidad?->diasConfig() ?? [])->pluck('dia')->toArray();
+            $diasDisponibles = !empty($locDias) ? $locDias : array_keys($diasLabelCorto);
+        @endphp
+        <div class="text-xs bg-white border border-gray-100 rounded-lg px-2 py-1.5 space-y-1.5">
+            <div class="flex flex-wrap items-center gap-1.5">
+                <span class="font-medium text-gray-700 min-w-[80px]">{{ $pl->localidad?->nombre ?? '—' }}</span>
+                <div class="flex items-center gap-1">
+                    <span class="text-gray-400 text-xs">$</span>
+                    <input type="number" step="0.01" min="0"
+                        placeholder="{{ number_format($ia->precio, 2, '.', '') }}"
+                        value="{{ $pl->precio !== null ? number_format($pl->precio, 2, '.', '') : '' }}"
+                        data-cod="{{ $cod }}" data-loc="{{ $pl->localidad_id }}"
+                        class="pl-loc-precio w-20 border border-gray-200 rounded px-1.5 py-0.5 text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-blue-300">
+                    <span class="pl-precio-ok text-green-500 hidden text-xs">✓</span>
+                </div>
+                <button type="button"
+                    onclick="removeLoc('{{ $cod }}', {{ $pl->localidad_id }}, this)"
+                    class="ml-auto text-red-400 hover:text-red-600 leading-none">✕</button>
             </div>
-            <span class="text-gray-300">|</span>
-            @if($pl->dias_reparto)
-            <span class="text-gray-600">
-                {{ collect($pl->dias_reparto)->map(fn($d) => $diasLabel[is_array($d) ? $d['dia'] : (int)$d] ?? '?')->join(', ') }}
-            </span>
-            @else
-            <span class="text-gray-400 italic">días de localidad</span>
-            @endif
-            <button type="button"
-                onclick="removeLoc('{{ $cod }}', {{ $pl->localidad_id }}, this)"
-                class="ml-auto text-red-400 hover:text-red-600 leading-none">✕</button>
+            {{-- Días editables --}}
+            <div class="flex flex-wrap gap-2 pl-1"
+                 data-cod="{{ $cod }}" data-loc="{{ $pl->localidad_id }}">
+                @foreach($diasDisponibles as $num)
+                <label class="flex items-center gap-0.5 cursor-pointer select-none">
+                    <input type="checkbox" value="{{ $num }}"
+                        {{ in_array($num, $rowDias) ? 'checked' : '' }}
+                        class="pl-loc-dia accent-blue-600"
+                        data-cod="{{ $cod }}" data-loc="{{ $pl->localidad_id }}">
+                    <span class="text-gray-600">{{ $diasLabelCorto[$num] ?? $num }}</span>
+                </label>
+                @endforeach
+                @if(empty($diasDisponibles))
+                <span class="text-gray-400 italic">sin días configurados en localidad</span>
+                @endif
+                <span class="pl-dias-ok text-green-500 hidden ml-1">✓</span>
+            </div>
         </div>
         @empty
         <p class="text-xs text-gray-400 italic">Sin configuración por localidad.</p>

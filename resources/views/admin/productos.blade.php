@@ -531,17 +531,36 @@ async function removeLoc(cod, localidad_id, btn) {
 // Auto-save precio al cambiar en una fila existente
 document.addEventListener('change', async function(e) {
     const input = e.target.closest('.pl-loc-precio');
-    if (!input) return;
-    const { cod, loc } = input.dataset;
-    const status = input.parentElement.querySelector('.pl-precio-ok');
-    try {
-        await fetch(`/admin/productos/${cod}/localidades/${loc}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-            body: JSON.stringify({ precio: input.value || null }),
-        });
-        if (status) { status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 2000); }
-    } catch (_) {}
+    if (input) {
+        const { cod, loc } = input.dataset;
+        const status = input.parentElement.querySelector('.pl-precio-ok');
+        try {
+            await fetch(`/admin/productos/${cod}/localidades/${loc}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                body: JSON.stringify({ precio: input.value || null }),
+            });
+            if (status) { status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 2000); }
+        } catch (_) {}
+        return;
+    }
+
+    // Auto-save días al cambiar checkbox en fila existente
+    const cb = e.target.closest('.pl-loc-dia');
+    if (cb) {
+        const { cod, loc } = cb.dataset;
+        const container = cb.closest('[data-cod][data-loc]');
+        const checked = [...container.querySelectorAll('.pl-loc-dia:checked')].map(c => ({ dia: parseInt(c.value) }));
+        const status = container.querySelector('.pl-dias-ok');
+        try {
+            await fetch(`/admin/productos/${cod}/localidades/${loc}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                body: JSON.stringify({ dias_reparto: checked.length > 0 ? checked : null }),
+            });
+            if (status) { status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 2000); }
+        } catch (_) {}
+    }
 });
 
 document.querySelectorAll('.precio-input').forEach(input => {
