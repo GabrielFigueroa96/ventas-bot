@@ -1317,8 +1317,11 @@ Herramientas disponibles:
             $cfg             = $diasConfigMap->get($diaSemana);
             $dentroDeVentana = true;
 
-            if (!empty($cfg['hasta_dia']) || !empty($cfg['hasta_hora'])) {
-                $hastaNum  = isset($cfg['hasta_dia']) && $cfg['hasta_dia'] !== '' ? (int) $cfg['hasta_dia'] : null;
+            $tieneHasta = isset($cfg['hasta_dia']) && $cfg['hasta_dia'] !== null && $cfg['hasta_dia'] !== '';
+            $tieneDesde = isset($cfg['desde_dia']) && $cfg['desde_dia'] !== null && $cfg['desde_dia'] !== '';
+
+            if ($tieneHasta || !empty($cfg['hasta_hora'])) {
+                $hastaNum  = $tieneHasta ? (int) $cfg['hasta_dia'] : null;
                 $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
                 if ($hastaNum !== null) {
                     $diff        = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
@@ -1330,14 +1333,17 @@ Herramientas disponibles:
                 if (now()->gt($corteHoy)) $dentroDeVentana = false;
             }
 
-            if ($dentroDeVentana && (!empty($cfg['desde_dia']) || !empty($cfg['desde_hora']))) {
-                $desdeNum  = isset($cfg['desde_dia']) && $cfg['desde_dia'] !== '' ? (int) $cfg['desde_dia'] : null;
+            if ($dentroDeVentana && ($tieneDesde || !empty($cfg['desde_hora']))) {
+                $desdeNum  = $tieneDesde ? (int) $cfg['desde_dia'] : null;
                 $desdeHora = !empty($cfg['desde_hora']) ? $cfg['desde_hora'] : '00:00';
                 if ($desdeNum !== null) {
                     $diff          = ($diaSemana - $desdeNum + 7) % 7 ?: 7;
                     $fechaApertura = $candidato->copy()->subDays($diff)->setTimeFromTimeString($desdeHora);
                     if (now()->lt($fechaApertura)) $dentroDeVentana = false;
                 }
+            } elseif ($dentroDeVentana && !$tieneHasta && empty($cfg['hasta_hora']) && !$tieneDesde && empty($cfg['desde_hora'])) {
+                // Sin rango configurado: solo mostrar dentro de los próximos 7 días
+                if ($i > 7) $dentroDeVentana = false;
             }
 
             if ($dentroDeVentana) {
