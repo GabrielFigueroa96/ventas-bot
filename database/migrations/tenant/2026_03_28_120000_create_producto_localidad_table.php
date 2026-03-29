@@ -6,9 +6,11 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    protected $connection = 'tenant';
+
     public function up(): void
     {
-        Schema::create('ia_producto_localidad', function (Blueprint $table) {
+        Schema::connection('tenant')->create('ia_producto_localidad', function (Blueprint $table) {
             $table->id();
             $table->decimal('cod', 10, 2);
             $table->unsignedBigInteger('localidad_id');
@@ -22,6 +24,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('ia_producto_localidad');
+        Schema::connection('tenant')->dropIfExists('ia_producto_localidad');
     }
 };

@@ -17,13 +17,11 @@ class LocalidadController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'nombre'      => 'required|string|max:100|unique:ia_localidades,nombre',
-            'provincia'   => 'nullable|string|max:100',
-            'costo_extra' => 'nullable|numeric|min:0',
-            'activo'      => 'boolean',
+            'nombre'    => 'required|string|max:100|unique:ia_localidades,nombre',
+            'provincia' => 'nullable|string|max:100',
+            'activo'    => 'boolean',
         ]);
         $data['activo']       = $request->boolean('activo', true);
-        $data['costo_extra']  = $data['costo_extra'] ?? 0;
         $data['dias_reparto'] = $this->buildDiasReparto($request);
 
         Localidad::create($data);
@@ -34,13 +32,11 @@ class LocalidadController extends Controller
     {
         $localidad = Localidad::findOrFail($id);
         $data = $request->validate([
-            'nombre'      => 'required|string|max:100|unique:ia_localidades,nombre,' . $localidad->id,
-            'provincia'   => 'nullable|string|max:100',
-            'costo_extra' => 'nullable|numeric|min:0',
-            'activo'      => 'boolean',
+            'nombre'    => 'required|string|max:100|unique:ia_localidades,nombre,' . $localidad->id,
+            'provincia' => 'nullable|string|max:100',
+            'activo'    => 'boolean',
         ]);
         $data['activo']       = $request->boolean('activo', true);
-        $data['costo_extra']  = $data['costo_extra'] ?? 0;
         $data['dias_reparto'] = $this->buildDiasReparto($request);
 
         $localidad->update($data);

@@ -32,9 +32,6 @@
                     <div class="flex items-center gap-2 flex-wrap">
                         <span class="font-semibold text-gray-800">{{ $loc->nombre }}</span>
                         <span class="text-xs text-gray-400">{{ $loc->diasTexto() }}</span>
-                        @if($loc->costo_extra > 0)
-                            <span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">+${{ number_format($loc->costo_extra, 0, ',', '') }}</span>
-                        @endif
                     </div>
                     <p class="text-xs text-gray-400 mt-0.5">{{ $loc->clientes()->count() }} cliente(s) vinculados</p>
                 </div>

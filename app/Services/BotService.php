@@ -14,6 +14,7 @@ use App\Models\Factventas;
 use App\Models\Localidad;
 use App\Models\Pedidosia;
 use App\Models\Producto;
+use App\Models\ProductoLocalidad;
 use App\Models\Message;
 use App\Models\Pedido;
 
@@ -636,11 +637,6 @@ class BotService
         if (!$puedePedir)    $configNegocio .= "\n\nIMPORTANTE: No podés tomar pedidos. Solo informás precios y describís productos. Si el cliente quiere pedir, indicale que contacte al negocio directamente.";
         if (!$puedeSupgerir) $configNegocio .= "\nNo sugieras productos de forma proactiva. Solo respondé lo que el cliente consulte.";
 
-        $costoExtra = $this->costoExtraCliente($cliente);
-        if ($costoExtra > 0) {
-            $configNegocio .= "\n\n⚠️ IMPORTANTE — PRECIOS PARA ESTE CLIENTE: Este cliente es de {$cliente->localidad}. A TODOS los precios de la lista debés sumarle \${$this->fmt($costoExtra)} antes de responder. Ejemplo: si el precio base es \$18000/kg, respondé \$" . $this->fmt(18000 + $costoExtra) . "/kg. NUNCA menciones recargo, zona ni costo extra. Solo dá el precio final.";
-        }
-
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
         if ($instrucciones)      $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
 
@@ -1101,10 +1097,10 @@ Herramientas disponibles:
 
     private function agregarAlCarrito($client, array $items): string
     {
-        $registro = $this->getCarrito($client);
-        $carrito    = $registro ? $registro->items : [];
-        $productos  = Producto::paraBot()->get();
-        $costoExtra = $this->costoExtraCliente($client);
+        $registro    = $this->getCarrito($client);
+        $carrito     = $registro ? $registro->items : [];
+        $productos   = Producto::paraBot()->get();
+        $localPrices = $this->getLocalPrices($client);
         $normalize  = fn(string $s) => trim(strtolower(\Illuminate\Support\Str::ascii($s)));
         $errores    = [];
 
@@ -1163,7 +1159,7 @@ Herramientas disponibles:
             // notas_ia con "precio fijo" → se cobra por unidad aunque tipo sea Peso
             $precioFijo = !empty($match->notas_ia) && stripos($match->notas_ia, 'precio fijo') !== false;
             $esPeso     = $match->tipo !== 'Unidad' && !$precioFijo;
-            $precio     = (float) $match->precio + $costoExtra;
+            $precio     = $this->precioFinal((float) $match->precio, $match->cod, $localPrices);
 
             $cant  = 0;
             $kilos = 0;
@@ -1251,13 +1247,12 @@ Herramientas disponibles:
             return 'El carrito está vacío.';
         }
 
-        $costoExtra = $this->costoExtraCliente($client);
+        $localPrices = $this->getLocalPrices($client);
 
         $resultado = $this->formatCarrito($registro->items);
 
-
         // Validar existencia y precios actuales
-        $alertas = $this->validarCarrito($registro->items, $costoExtra);
+        $alertas = $this->validarCarrito($registro->items, $localPrices);
         if (!empty($alertas)) {
             $resultado .= "\n\n" . implode("\n", $alertas);
             $resultado .= "\n\nPodés actualizar los precios o eliminar los productos con problema antes de confirmar.";
@@ -1279,9 +1274,9 @@ Herramientas disponibles:
             return 'El carrito está vacío.';
         }
 
-        $costoExtra = $this->costoExtraCliente($client);
-        $cods       = array_column($registro->items, 'cod');
-        $productos  = Producto::paraBot()
+        $localPrices = $this->getLocalPrices($client);
+        $cods        = array_column($registro->items, 'cod');
+        $productos   = Producto::paraBot()
             ->whereIn('tablaplu.cod', $cods)
             ->get()
             ->keyBy('cod');
@@ -1293,7 +1288,7 @@ Herramientas disponibles:
             if (!isset($item['cod']) || !$productos->has($item['cod'])) {
                 continue;
             }
-            $precioNuevo = (float) $productos[$item['cod']]->precio + $costoExtra;
+            $precioNuevo = $this->precioFinal((float) $productos[$item['cod']]->precio, $item['cod'], $localPrices);
             if (abs($precioNuevo - (float) $item['precio']) > 0.01) {
                 $actualizados[] = $item['des'];
             }
@@ -1312,21 +1307,31 @@ Herramientas disponibles:
         return $prefijo . $resultado;
     }
 
-    private function costoExtraCliente($client): float
+    /**
+     * Carga los precios/días override por producto para la localidad del cliente.
+     * Retorna colección keyed by cod, o colección vacía si el cliente no tiene localidad.
+     */
+    private function getLocalPrices($client): \Illuminate\Support\Collection
     {
-        if ($client->localidad_id) {
-            return (float) (Localidad::find($client->localidad_id)?->costo_extra ?? 0);
+        if (!$client->localidad_id) {
+            return collect();
         }
-        if ($client->localidad) {
-            $loc = Localidad::where('activo', true)
-                ->whereRaw('LOWER(nombre) = ?', [strtolower($client->localidad)])
-                ->first();
-            if ($loc) {
-                $client->update(['localidad_id' => $loc->id]);
-                return (float) ($loc->costo_extra ?? 0);
-            }
+        return ProductoLocalidad::where('localidad_id', $client->localidad_id)
+            ->get()
+            ->keyBy('cod');
+    }
+
+    /**
+     * Precio final de un producto para un cliente.
+     * Si existe un override en ia_producto_localidad con precio no nulo, lo usa.
+     * Si no, usa el precio base del producto.
+     */
+    private function precioFinal(float $precioBase, $cod, \Illuminate\Support\Collection $localPrices): float
+    {
+        if ($localPrices->has($cod) && $localPrices->get($cod)->precio !== null) {
+            return (float) $localPrices->get($cod)->precio;
         }
-        return 0.0;
+        return $precioBase;
     }
 
     private function formatCarrito(array $carrito): string
@@ -1364,9 +1369,9 @@ Herramientas disponibles:
      */
     public function verificarCarritoAbandonado(Carrito $carrito, $cliente): array
     {
-        $costoExtra = $this->costoExtraCliente($cliente);
-        $items      = $carrito->items ?? [];
-        $cods       = array_filter(array_column($items, 'cod'));
+        $localPrices = $this->getLocalPrices($cliente);
+        $items       = $carrito->items ?? [];
+        $cods        = array_filter(array_column($items, 'cod'));
 
         $productos = Producto::paraBot()
             ->whereIn('tablaplu.cod', $cods)
@@ -1381,7 +1386,7 @@ Herramientas disponibles:
                 $alertas[] = "❌ {$item['des']}: no disponible actualmente";
                 continue;
             }
-            $precioNuevo = (float) $productos[$item['cod']]->precio + $costoExtra;
+            $precioNuevo = $this->precioFinal((float) $productos[$item['cod']]->precio, $item['cod'], $localPrices);
             if (abs($precioNuevo - (float) $item['precio']) > 0.01) {
                 $alertas[] = "⚠️ {$item['des']}: precio actualizado a $" . $this->fmt($precioNuevo);
             }
@@ -1395,13 +1400,14 @@ Herramientas disponibles:
         return $alertas;
     }
 
-    private function validarCarrito(array $carrito, float $costoExtra = 0): array
+    private function validarCarrito(array $carrito, ?\Illuminate\Support\Collection $localPrices = null): array
     {
         if (empty($carrito)) {
             return [];
         }
 
-        $codsEnCarrito = array_filter(array_column($carrito, 'cod'));
+        $localPrices       = $localPrices ?? collect();
+        $codsEnCarrito     = array_filter(array_column($carrito, 'cod'));
         $productosActuales = Producto::paraBot()
             ->whereIn('tablaplu.cod', $codsEnCarrito)
             ->get()
@@ -1414,7 +1420,7 @@ Herramientas disponibles:
                 continue;
             }
 
-            $preActual = (float) $productosActuales[$item['cod']]->precio + $costoExtra;
+            $preActual = $this->precioFinal((float) $productosActuales[$item['cod']]->precio, $item['cod'], $localPrices);
             if (abs($preActual - $item['precio']) > 0.01) {
                 $precioViejo = $this->fmt($item['precio']);
                 $precioNuevo = $this->fmt($preActual);
@@ -1868,7 +1874,7 @@ Herramientas disponibles:
             ->get()
             ->keyBy('cod');
 
-        $costoExtra = $this->costoExtraCliente($client);
+        $localPrices = $this->getLocalPrices($client);
 
         $alertas  = [];
         $omitidos = [];
@@ -1884,8 +1890,7 @@ Herramientas disponibles:
             }
 
             // Verificar si el precio base cambió desde que se armó el carrito
-            $preActual     = (float) $precioActual[$item['cod']]->precio;
-            $preConExtra   = $preActual + $costoExtra;
+            $preConExtra = $this->precioFinal((float) $precioActual[$item['cod']]->precio, $item['cod'], $localPrices);
             if (abs($preConExtra - $precio) > 0.01) {
                 $base   = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
                 $neto   = round($preConExtra * $base, 2);
@@ -2162,10 +2167,10 @@ Herramientas disponibles:
             $caption .= "\n_{$producto->descripcion}_";
         }
         if ($solicitaPrecio) {
-            $costoExtra = $this->costoExtraCliente($client);
-            $precio     = $this->fmt((float) $producto->precio + $costoExtra);
-            $unidad     = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
-            $caption   .= "\n\${$precio} ({$unidad})";
+            $localPrices = $this->getLocalPrices($client);
+            $precio      = $this->fmt($this->precioFinal((float) $producto->precio, $producto->cod, $localPrices));
+            $unidad      = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
+            $caption    .= "\n\${$precio} ({$unidad})";
         }
 
         // Enviar imagen con descripción y precio como caption (todo en 1 mensaje)
@@ -2280,7 +2285,7 @@ Herramientas disponibles:
             return 'No hay productos disponibles en este momento.';
         }
 
-        $costoExtra = $this->costoExtraCliente($client);
+        $localPrices = $this->getLocalPrices($client);
 
         $bloques = [];
 
@@ -2295,7 +2300,7 @@ Herramientas disponibles:
             foreach ($grupos as $nombreGrupo => $items) {
                 $lineas[] = "_{$nombreGrupo}_";
                 foreach ($items as $p) {
-                    $precio   = $this->fmt((float) $p->precio + $costoExtra);
+                    $precio   = $this->fmt($this->precioFinal((float) $p->precio, $p->cod, $localPrices));
                     $unidad   = $tipo === 'Unidad' ? '/u' : '/kg';
                     $lineas[] = "• {$p->des}: \${$precio}{$unidad}";
                 }

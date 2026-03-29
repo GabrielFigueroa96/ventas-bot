@@ -154,6 +154,7 @@
                     </form>
                 </div>
             </div>
+            @include('admin.partials.producto-localidades', ['cod' => $cod, 'ia' => $ia, 'localidades' => $localidades])
         </div>
         @endif
 
@@ -300,6 +301,7 @@
                         </div>
                     </div>
                 </div>
+                @include('admin.partials.producto-localidades', ['cod' => $cod, 'ia' => $ia, 'localidades' => $localidades])
             </td>
         </tr>
         @endif
@@ -473,6 +475,74 @@ async function aplicarSugerencia(cod, btn) {
     } catch (_) {}
     document.getElementById(`sugerencia-panel-${cod}`)?.remove();
 }
+
+// ── Localidades por producto ──────────────────────────────────────────
+function toggleAddLoc(cod) {
+    document.getElementById('loc-add-' + cod)?.classList.toggle('hidden');
+}
+
+function onLocSelChange(cod) {
+    const sel     = document.getElementById('loc-add-sel-' + cod);
+    const diasDiv = document.getElementById('loc-add-dias-' + cod);
+    const opt     = sel.options[sel.selectedIndex];
+    const diasStr = opt?.dataset?.dias ?? '';
+    if (sel.value && diasStr) {
+        diasDiv.classList.remove('hidden');
+        const diasLoc = diasStr.split(',').map(Number).filter(n => !isNaN(n));
+        document.querySelectorAll(`.loc-add-dia-${cod}`).forEach(cb => {
+            cb.checked = diasLoc.includes(parseInt(cb.value));
+        });
+    } else {
+        diasDiv.classList.add('hidden');
+    }
+}
+
+async function saveLoc(cod) {
+    const sel          = document.getElementById('loc-add-sel-' + cod);
+    const localidad_id = sel?.value;
+    if (!localidad_id) { showToast('Seleccioná una localidad', 'error'); return; }
+    const precio   = document.getElementById('loc-add-precio-' + cod)?.value || null;
+    const checked  = [...document.querySelectorAll(`.loc-add-dia-${cod}:checked`)].map(cb => parseInt(cb.value));
+    const dias_reparto = checked.length > 0 ? checked.map(d => ({ dia: d })) : null;
+    try {
+        const res = await fetch(`/admin/productos/${cod}/localidades`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+            body: JSON.stringify({ localidad_id, precio: precio || null, dias_reparto }),
+        });
+        if (res.ok) { window.location.reload(); }
+        else { showToast('Error al guardar', 'error'); }
+    } catch (e) { showToast('Error de conexión', 'error'); }
+}
+
+async function removeLoc(cod, localidad_id, btn) {
+    if (!confirm('¿Eliminar la configuración de esta localidad?')) return;
+    btn.disabled = true;
+    try {
+        const res = await fetch(`/admin/productos/${cod}/localidades/${localidad_id}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+        });
+        if (res.ok) { window.location.reload(); }
+        else { showToast('Error al eliminar', 'error'); btn.disabled = false; }
+    } catch (e) { showToast('Error de conexión', 'error'); btn.disabled = false; }
+}
+
+// Auto-save precio al cambiar en una fila existente
+document.addEventListener('change', async function(e) {
+    const input = e.target.closest('.pl-loc-precio');
+    if (!input) return;
+    const { cod, loc } = input.dataset;
+    const status = input.parentElement.querySelector('.pl-precio-ok');
+    try {
+        await fetch(`/admin/productos/${cod}/localidades/${loc}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+            body: JSON.stringify({ precio: input.value || null }),
+        });
+        if (status) { status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 2000); }
+    } catch (_) {}
+});
 
 document.querySelectorAll('.precio-input').forEach(input => {
     let original = input.value;
