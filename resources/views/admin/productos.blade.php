@@ -154,7 +154,7 @@
                     </form>
                 </div>
             </div>
-            @include('admin.partials.producto-localidades', ['cod' => $cod, 'ia' => $ia, 'localidades' => $localidades])
+            @include('admin.partials.producto-localidades', ['cod' => $cod, 'ia' => $ia, 'localidades' => $localidades, 'prefix' => 'm'])
         </div>
         @endif
 
@@ -301,7 +301,7 @@
                         </div>
                     </div>
                 </div>
-                @include('admin.partials.producto-localidades', ['cod' => $cod, 'ia' => $ia, 'localidades' => $localidades])
+                @include('admin.partials.producto-localidades', ['cod' => $cod, 'ia' => $ia, 'localidades' => $localidades, 'prefix' => 'd'])
             </td>
         </tr>
         @endif
@@ -477,19 +477,19 @@ async function aplicarSugerencia(cod, btn) {
 }
 
 // ── Localidades por producto ──────────────────────────────────────────
-function toggleAddLoc(cod) {
-    document.getElementById('loc-add-' + cod)?.classList.toggle('hidden');
+function toggleAddLoc(uid) {
+    document.getElementById('loc-add-' + uid)?.classList.toggle('hidden');
 }
 
-function onLocSelChange(cod) {
-    const sel     = document.getElementById('loc-add-sel-' + cod);
-    const diasDiv = document.getElementById('loc-add-dias-' + cod);
+function onLocSelChange(uid) {
+    const sel     = document.getElementById('loc-add-sel-' + uid);
+    const diasDiv = document.getElementById('loc-add-dias-' + uid);
     const opt     = sel.options[sel.selectedIndex];
     const diasStr = opt?.dataset?.dias ?? '';
     if (sel.value && diasStr) {
         diasDiv.classList.remove('hidden');
         const diasLoc = diasStr.split(',').map(Number).filter(n => !isNaN(n));
-        document.querySelectorAll(`.loc-add-dia-${cod}`).forEach(cb => {
+        document.querySelectorAll('.loc-add-dia-' + uid).forEach(cb => {
             cb.checked = diasLoc.includes(parseInt(cb.value));
         });
     } else {
@@ -497,12 +497,12 @@ function onLocSelChange(cod) {
     }
 }
 
-async function saveLoc(cod) {
-    const sel          = document.getElementById('loc-add-sel-' + cod);
+async function saveLoc(uid, cod) {
+    const sel          = document.getElementById('loc-add-sel-' + uid);
     const localidad_id = sel?.value;
     if (!localidad_id) { showToast('Seleccioná una localidad', 'error'); return; }
-    const precio   = document.getElementById('loc-add-precio-' + cod)?.value || null;
-    const checked  = [...document.querySelectorAll(`.loc-add-dia-${cod}:checked`)].map(cb => parseInt(cb.value));
+    const precio       = document.getElementById('loc-add-precio-' + uid)?.value || null;
+    const checked      = [...document.querySelectorAll('.loc-add-dia-' + uid + ':checked')].map(cb => parseInt(cb.value));
     const dias_reparto = checked.length > 0 ? checked.map(d => ({ dia: d })) : null;
     try {
         const res = await fetch(`/admin/productos/${cod}/localidades`, {

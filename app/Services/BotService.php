@@ -480,7 +480,7 @@ class BotService
                 ->get()
                 ->map(function ($l) use ($diasLabel) {
                     $dias = !empty($l->dias_reparto)
-                        ? implode(', ', array_map(fn($d) => $diasLabel[$d] ?? $d, $l->dias_reparto))
+                        ? implode(', ', array_map(fn($d) => $diasLabel[is_array($d) ? $d['dia'] : (int) $d] ?? $d, $l->dias_reparto))
                         : 'días a confirmar';
                     return "{$l->nombre} (reparto los: {$dias})";
                 })
