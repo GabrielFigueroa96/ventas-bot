@@ -25,7 +25,6 @@ class LocalidadController extends Controller
         $data['dias_reparto'] = $this->buildDiasReparto($request);
 
         Localidad::create($data);
-        $this->clearZonasCache();
         return redirect()->route('admin.localidades')->with('ok', 'Localidad creada.');
     }
 
@@ -41,7 +40,6 @@ class LocalidadController extends Controller
         $data['dias_reparto'] = $this->buildDiasReparto($request);
 
         $localidad->update($data);
-        $this->clearZonasCache();
         return redirect()->route('admin.localidades')->with('ok', 'Localidad actualizada.');
     }
 
@@ -74,7 +72,6 @@ class LocalidadController extends Controller
     {
         $localidad = Localidad::findOrFail($id);
         $localidad->delete();
-        $this->clearZonasCache();
         return redirect()->route('admin.localidades')->with('ok', 'Localidad eliminada.');
     }
 
@@ -82,13 +79,6 @@ class LocalidadController extends Controller
     {
         $localidad = Localidad::findOrFail($id);
         $localidad->update(['activo' => !$localidad->activo]);
-        $this->clearZonasCache();
         return response()->json(['activo' => $localidad->activo]);
-    }
-
-    private function clearZonasCache(): void
-    {
-        $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
-        \Cache::forget('bot_zonas_entrega_' . $tenantId);
     }
 }

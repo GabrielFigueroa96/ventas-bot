@@ -512,18 +512,16 @@ class BotService
                 ->implode(', ')
         );
 
-        // Todas las zonas de entrega activas con sus días
-        $todasLasZonas = Cache::remember('bot_zonas_entrega_' . $tenantId, 300, function () use ($diasLabel) {
-            return Localidad::where('activo', true)
-                ->get()
-                ->map(function ($l) use ($diasLabel) {
-                    $dias = !empty($l->dias_reparto)
-                        ? implode(', ', array_map(fn($d) => $diasLabel[is_array($d) ? $d['dia'] : (int) $d] ?? $d, $l->dias_reparto))
-                        : 'días a confirmar';
-                    return "{$l->nombre} (reparto los: {$dias})";
-                })
-                ->implode(' | ');
-        });
+        // Todas las zonas de entrega activas con sus días (sin caché para evitar datos rancios)
+        $todasLasZonas = Localidad::where('activo', true)
+            ->get()
+            ->map(function ($l) use ($diasLabel) {
+                $dias = !empty($l->dias_reparto)
+                    ? implode(', ', array_map(fn($d) => $diasLabel[is_array($d) ? $d['dia'] : (int) $d] ?? $d, $l->dias_reparto))
+                    : 'días a confirmar';
+                return "{$l->nombre} (reparto los: {$dias})";
+            })
+            ->implode(' | ');
 
         // Tipos de entrega habilitados
         $permiteEnvio  = $empresa?->bot_permite_envio  ?? true;
