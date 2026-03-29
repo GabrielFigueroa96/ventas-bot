@@ -343,7 +343,12 @@ class BotService
         $todosProductos = Producto::paraBot()->get();
 
         // Si el cliente ya eligió fecha de reparto, filtrar productos disponibles para ese día
-        $fechaElegida   = Cache::get('fecha_reparto_elegida_' . $cliente->id);
+        $fechaElegida = Cache::get('fecha_reparto_elegida_' . $cliente->id);
+        // Si la fecha cacheada ya no está entre las disponibles, limpiarla
+        if ($fechaElegida && !collect($fechasDisponibles)->contains('fecha', $fechaElegida)) {
+            Cache::forget('fecha_reparto_elegida_' . $cliente->id);
+            $fechaElegida = null;
+        }
         $diaElegido     = $fechaElegida ? (int) \Carbon\Carbon::parse($fechaElegida)->format('w') : null;
         $productos      = $diaElegido !== null
             ? $this->filtrarProductosPorDia($todosProductos, $diaElegido, $cliente->localidad_id)
@@ -650,7 +655,10 @@ Cliente: {$nombre}{$cuentaTexto}
 Último pedido: {$ultimoPedidoTexto}
 {$favoritosTexto}
 {$ultimaDirTexto}{$configNegocio}
-" . ($fechaYaElegida ? "Reparto elegido: {$fechaElegidaTexto}. Los productos que ves son los disponibles para ese día." : ($fechasTexto ? "Repartos disponibles: {$fechasTexto}." : '')) . "
+" . ($fechaYaElegida
+    ? "Reparto elegido: {$fechaElegidaTexto}. Los productos que ves son los disponibles para ese día."
+      . ($hayMultiplesFechas ? " También hay repartos disponibles para: " . implode(', ', array_filter(array_map(fn($f) => $f['fecha'] !== $fechaElegida ? $f['texto'] : null, $fechasDisponibles))) . ". Si el cliente quiere cambiar de fecha, usá elegir_reparto." : "")
+    : ($fechasTexto ? "Repartos disponibles: {$fechasTexto}." : '')) . "
 
 Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : " (mostrá estos solo si el cliente ya eligió fecha de reparto — si no eligió, usá elegir_reparto primero)") . ":
 {$lista}
@@ -682,7 +690,7 @@ FLUJO 2 — TOMAR PEDIDO
 ════════════════════════════════
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
-" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. ANTES de mostrar productos o agregar al carrito, usá elegir_reparto para que el cliente elija para qué fecha quiere el pedido. Los productos varían según el día de reparto." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." : "")) . "
+" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. ANTES de mostrar productos o agregar al carrito, usá elegir_reparto para que el cliente elija para qué fecha quiere el pedido. Los productos varían según el día de reparto." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : "")) . "
 1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación extra ni resumas antes. Si el cliente dice si, dale, esta bien o similar con una cantidad implícita o explícita → accioná.
 2. Podés agregar múltiples productos en una sola llamada a agregar_al_carrito.
 3. Mostrá el resumen con ver_carrito. Si hay alertas de precio (⚠️), ofrecé actualizar y cuando el cliente confirme llamá actualizar_precios_carrito (NO ver_carrito). Si hay ❌ producto no disponible, ofrecé eliminar el ítem con agregar_al_carrito cantidad 0.
