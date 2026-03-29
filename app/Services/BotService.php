@@ -107,6 +107,12 @@ class BotService
             $client->refresh();
         }
 
+        // Si estaba eligiendo reparto pero escribió texto, volver a normal
+        if ($client->estado === 'eligiendo_reparto') {
+            $client->update(['estado' => null]);
+            $client->refresh();
+        }
+
         // Registro inicial: nombre → localidad → provincia
         $estadosVerificacion = ['verificando_nombre', 'verificando_localidad', 'verificando_calle', 'esperando_localidad', 'esperando_calle', 'esperando_dato_extra'];
         if ((empty($client->name) || $client->estado === 'esperando_nombre') && !in_array($client->estado, $estadosVerificacion)) {
@@ -334,7 +340,14 @@ class BotService
         $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
 
         // Sin caché: siempre fresco para reflejar cambios del catálogo inmediatamente
-        $productos = Producto::paraBot()->get();
+        $todosProductos = Producto::paraBot()->get();
+
+        // Si el cliente ya eligió fecha de reparto, filtrar productos disponibles para ese día
+        $fechaElegida   = Cache::get('fecha_reparto_elegida_' . $cliente->id);
+        $diaElegido     = $fechaElegida ? (int) \Carbon\Carbon::parse($fechaElegida)->format('w') : null;
+        $productos      = $diaElegido !== null
+            ? $this->filtrarProductosPorDia($todosProductos, $diaElegido, $cliente->localidad_id)
+            : $todosProductos;
 
         $formatear = function ($p) {
             $linea = $p->des;
@@ -494,98 +507,55 @@ class BotService
         $fechasCerradas = $empresa?->bot_fechas_cerrado ?? [];
         $botHorarios    = $empresa?->bot_horarios ?? [];  // {"1":[{"de":"08:00","a":"12:00"}], ...}
 
-        // Próximo reparto: busca el candidato más próximo respetando la ventana por día
-        // diasConfig = [{dia:3, desde_dia:1, desde_hora:"08:00", hasta_dia:2, hasta_hora:"20:00"}, ...]
-        $diasConfigMap = collect($diasConfig)->keyBy('dia'); // indexado por número de día (0=dom)
-        $globalHoraCorte = $empresa?->bot_hora_corte ?? null;
+        // Fechas de reparto disponibles (ventana ±21 días)
+        $globalHoraCorte  = $empresa?->bot_hora_corte ?? null;
+        $fechasDisponibles = $this->getFechasReparto($diasConfig, $fechasCerradas, $globalHoraCorte);
 
         $proximoRepartoTexto = '';
         $proximoRepartoFecha = '';
         $corteAviso          = '';
 
-        if (!empty($diasReparto)) {
-            for ($i = 0; $i <= 21; $i++) {
-                $candidato  = now()->addDays($i);
-                $diaSemana  = (int) $candidato->format('w');
-                $fechaStr   = $candidato->format('Y-m-d');
-
+        if (!empty($fechasDisponibles)) {
+            $primero             = $fechasDisponibles[0];
+            $proximoRepartoFecha = $primero['fecha'];
+            $proximoRepartoTexto = $primero['texto'];
+        } elseif (!empty($diasReparto)) {
+            // Hay días configurados pero todos cerrados — informar cierre
+            $diasConfigMap = collect($diasConfig)->keyBy('dia');
+            for ($i = 0; $i <= 7; $i++) {
+                $candidato = now()->addDays($i);
+                $diaSemana = (int) $candidato->format('w');
                 if (!\in_array($diaSemana, $diasReparto, true)) continue;
-                if (\in_array($fechaStr, $fechasCerradas, true)) continue;
-
-                $cfg = $diasConfigMap->get($diaSemana);
-
-                // Verificar si estamos dentro de la ventana de pedido para este día de reparto
-                $dentroDeVentana = true;
-                $avisoCorte      = '';
-
-                if (!empty($cfg['hasta_dia']) || !empty($cfg['hasta_hora'])) {
-                    // Tiene cierre configurado: calcular cuándo cierra para este reparto
-                    // El "hasta_dia" es relativo a la semana del reparto (antes del día de reparto)
-                    $hastaNum  = isset($cfg['hasta_dia']) && $cfg['hasta_dia'] !== '' ? (int) $cfg['hasta_dia'] : null;
-                    $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
-
-                    if ($hastaNum !== null) {
-                        // Calcular la fecha de cierre: es el $hastaNum más reciente ANTES del candidato
-                        $diff = ($diaSemana - $hastaNum + 7) % 7;
-                        $diff = $diff === 0 ? 7 : $diff; // si es el mismo día, es la semana anterior
-                        $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
-
-                        if (now()->gt($fechaCierre)) {
-                            $dentroDeVentana = false;
-                            $avisoCorte = "⚠️ CIERRE DE PEDIDOS: Los pedidos para el reparto del "
-                                . $candidato->locale('es')->isoFormat('dddd D [de] MMMM')
-                                . " cerraron el {$diasLabel[$hastaNum]} a las " . \Carbon\Carbon::today()->setTimeFromTimeString($hastaHora)->format('H:i') . "hs.";
-                        }
-                    }
-                } elseif ($globalHoraCorte && $i === 0) {
-                    // Sin config específica: usa hora de corte global solo para hoy
-                    $corteHoy = \Carbon\Carbon::today()->setTimeFromTimeString($globalHoraCorte);
-                    if (now()->gt($corteHoy)) {
-                        $dentroDeVentana = false;
-                        $avisoCorte = "⚠️ HORARIO DE CORTE: Los pedidos para hoy cerraron a las "
-                            . $corteHoy->format('H:i') . "hs.";
-                    }
-                }
-
-                // Verificar apertura
-                if ($dentroDeVentana && !empty($cfg['desde_dia']) || (!empty($cfg['desde_hora']) && $dentroDeVentana)) {
-                    $desdeNum  = isset($cfg['desde_dia']) && $cfg['desde_dia'] !== '' ? (int) $cfg['desde_dia'] : null;
-                    $desdeHora = !empty($cfg['desde_hora']) ? $cfg['desde_hora'] : '00:00';
-
-                    if ($desdeNum !== null) {
-                        $diff = ($diaSemana - $desdeNum + 7) % 7;
-                        $diff = $diff === 0 ? 7 : $diff;
-                        $fechaApertura = $candidato->copy()->subDays($diff)->setTimeFromTimeString($desdeHora);
-                        if (now()->lt($fechaApertura)) {
-                            $dentroDeVentana = false; // Todavía no abrió
-                        }
-                    }
-                }
-
-                if ($dentroDeVentana) {
-                    $proximoRepartoTexto = $candidato->locale('es')->isoFormat('dddd D [de] MMMM');
-                    $proximoRepartoFecha = $fechaStr;
+                $cfg      = $diasConfigMap->get($diaSemana);
+                $hastaNum  = isset($cfg['hasta_dia']) && $cfg['hasta_dia'] !== '' ? (int) $cfg['hasta_dia'] : null;
+                $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
+                if ($hastaNum !== null) {
+                    $diff        = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
+                    $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
+                    $corteAviso  = "⚠️ CIERRE DE PEDIDOS: Los pedidos para el reparto del "
+                        . $candidato->locale('es')->isoFormat('dddd D [de] MMMM')
+                        . " cerraron el {$diasLabel[$hastaNum]} a las "
+                        . \Carbon\Carbon::today()->setTimeFromTimeString($hastaHora)->format('H:i') . "hs.";
                     break;
-                } elseif (!$proximoRepartoTexto) {
-                    // Guardamos el aviso del primer día que encontramos pero ya cerró
-                    $corteAviso = $avisoCorte . ($proximoRepartoTexto
-                        ? " El próximo reparto disponible es el {$proximoRepartoTexto}."
-                        : '');
                 }
-            }
-            // Si encontramos fecha pero no seteamos corteAviso, lo completamos ahora
-            if ($proximoRepartoTexto && $corteAviso) {
-                $corteAviso .= " El próximo reparto disponible es el {$proximoRepartoTexto}.";
             }
         }
-
-        // Fallback: hora de corte global si no hay config por día
-        $horaCorte = $globalHoraCorte;
 
         // Guardar la fecha calculada en cache para que iniciarConfirmacionPedido use la misma
         if ($proximoRepartoFecha) {
             Cache::put('proxima_fecha_entrega_' . $cliente->id, $proximoRepartoFecha, now()->addMinutes(30));
         }
+
+        // Texto de fechas disponibles para el prompt
+        $hayMultiplesFechas = count($fechasDisponibles) > 1;
+        $fechasTexto = '';
+        if (!empty($fechasDisponibles)) {
+            $fechasTexto = implode(', ', array_map(fn($f) => $f['texto'], $fechasDisponibles));
+        }
+        $fechaYaElegida     = $fechaElegida !== null;
+        $fechaElegidaTexto  = $fechaYaElegida
+            ? \Carbon\Carbon::parse($fechaElegida)->locale('es')->isoFormat('dddd D [de] MMMM')
+            : null;
 
         // Texto dinámico para el paso 3 del flujo de pedido
         $entregasOpciones = array_filter([
@@ -657,8 +627,9 @@ Cliente: {$nombre}{$cuentaTexto}
 Último pedido: {$ultimoPedidoTexto}
 {$favoritosTexto}
 {$ultimaDirTexto}{$configNegocio}
+" . ($fechaYaElegida ? "Reparto elegido: {$fechaElegidaTexto}. Los productos que ves son los disponibles para ese día." : ($fechasTexto ? "Repartos disponibles: {$fechasTexto}." : '')) . "
 
-Productos disponibles (solo nombres — para precios usá siempre ver_producto):
+Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : " (mostrá estos solo si el cliente ya eligió fecha de reparto — si no eligió, usá elegir_reparto primero)") . ":
 {$lista}
 
 " . ($puedeSupgerir ? "════════════════════════════════
@@ -688,10 +659,11 @@ FLUJO 2 — TOMAR PEDIDO
 ════════════════════════════════
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
+" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. ANTES de mostrar productos o agregar al carrito, usá elegir_reparto para que el cliente elija para qué fecha quiere el pedido. Los productos varían según el día de reparto." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." : "")) . "
 1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación extra ni resumas antes. Si el cliente dice si, dale, esta bien o similar con una cantidad implícita o explícita → accioná.
 2. Podés agregar múltiples productos en una sola llamada a agregar_al_carrito.
 3. Mostrá el resumen con ver_carrito. Si hay alertas de precio (⚠️), ofrecé actualizar y cuando el cliente confirme llamá actualizar_precios_carrito (NO ver_carrito). Si hay ❌ producto no disponible, ofrecé eliminar el ítem con agregar_al_carrito cantidad 0.
-4. Cuando el carrito esté listo, preguntá si el cliente confirma. Podés mencionar la próxima fecha de entrega ({$paso3Fecha}). Luego llamá DIRECTAMENTE crear_pedido. NUNCA preguntes forma de pago ni tipo de entrega antes de llamar crear_pedido — el sistema envía botones interactivos para eso. Solo pasá tipo_entrega o forma_pago como argumento si el cliente los mencionó explícitamente en esta conversación.
+4. Cuando el carrito esté listo, preguntá si el cliente confirma. Luego llamá DIRECTAMENTE crear_pedido. NUNCA preguntes forma de pago ni tipo de entrega antes de llamar crear_pedido — el sistema envía botones interactivos para eso. Solo pasá tipo_entrega o forma_pago como argumento si el cliente los mencionó explícitamente en esta conversación.
 5. Una vez creado el pedido (ves 'Botones enviados' en la respuesta del sistema), no envíes ningún mensaje: el cliente ya está viendo los botones de confirmación.
 6. Si el cliente dice el horario o turno preferido, guardalo en obs (no en fecha_entrega).
 
@@ -726,7 +698,8 @@ Pasos:
 4. Si quiere cancelar un pedido pendiente, usá cancelar_pedido." : "") . "
 
 Herramientas disponibles:
-" . ($puedePedir ? "- agregar_al_carrito → agregar/modificar ítems del carrito
+" . ($puedePedir ? "- elegir_reparto → muestra las fechas de reparto disponibles para que el cliente elija. Usala antes de agregar productos cuando hay múltiples fechas disponibles, o si el cliente quiere cambiar la fecha ya elegida
+- agregar_al_carrito → agregar/modificar ítems del carrito
 - ver_carrito → resumen con totales, tiempo restante y validación de precios. SIEMPRE usá esta herramienta cuando el cliente pregunta por el total, precio o detalle de su carrito; nunca calcules precios manualmente
 - vaciar_carrito → limpiar el carrito
 - crear_pedido → confirmar y registrar el pedido
@@ -825,6 +798,14 @@ Herramientas disponibles:
     private function allTools(array $tiposEntrega, array $mediosPago): array
     {
         return [
+            [
+                'type'     => 'function',
+                'function' => [
+                    'name'        => 'elegir_reparto',
+                    'description' => 'Muestra las fechas de reparto disponibles y permite al cliente elegir para cuál quiere hacer el pedido. La lista de productos se actualiza según el día elegido. Usala cuando el cliente quiere hacer un pedido y hay múltiples fechas disponibles, o cuando el cliente quiere cambiar la fecha de reparto ya elegida.',
+                    'parameters'  => ['type' => 'object', 'properties' => new \stdClass()],
+                ],
+            ],
             [
                 'type'     => 'function',
                 'function' => [
@@ -1009,6 +990,7 @@ Herramientas disponibles:
 
                 try {
                     $result = match ($funcName) {
+                        'elegir_reparto'             => $this->elegirReparto($cliente),
                         'agregar_al_carrito'         => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
                         'ver_carrito'                => $this->verCarrito($cliente),
                         'vaciar_carrito'             => $this->vaciarCarrito($cliente),
@@ -1311,6 +1293,140 @@ Herramientas disponibles:
      * Carga los precios/días override por producto para la localidad del cliente.
      * Retorna colección keyed by cod, o colección vacía si el cliente no tiene localidad.
      */
+    /**
+     * Devuelve las fechas de reparto disponibles (ventana 21 días) ordenadas.
+     * Cada elemento: ['fecha'=>'Y-m-d', 'dia'=>int(0=dom), 'texto'=>'miércoles 2 de abril']
+     */
+    private function getFechasReparto(array $diasConfig, array $fechasCerradas = [], ?string $globalHoraCorte = null): array
+    {
+        if (empty($diasConfig)) return [];
+
+        $diasLabel     = IaEmpresa::DIAS_LABEL;
+        $diasReparto   = array_map(fn($d) => (int) $d['dia'], $diasConfig);
+        $diasConfigMap = collect($diasConfig)->keyBy('dia');
+        $disponibles   = [];
+
+        for ($i = 0; $i <= 21; $i++) {
+            $candidato = now()->addDays($i);
+            $diaSemana = (int) $candidato->format('w');
+            $fechaStr  = $candidato->format('Y-m-d');
+
+            if (!\in_array($diaSemana, $diasReparto, true)) continue;
+            if (\in_array($fechaStr, $fechasCerradas, true)) continue;
+
+            $cfg             = $diasConfigMap->get($diaSemana);
+            $dentroDeVentana = true;
+
+            if (!empty($cfg['hasta_dia']) || !empty($cfg['hasta_hora'])) {
+                $hastaNum  = isset($cfg['hasta_dia']) && $cfg['hasta_dia'] !== '' ? (int) $cfg['hasta_dia'] : null;
+                $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
+                if ($hastaNum !== null) {
+                    $diff        = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
+                    $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
+                    if (now()->gt($fechaCierre)) $dentroDeVentana = false;
+                }
+            } elseif ($globalHoraCorte && $i === 0) {
+                $corteHoy = \Carbon\Carbon::today()->setTimeFromTimeString($globalHoraCorte);
+                if (now()->gt($corteHoy)) $dentroDeVentana = false;
+            }
+
+            if ($dentroDeVentana && (!empty($cfg['desde_dia']) || !empty($cfg['desde_hora']))) {
+                $desdeNum  = isset($cfg['desde_dia']) && $cfg['desde_dia'] !== '' ? (int) $cfg['desde_dia'] : null;
+                $desdeHora = !empty($cfg['desde_hora']) ? $cfg['desde_hora'] : '00:00';
+                if ($desdeNum !== null) {
+                    $diff          = ($diaSemana - $desdeNum + 7) % 7 ?: 7;
+                    $fechaApertura = $candidato->copy()->subDays($diff)->setTimeFromTimeString($desdeHora);
+                    if (now()->lt($fechaApertura)) $dentroDeVentana = false;
+                }
+            }
+
+            if ($dentroDeVentana) {
+                $disponibles[] = [
+                    'fecha' => $fechaStr,
+                    'dia'   => $diaSemana,
+                    'texto' => $candidato->locale('es')->isoFormat('dddd D [de] MMMM'),
+                ];
+            }
+        }
+
+        return $disponibles;
+    }
+
+    /**
+     * Muestra las fechas de reparto disponibles via botones interactivos.
+     * El cliente elige y el sistema guarda la fecha en cache.
+     */
+    private function elegirReparto($client): string
+    {
+        $empresa    = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
+        $localidadObj = $client->localidad_id ? Localidad::find($client->localidad_id) : null;
+        if (!$localidadObj && $client->localidad) {
+            $localidadObj = Localidad::where('activo', true)
+                ->whereRaw('LOWER(nombre) = ?', [strtolower($client->localidad)])
+                ->first();
+        }
+
+        $diasConfig        = $localidadObj ? $localidadObj->diasConfig() : [];
+        $fechasCerradas    = $empresa?->bot_fechas_cerrado ?? [];
+        $globalHoraCorte   = $empresa?->bot_hora_corte ?? null;
+        $fechasDisponibles = $this->getFechasReparto($diasConfig, $fechasCerradas, $globalHoraCorte);
+
+        if (empty($fechasDisponibles)) {
+            return 'No hay fechas de reparto disponibles en este momento para tu localidad.';
+        }
+
+        if (count($fechasDisponibles) === 1) {
+            // Solo una opción: elegir automáticamente
+            $f = $fechasDisponibles[0];
+            Cache::put('fecha_reparto_elegida_' . $client->id, $f['fecha'], now()->addHours(6));
+            Cache::put('proxima_fecha_entrega_' . $client->id, $f['fecha'], now()->addMinutes(30));
+            return "El próximo reparto es el {$f['texto']}. Podés pedirme los productos que querés para ese día.";
+        }
+
+        // Múltiples fechas: enviar botones (máximo 3 por limitación de WhatsApp)
+        $botones = array_map(fn($f) => [
+            'id'    => 'reparto_' . $f['fecha'],
+            'title' => ucfirst($f['texto']),
+        ], array_slice($fechasDisponibles, 0, 3));
+
+        $client->update(['estado' => 'eligiendo_reparto']);
+        $this->sendInteractiveButtons(
+            $client->phone,
+            '¿Para qué fecha querés hacer el pedido?',
+            'Elegí el reparto:',
+            $botones
+        );
+
+        return 'Botones enviados';
+    }
+
+    /**
+     * Filtra los productos según el día de reparto elegido.
+     * Un producto es disponible para un día si:
+     * - No tiene configuración en ia_producto_localidad para esa localidad, O
+     * - Tiene configuración pero dias_reparto es null (usa todos los días de la localidad), O
+     * - Tiene dias_reparto y el día está incluido.
+     */
+    private function filtrarProductosPorDia(\Illuminate\Support\Collection $productos, int $dia, ?int $localidadId): \Illuminate\Support\Collection
+    {
+        if (!$localidadId) return $productos;
+
+        $configs = ProductoLocalidad::where('localidad_id', $localidadId)
+            ->whereNotNull('dias_reparto')
+            ->get()
+            ->keyBy('cod');
+
+        if ($configs->isEmpty()) return $productos;
+
+        return $productos->filter(function ($p) use ($dia, $configs) {
+            if (!$configs->has($p->cod)) return true; // sin override → disponible siempre
+            $diasCfg = $configs->get($p->cod)->dias_reparto;
+            if (empty($diasCfg)) return true;
+            $diasNum = array_map(fn($d) => is_array($d) ? (int) $d['dia'] : (int) $d, $diasCfg);
+            return \in_array($dia, $diasNum, true);
+        });
+    }
+
     private function getLocalPrices($client): \Illuminate\Support\Collection
     {
         if (!$client->localidad_id) {
@@ -1661,6 +1777,10 @@ Herramientas disponibles:
     {
         $estado = $client->estado ?? '';
 
+        if ($estado === 'eligiendo_reparto') {
+            return $this->handleRepartoSeleccionado($client, $id);
+        }
+
         if ($estado === 'confirmando_entrega') {
             return $this->handleEntregaSeleccionada($client, $id);
         }
@@ -1674,6 +1794,50 @@ Herramientas disponibles:
         }
 
         return '';
+    }
+
+    private function handleRepartoSeleccionado($client, string $id): string
+    {
+        // id formato: reparto_2026-04-02
+        if (!str_starts_with($id, 'reparto_')) {
+            return '';
+        }
+
+        $fecha = substr($id, 8); // 'reparto_' tiene 8 chars
+        if (!\Carbon\Carbon::canBeCreatedFromFormat($fecha, 'Y-m-d')) {
+            return '';
+        }
+
+        Cache::put('fecha_reparto_elegida_' . $client->id, $fecha, now()->addHours(6));
+        Cache::put('proxima_fecha_entrega_' . $client->id, $fecha, now()->addMinutes(30));
+        $client->update(['estado' => null]);
+
+        $textoFecha = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
+        $dia        = (int) \Carbon\Carbon::parse($fecha)->format('w');
+
+        // Verificar si hay productos en el carrito que no se reparten ese día
+        $carritoRegistro = $this->getCarrito($client);
+        $noDisponibles   = [];
+        if ($carritoRegistro && !empty($carritoRegistro->items) && $client->localidad_id) {
+            $todosProductos = Producto::paraBot()->get();
+            $disponibles    = $this->filtrarProductosPorDia($todosProductos, $dia, $client->localidad_id)
+                ->pluck('cod')->toArray();
+
+            foreach ($carritoRegistro->items as $item) {
+                if (isset($item['cod']) && !\in_array($item['cod'], $disponibles)) {
+                    $noDisponibles[] = $item['des'];
+                }
+            }
+        }
+
+        $avisoCarrito = '';
+        if (!empty($noDisponibles)) {
+            $lista        = implode(', ', $noDisponibles);
+            $avisoCarrito = " ADVERTENCIA: los siguientes productos del carrito NO se reparten ese día y deben quitarse: {$lista}.";
+        }
+
+        // Procesar con IA para que muestre los productos disponibles para ese día
+        return $this->process($client, "El cliente eligió el reparto del {$textoFecha}.{$avisoCarrito} Mostrá los productos disponibles para ese día y preguntá qué quiere pedir.");
     }
 
     private function handleEntregaSeleccionada($client, string $id): string
@@ -1797,6 +1961,7 @@ Herramientas disponibles:
         $data     = Cache::get($cacheKey, []);
         $client->update(['estado' => 'activo']);
         Cache::forget($cacheKey);
+        Cache::forget('fecha_reparto_elegida_' . $client->id);
 
         if ($id === 'confirmar_si') {
             $result = $this->createOrder(
