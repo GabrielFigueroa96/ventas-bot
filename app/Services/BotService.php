@@ -1341,9 +1341,6 @@ Herramientas disponibles:
                     $fechaApertura = $candidato->copy()->subDays($diff)->setTimeFromTimeString($desdeHora);
                     if (now()->lt($fechaApertura)) $dentroDeVentana = false;
                 }
-            } elseif ($dentroDeVentana && !$tieneHasta && empty($cfg['hasta_hora']) && !$tieneDesde && empty($cfg['desde_hora'])) {
-                // Sin rango configurado: solo mostrar dentro de los próximos 7 días
-                if ($i > 7) $dentroDeVentana = false;
             }
 
             if ($dentroDeVentana) {
