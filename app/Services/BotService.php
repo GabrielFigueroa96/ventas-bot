@@ -520,23 +520,43 @@ class BotService
             $proximoRepartoFecha = $primero['fecha'];
             $proximoRepartoTexto = $primero['texto'];
         } elseif (!empty($diasReparto)) {
-            // Hay días configurados pero todos cerrados — informar cierre
+            // Hay días configurados pero ninguno disponible ahora — determinar si es por cierre o por apertura futura
             $diasConfigMap = collect($diasConfig)->keyBy('dia');
-            for ($i = 0; $i <= 7; $i++) {
+            for ($i = 0; $i <= 14; $i++) {
                 $candidato = now()->addDays($i);
                 $diaSemana = (int) $candidato->format('w');
                 if (!\in_array($diaSemana, $diasReparto, true)) continue;
-                $cfg      = $diasConfigMap->get($diaSemana);
-                $hastaNum  = isset($cfg['hasta_dia']) && $cfg['hasta_dia'] !== '' ? (int) $cfg['hasta_dia'] : null;
-                $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
-                if ($hastaNum !== null) {
-                    $diff        = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
+                $cfg = $diasConfigMap->get($diaSemana);
+
+                $tieneHasta = isset($cfg['hasta_dia']) && $cfg['hasta_dia'] !== null && $cfg['hasta_dia'] !== '';
+                $tieneDesde = isset($cfg['desde_dia']) && $cfg['desde_dia'] !== null && $cfg['desde_dia'] !== '';
+
+                if ($tieneHasta) {
+                    $hastaNum  = (int) $cfg['hasta_dia'];
+                    $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
+                    $diff      = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
                     $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
-                    $corteAviso  = "⚠️ CIERRE DE PEDIDOS: Los pedidos para el reparto del "
-                        . $candidato->locale('es')->isoFormat('dddd D [de] MMMM')
-                        . " cerraron el {$diasLabel[$hastaNum]} a las "
-                        . \Carbon\Carbon::today()->setTimeFromTimeString($hastaHora)->format('H:i') . "hs.";
-                    break;
+                    if (now()->gt($fechaCierre)) {
+                        $corteAviso = "⚠️ CIERRE DE PEDIDOS: Los pedidos para el reparto del "
+                            . $candidato->locale('es')->isoFormat('dddd D [de] MMMM')
+                            . " cerraron el {$diasLabel[$hastaNum]} a las "
+                            . \Carbon\Carbon::today()->setTimeFromTimeString($hastaHora)->format('H:i') . "hs.";
+                        break;
+                    }
+                }
+
+                if ($tieneDesde) {
+                    $desdeNum  = (int) $cfg['desde_dia'];
+                    $desdeHora = !empty($cfg['desde_hora']) ? $cfg['desde_hora'] : '00:00';
+                    $diff      = ($diaSemana - $desdeNum + 7) % 7 ?: 7;
+                    $fechaApertura = $candidato->copy()->subDays($diff)->setTimeFromTimeString($desdeHora);
+                    if (now()->lt($fechaApertura)) {
+                        $corteAviso = "⚠️ PEDIDOS CERRADOS: Todavía no se pueden tomar pedidos para el reparto del "
+                            . $candidato->locale('es')->isoFormat('dddd D [de] MMMM')
+                            . ". La ventana de pedidos abre el {$diasLabel[$desdeNum]} a las "
+                            . \Carbon\Carbon::today()->setTimeFromTimeString($desdeHora)->format('H:i') . "hs.";
+                        break;
+                    }
                 }
             }
         }
@@ -604,6 +624,9 @@ class BotService
         }
 
         if ($corteAviso)     $configNegocio .= "\n\n{$corteAviso}";
+        if ($puedePedir && empty($fechasDisponibles) && !empty($diasReparto)) {
+            $configNegocio .= "\n\nIMPORTANTE: En este momento NO hay repartos disponibles para tomar pedidos. No podés reservar ni armar pedidos hasta que abra la próxima ventana de pedidos. Si el cliente pregunta cuándo puede pedir, indicale la información del aviso de cierre/apertura de arriba.";
+        }
         if (!$puedePedir)    $configNegocio .= "\n\nIMPORTANTE: No podés tomar pedidos. Solo informás precios y describís productos. Si el cliente quiere pedir, indicale que contacte al negocio directamente.";
         if (!$puedeSupgerir) $configNegocio .= "\nNo sugieras productos de forma proactiva. Solo respondé lo que el cliente consulte.";
 
