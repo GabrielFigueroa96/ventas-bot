@@ -342,18 +342,39 @@ class BotService
         // Sin caché: siempre fresco para reflejar cambios del catálogo inmediatamente
         $todosProductos = Producto::paraBot()->get();
 
-        // Si el cliente ya eligió fecha de reparto, filtrar productos disponibles para ese día
+        // ── Localidad y días de reparto (necesarios antes de filtrar productos) ──
+        $diasLabel    = IaEmpresa::DIAS_LABEL;
+        $localidadObj = $cliente->localidad_id
+            ? Localidad::find($cliente->localidad_id)
+            : ($cliente->localidad
+                ? Localidad::where('activo', true)->whereRaw('LOWER(nombre) = ?', [strtolower($cliente->localidad)])->first()
+                : null);
+        if ($localidadObj && !$cliente->localidad_id) {
+            $cliente->update(['localidad_id' => $localidadObj->id]);
+        }
+        $diasConfig      = $localidadObj ? $localidadObj->diasConfig() : [];
+        $fechasCerradas  = $empresa?->bot_fechas_cerrado ?? [];
+        $globalHoraCorte = $empresa?->bot_hora_corte ?? null;
+
+        // Fechas de reparto disponibles — necesario antes de verificar caché de fecha elegida
+        $fechasDisponibles = $this->getFechasReparto($diasConfig, $fechasCerradas, $globalHoraCorte);
+
+        // Fecha de reparto elegida por el cliente
         $fechaElegida = Cache::get('fecha_reparto_elegida_' . $cliente->id);
         // Si la fecha cacheada ya no está entre las disponibles, limpiarla
         if ($fechaElegida && !collect($fechasDisponibles)->contains('fecha', $fechaElegida)) {
             Cache::forget('fecha_reparto_elegida_' . $cliente->id);
             $fechaElegida = null;
         }
+        // Si hay una sola fecha disponible, seleccionarla automáticamente
+        if (!$fechaElegida && count($fechasDisponibles) === 1) {
+            $fechaElegida = $fechasDisponibles[0]['fecha'];
+            Cache::put('fecha_reparto_elegida_' . $cliente->id, $fechaElegida, now()->addHours(6));
+        }
+
         $diaElegido = $fechaElegida ? (int) \Carbon\Carbon::parse($fechaElegida)->format('w') : null;
 
-        // Si el cliente tiene localidad, cargamos todas las configs para esa localidad.
-        // Solo se muestran productos que tengan una entrada en ia_producto_localidad para esa localidad.
-        // Si no tiene localidad, se muestran todos los productos.
+        // ── Filtrado de productos por localidad y día ──
         $diasLabelCorto = [0=>'Dom',1=>'Lun',2=>'Mar',3=>'Mié',4=>'Jue',5=>'Vie',6=>'Sáb'];
         $prodLocConfigs = $cliente->localidad_id
             ? ProductoLocalidad::where('localidad_id', $cliente->localidad_id)->get()->keyBy('cod')
@@ -472,21 +493,8 @@ class BotService
         $infoNegocio   = trim($empresa?->bot_info ?? '');
         $instrucciones = trim($empresa?->bot_instrucciones ?? '');
 
-        // Días de reparto: usa la localidad del cliente si tiene una configurada, si no la global
-        $diasLabel     = IaEmpresa::DIAS_LABEL;
-        $localidadObj = $cliente->localidad_id
-            ? Localidad::find($cliente->localidad_id)
-            : ($cliente->localidad
-                ? Localidad::where('activo', true)
-                ->whereRaw('LOWER(nombre) = ?', [strtolower($cliente->localidad)])
-                ->first()
-                : null);
-
-        // Si encontró la localidad por nombre pero el cliente no tiene localidad_id, lo actualiza
-        if ($localidadObj && !$cliente->localidad_id) {
-            $cliente->update(['localidad_id' => $localidadObj->id]);
-        }
-        $diasConfig  = $localidadObj ? $localidadObj->diasConfig() : [];
+        // $diasLabel, $localidadObj, $diasConfig, $fechasCerradas, $globalHoraCorte, $fechasDisponibles
+        // ya fueron computados arriba (antes del filtrado de productos)
         $diasReparto = array_map(fn($d) => (int) $d['dia'], $diasConfig);
         if (!empty($diasReparto)) {
             $diasNombres = implode(', ', array_map(fn($d) => $diasLabel[$d] ?? $d, $diasReparto));
@@ -540,12 +548,8 @@ class BotService
         $mediosTexto       = 'Medios de pago aceptados: ' . implode(', ', array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados)) . '.';
 
         // Horario y calendario del local
-        $fechasCerradas = $empresa?->bot_fechas_cerrado ?? [];
-        $botHorarios    = $empresa?->bot_horarios ?? [];  // {"1":[{"de":"08:00","a":"12:00"}], ...}
-
-        // Fechas de reparto disponibles (ventana ±21 días)
-        $globalHoraCorte  = $empresa?->bot_hora_corte ?? null;
-        $fechasDisponibles = $this->getFechasReparto($diasConfig, $fechasCerradas, $globalHoraCorte);
+        // $fechasCerradas, $globalHoraCorte, $fechasDisponibles ya calculados arriba
+        $botHorarios = $empresa?->bot_horarios ?? [];
 
         $proximoRepartoTexto = '';
         $proximoRepartoFecha = '';
