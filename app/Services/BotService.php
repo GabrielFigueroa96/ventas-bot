@@ -349,18 +349,51 @@ class BotService
             Cache::forget('fecha_reparto_elegida_' . $cliente->id);
             $fechaElegida = null;
         }
-        $diaElegido     = $fechaElegida ? (int) \Carbon\Carbon::parse($fechaElegida)->format('w') : null;
-        $productos      = $diaElegido !== null
-            ? $this->filtrarProductosPorDia($todosProductos, $diaElegido, $cliente->localidad_id)
-            : $todosProductos;
+        $diaElegido = $fechaElegida ? (int) \Carbon\Carbon::parse($fechaElegida)->format('w') : null;
 
-        $formatear = function ($p) {
+        // Si el cliente tiene localidad, cargamos todas las configs para esa localidad.
+        // Solo se muestran productos que tengan una entrada en ia_producto_localidad para esa localidad.
+        // Si no tiene localidad, se muestran todos los productos.
+        $diasLabelCorto = [0=>'Dom',1=>'Lun',2=>'Mar',3=>'Mié',4=>'Jue',5=>'Vie',6=>'Sáb'];
+        $prodLocConfigs = $cliente->localidad_id
+            ? ProductoLocalidad::where('localidad_id', $cliente->localidad_id)->get()->keyBy('cod')
+            : collect();
+
+        if ($cliente->localidad_id && $prodLocConfigs->isNotEmpty()) {
+            // Solo productos configurados para esta localidad, y si hay día elegido también por ese día
+            $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diaElegido) {
+                if (!$prodLocConfigs->has($p->cod)) return false; // no configurado para esta localidad
+                if ($diaElegido === null) return true;            // sin fecha elegida: mostrar todos los de la localidad
+                // Con fecha elegida: verificar restricción de días
+                $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto ?? null;
+                if (empty($diasCfg)) return true;                // sin restricción de días → disponible todos los días
+                $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                return in_array($diaElegido, $diasNum, true);
+            });
+        } else {
+            $productos = $todosProductos;
+        }
+
+        // Para anotar días restringidos en la lista cuando no hay fecha elegida ("solo Lun/Vie")
+        $prodLocDias = (!$diaElegido && $prodLocConfigs->isNotEmpty())
+            ? $prodLocConfigs->filter(fn($c) => !empty($c->dias_reparto))
+            : collect();
+
+        $formatear = function ($p) use ($diaElegido, $prodLocDias, $diasLabelCorto) {
             $linea = $p->des;
             if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
                 $linea .= " ({$p->descripcion})";
             }
             if (!empty($p->notas_ia)) {
                 $linea .= " [IA: {$p->notas_ia}]";
+            }
+            // Si no hay fecha elegida y el producto tiene días restringidos para esta localidad, anotarlo
+            if (!$diaElegido && $prodLocDias->has($p->cod)) {
+                $dias = $prodLocDias->get($p->cod)->dias_reparto ?? [];
+                if (!empty($dias)) {
+                    $nombres = array_map(fn($d) => $diasLabelCorto[is_array($d) ? (int)$d['dia'] : (int)$d] ?? '?', $dias);
+                    $linea .= ' [solo ' . implode('/', $nombres) . ']';
+                }
             }
             return $linea;
         };
@@ -480,7 +513,7 @@ class BotService
         );
 
         // Todas las zonas de entrega activas con sus días
-        $todasLasZonas = Cache::remember('bot_zonas_entrega_' . $tenantId, 3600, function () use ($diasLabel) {
+        $todasLasZonas = Cache::remember('bot_zonas_entrega_' . $tenantId, 300, function () use ($diasLabel) {
             return Localidad::where('activo', true)
                 ->get()
                 ->map(function ($l) use ($diasLabel) {
@@ -2341,7 +2374,14 @@ Herramientas disponibles:
     private function verProducto($client, string $nombre, bool $solicitaPrecio = false, bool $puedePedir = true): string
     {
         // Sin cache: siempre precio e imagen actualizados desde la BD
-        $productos    = Producto::paraBot()->get();
+        $todosProductos = Producto::paraBot()->get();
+        // Solo productos disponibles para la localidad del cliente
+        if ($client->localidad_id) {
+            $locCods = ProductoLocalidad::where('localidad_id', $client->localidad_id)->pluck('cod')->toArray();
+            $productos = $locCods ? $todosProductos->filter(fn($p) => in_array($p->cod, $locCods)) : $todosProductos;
+        } else {
+            $productos = $todosProductos;
+        }
         $candidatos   = $this->buscarCandidatos($productos, $nombre);
 
         if ($candidatos->isEmpty()) {
@@ -2478,7 +2518,15 @@ Herramientas disponibles:
 
     private function priceList($client): string
     {
-        $productos = Producto::paraBot()->get();
+        $todosProductos = Producto::paraBot()->get();
+
+        // Solo mostrar productos configurados para la localidad del cliente
+        if ($client->localidad_id) {
+            $locCods = ProductoLocalidad::where('localidad_id', $client->localidad_id)->pluck('cod')->toArray();
+            $productos = $locCods ? $todosProductos->filter(fn($p) => in_array($p->cod, $locCods)) : $todosProductos;
+        } else {
+            $productos = $todosProductos;
+        }
 
         if ($productos->isEmpty()) {
             return 'No hay productos disponibles en este momento.';
