@@ -102,7 +102,7 @@
 </div>
 @endsection
 
-@push('scripts')
+@section('scripts')
 <script>
 const mensajeUrl   = '{{ route('admin.test_bot.mensaje') }}';
 const resetUrl     = '{{ route('admin.test_bot.reset') }}';
@@ -205,4 +205,4 @@ document.getElementById('btn-reset').addEventListener('click', async () => {
     chatMessages.innerHTML = '';
 });
 </script>
-@endpush
+@endsection
