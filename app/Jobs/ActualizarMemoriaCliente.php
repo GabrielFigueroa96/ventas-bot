@@ -37,7 +37,8 @@ class ActualizarMemoriaCliente implements ShouldQueue
 
         $systemPrompt = 'Sos un asistente que analiza conversaciones de clientes de una carnicería/distribuidora y extrae información útil para personalizar futuras interacciones. '
             . 'Devolvé ÚNICAMENTE una lista de puntos concisos (máx. 8), cada uno comenzando con "- ". '
-            . 'Incluí solo datos concretos y útiles: productos favoritos, cantidades habituales, días/frecuencia de pedido, forma de pago preferida, tipo de cliente (particular/revendedor), observaciones importantes. '
+            . 'Incluí solo datos concretos y útiles sobre EL CLIENTE: productos favoritos, cantidades habituales, frecuencia de pedido, forma de pago preferida, tipo de cliente (particular/revendedor), observaciones importantes. '
+            . 'NO incluyas información del negocio (días de reparto, zonas de entrega, horarios, precios) — esos datos los maneja el sistema por separado. '
             . 'No incluyas datos de dirección ni nombre (ya están en el perfil). '
             . 'Si hay una memoria previa, actualizá o confirmá los puntos existentes con la nueva información. '
             . 'Si no hay información útil nueva, devolvé la memoria previa sin cambios.';
