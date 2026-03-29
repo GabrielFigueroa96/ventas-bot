@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Carrito;
 use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\Factventas;
+use App\Models\Localidad;
 use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Pedidosia;
@@ -12,7 +14,7 @@ use App\Models\Vmayo;
 use App\Services\BotService;
 use App\Services\TenantManager;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -259,6 +261,103 @@ class AdminChatController extends Controller
             }
         }
         return $result;
+    }
+
+    // ── Test bot ──────────────────────────────────────────────────────────
+
+    public function testBot()
+    {
+        $localidades = Localidad::where('activo', true)->orderBy('nombre')->get();
+        $cliente     = $this->getTestCliente();
+        $mensajes    = Message::where('cliente_id', $cliente->id)->oldest('id')->get();
+        return view('admin.test-bot', compact('localidades', 'cliente', 'mensajes'));
+    }
+
+    public function testBotMensaje(Request $request)
+    {
+        $request->validate(['mensaje' => 'required|string|max:4096']);
+
+        $localidadId = $request->input('localidad_id');
+        $cliente     = $this->getTestCliente($localidadId);
+        $bot         = app(BotService::class);
+
+        // Guardar mensaje entrante
+        Message::create([
+            'cliente_id' => $cliente->id,
+            'message'    => $request->mensaje,
+            'direction'  => 'incoming',
+        ]);
+
+        // Procesar con el bot
+        try {
+            $respuesta = $bot->process($cliente, $request->mensaje);
+        } catch (\Throwable $e) {
+            Log::error("TestBot error: {$e->getMessage()}");
+            $respuesta = "❌ Error: {$e->getMessage()}";
+        }
+
+        // Guardar respuesta del bot
+        if ($respuesta) {
+            Message::create([
+                'cliente_id' => $cliente->id,
+                'message'    => $respuesta,
+                'direction'  => 'outgoing',
+            ]);
+        }
+
+        $mensajes = Message::where('cliente_id', $cliente->id)
+            ->oldest('id')
+            ->get(['id', 'message', 'direction', 'created_at']);
+
+        return response()->json([
+            'respuesta' => $respuesta,
+            'mensajes'  => $mensajes->map(fn($m) => [
+                'id'         => $m->id,
+                'message'    => $m->message,
+                'direction'  => $m->direction,
+                'created_at' => $m->created_at->format('H:i'),
+            ]),
+        ]);
+    }
+
+    public function testBotReset(Request $request)
+    {
+        $localidadId = $request->input('localidad_id');
+        $cliente     = $this->getTestCliente($localidadId);
+
+        // Borrar mensajes, carrito, caché
+        Message::where('cliente_id', $cliente->id)->delete();
+        Carrito::where('cliente_id', $cliente->id)->delete();
+        Cache::forget('fecha_reparto_elegida_' . $cliente->id);
+        Cache::forget('proxima_fecha_entrega_' . $cliente->id);
+        $cliente->update(['estado' => 'activo', 'modo' => 'bot', 'memoria_ia' => null]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function getTestCliente(?int $localidadId = null): Cliente
+    {
+        $tenantId = app(TenantManager::class)->get()?->id ?? 0;
+        $phone    = 'test_admin_' . $tenantId;
+
+        $cliente = Cliente::firstOrCreate(
+            ['phone' => $phone],
+            ['name' => '🧪 Test Admin', 'modo' => 'bot', 'estado' => 'activo']
+        );
+
+        // Actualizar localidad si se pasó una
+        if ($localidadId !== null) {
+            $loc = Localidad::find($localidadId);
+            if ($loc) {
+                $cliente->update([
+                    'localidad_id' => $loc->id,
+                    'localidad'    => $loc->nombre,
+                ]);
+                $cliente->refresh();
+            }
+        }
+
+        return $cliente;
     }
 
     private function loadFactventas($pedidos): \Illuminate\Support\Collection
