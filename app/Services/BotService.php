@@ -1820,7 +1820,9 @@ Herramientas disponibles:
 
         // Si ya tenemos tipo de entrega, calcular fecha y armar datos
         if ($tipoProvisto !== null) {
-            $fecha = Cache::get('proxima_fecha_entrega_' . $client->id)
+            $fecha = Cache::get('fecha_reparto_elegida_' . $client->id)
+                  ?? Cache::get('proxima_fecha_entrega_' . $client->id)
+                  ?? (!empty($args['fecha_entrega']) && \Carbon\Carbon::canBeCreatedFromFormat($args['fecha_entrega'], 'Y-m-d') ? $args['fecha_entrega'] : null)
                   ?? $this->getProximaFechaValida($client, $tipoProvisto, $empresa);
             $fechaLabel = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
 
@@ -1913,7 +1915,7 @@ Herramientas disponibles:
         $textoFecha = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
         $dia        = (int) \Carbon\Carbon::parse($fecha)->format('w');
 
-        // Verificar si hay productos en el carrito que no se reparten ese día
+        // Eliminar del carrito los productos que no se reparten ese día
         $carritoRegistro = $this->getCarrito($client);
         $noDisponibles   = [];
         if ($carritoRegistro && !empty($carritoRegistro->items) && $client->localidad_id) {
@@ -1921,17 +1923,24 @@ Herramientas disponibles:
             $disponibles    = $this->filtrarProductosPorDia($todosProductos, $dia, $client->localidad_id)
                 ->pluck('cod')->toArray();
 
+            $itemsFiltrados = [];
             foreach ($carritoRegistro->items as $item) {
                 if (isset($item['cod']) && !\in_array($item['cod'], $disponibles)) {
                     $noDisponibles[] = $item['des'];
+                } else {
+                    $itemsFiltrados[] = $item;
                 }
+            }
+
+            if (!empty($noDisponibles)) {
+                $carritoRegistro->update(['items' => $itemsFiltrados]);
             }
         }
 
         $avisoCarrito = '';
         if (!empty($noDisponibles)) {
             $lista        = implode(', ', $noDisponibles);
-            $avisoCarrito = " ADVERTENCIA: los siguientes productos del carrito NO se reparten ese día y deben quitarse: {$lista}.";
+            $avisoCarrito = " Se quitaron automáticamente del carrito los siguientes productos que no se reparten ese día: {$lista}. Informale al cliente.";
         }
 
         // Procesar con IA para que muestre los productos disponibles para ese día
