@@ -13,8 +13,7 @@
         padding: 0.5rem 0.75rem;
         border-radius: 0.75rem;
         font-size: 0.85rem;
-        line-height: 1.4;
-        white-space: pre-wrap;
+        line-height: 1.5;
         word-break: break-word;
     }
     .bubble-in {
@@ -35,6 +34,8 @@
         margin-top: 2px;
         text-align: right;
     }
+    .bubble em   { font-style: italic; }
+    .bubble code { background: rgba(0,0,0,.07); padding: 1px 4px; border-radius: 3px; font-size: .8em; }
 </style>
 @endpush
 
@@ -77,7 +78,7 @@
                 @foreach($mensajes as $m)
                 <div class="flex {{ $m->direction === 'incoming' ? 'justify-start' : 'justify-end' }}">
                     <div>
-                        <div class="bubble {{ $m->direction === 'incoming' ? 'bubble-in' : 'bubble-out' }}">{{ $m->message }}</div>
+                        <div class="bubble {{ $m->direction === 'incoming' ? 'bubble-in' : 'bubble-out' }}">{!! nl2br(e($m->message)) !!}</div>
                         <div class="bubble-time">{{ $m->created_at->format('H:i') }}</div>
                     </div>
                 </div>
@@ -130,7 +131,16 @@ function addBubble(text, direction, time) {
 }
 
 function escHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    // Escape HTML
+    s = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // WhatsApp markdown
+    s = s.replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>');
+    s = s.replace(/_([^_\n]+)_/g, '<em>$1</em>');
+    s = s.replace(/~([^~\n]+)~/g, '<s>$1</s>');
+    s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    // Newlines
+    s = s.replace(/\n/g, '<br>');
+    return s;
 }
 
 function getLocalidadId() {

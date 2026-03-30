@@ -2922,22 +2922,6 @@ Herramientas disponibles:
         }
     }
 
-    private function saveOutgoingMessage(int $clienteId, string $message): void
-    {
-        try {
-            \App\Models\Message::create([
-                'cliente_id' => $clienteId,
-                'message'    => $message,
-                'direction'  => 'outgoing',
-                'type'       => 'text',
-                'wamid'      => $this->lastOutgoingWamid ?? null,
-                'status'     => $this->lastOutgoingWamid ? 'sent' : null,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error("saveOutgoingMessage cliente {$clienteId}: {$e->getMessage()}");
-        }
-    }
-
     public function sendWhatsapp(string $phone, string $message): void
     {
         try {
@@ -2999,8 +2983,6 @@ Herramientas disponibles:
         } else {
             $this->sendWhatsapp($phone, $message);
         }
-
-        $this->saveOutgoingMessage($client->id, $message);
     }
 
     /**
