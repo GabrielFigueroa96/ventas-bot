@@ -62,6 +62,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::patch ('/recordatorios/{rec}/toggle',[RecordatorioController::class, 'toggle'])->name('recordatorios.toggle');
     Route::post  ('/recordatorios/{rec}/probar',[RecordatorioController::class, 'probar'])->name('recordatorios.probar');
 
+    // Flujo bot
+    Route::get('/flujo-bot', [AdminChatController::class, 'flujoBot'])->name('flujo_bot');
+
     // Test bot
     Route::get ('/test-bot',         [AdminChatController::class, 'testBot'])->name('test_bot');
     Route::post('/test-bot/mensaje', [AdminChatController::class, 'testBotMensaje'])->name('test_bot.mensaje');

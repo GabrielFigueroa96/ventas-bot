@@ -263,6 +263,13 @@ class AdminChatController extends Controller
         return $result;
     }
 
+    // ── Flujo bot ─────────────────────────────────────────────────────────
+
+    public function flujoBot()
+    {
+        return view('admin.flujo-bot');
+    }
+
     // ── Test bot ──────────────────────────────────────────────────────────
 
     public function testBot()
