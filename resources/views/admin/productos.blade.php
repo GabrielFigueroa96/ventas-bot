@@ -549,7 +549,7 @@ document.addEventListener('change', async function(e) {
     const cb = e.target.closest('.pl-loc-dia');
     if (cb) {
         const { cod, loc } = cb.dataset;
-        const container = cb.closest('[data-cod][data-loc]');
+        const container = cb.closest('div[data-cod][data-loc]');
         const checked = [...container.querySelectorAll('.pl-loc-dia:checked')].map(c => ({ dia: parseInt(c.value) }));
         const status = container.querySelector('.pl-dias-ok');
         try {

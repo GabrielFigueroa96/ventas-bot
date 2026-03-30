@@ -206,10 +206,14 @@ class ProductoController extends Controller
             'precio'       => 'nullable|numeric|min:0',
             'dias_reparto' => 'nullable|array',
         ]);
-        $pl->update([
-            'precio'       => isset($data['precio']) && $data['precio'] !== '' ? $data['precio'] : null,
-            'dias_reparto' => array_key_exists('dias_reparto', $data) ? ($data['dias_reparto'] ?? null) : null,
-        ]);
+        $update = [];
+        if (array_key_exists('precio', $data)) {
+            $update['precio'] = isset($data['precio']) && $data['precio'] !== '' ? $data['precio'] : null;
+        }
+        if (array_key_exists('dias_reparto', $data)) {
+            $update['dias_reparto'] = $data['dias_reparto'] ?? null;
+        }
+        $pl->update($update);
         $this->limpiarCacheProductos();
         return response()->json(['ok' => true]);
     }
