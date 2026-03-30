@@ -208,7 +208,7 @@ class ProductoController extends Controller
         ]);
         $pl->update([
             'precio'       => isset($data['precio']) && $data['precio'] !== '' ? $data['precio'] : null,
-            'dias_reparto' => !empty($data['dias_reparto']) ? $data['dias_reparto'] : null,
+            'dias_reparto' => array_key_exists('dias_reparto', $data) ? ($data['dias_reparto'] ?? null) : null,
         ]);
         $this->limpiarCacheProductos();
         return response()->json(['ok' => true]);

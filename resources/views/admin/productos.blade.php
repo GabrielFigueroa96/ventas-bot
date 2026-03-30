@@ -556,7 +556,7 @@ document.addEventListener('change', async function(e) {
             await fetch(`/admin/productos/${cod}/localidades/${loc}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                body: JSON.stringify({ dias_reparto: checked.length > 0 ? checked : null }),
+                body: JSON.stringify({ dias_reparto: checked }),
             });
             if (status) { status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 2000); }
         } catch (_) {}

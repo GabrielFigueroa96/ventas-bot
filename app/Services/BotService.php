@@ -387,8 +387,9 @@ class BotService
                 if (!$prodLocConfigs->has($p->cod)) return false; // no configurado para esta localidad
                 if ($diaElegido === null) return true;            // sin fecha elegida: mostrar todos los de la localidad
                 // Con fecha elegida: verificar restricción de días
-                $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto ?? null;
-                if (empty($diasCfg)) return true;                // sin restricción de días → disponible todos los días
+                $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
+                if ($diasCfg === null) return true;              // sin restricción → disponible todos los días
+                if (empty($diasCfg)) return false;               // array vacío → no disponible ningún día
                 $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
                 return in_array($diaElegido, $diasNum, true);
             });
@@ -717,7 +718,7 @@ FLUJO 1 — SUGERIR
 Activar cuando: el cliente saluda, no sabe qué quiere, pide recomendación o menciona una ocasión (asado, cumpleaños, etc.).
 Pasos:
 1. Si menciona una ocasión, calculá cantidades según las porciones estándar y mostrá solo productos de la lista disponible.
-2. Si no menciona ocasión, sugerí sus favoritos" . ($puedeMasVendidos ? " o los más populares" : "") . ".
+2. Si no menciona ocasión, sugerí sus favoritos que estén en la lista disponible (ignorá los que no estén en la lista)" . ($puedeMasVendidos ? " o los más populares" : "") . ".
 3. Ofrecé achuras cuando sea pertinente (una sola vez, sin insistir).
 " . ($puedePedir ? "4. Preguntá si agrega al carrito." : "4. Informá precios si el cliente los consulta. NO ofrezcas agregar al carrito ni procesar pedidos.") . "
 
@@ -1517,7 +1518,8 @@ Herramientas disponibles:
         return $productos->filter(function ($p) use ($dia, $configs) {
             if (!$configs->has($p->cod)) return true; // sin override → disponible siempre
             $diasCfg = $configs->get($p->cod)->dias_reparto;
-            if (empty($diasCfg)) return true;
+            if ($diasCfg === null) return true;       // sin restricción → disponible siempre
+            if (empty($diasCfg)) return false;        // array vacío → no disponible ningún día
             $diasNum = array_map(fn($d) => is_array($d) ? (int) $d['dia'] : (int) $d, $diasCfg);
             return \in_array($dia, $diasNum, true);
         });
