@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminChatController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\FlujoController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\LocalidadController;
 use App\Http\Controllers\RecordatorioController;
@@ -62,8 +63,17 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::patch ('/recordatorios/{rec}/toggle',[RecordatorioController::class, 'toggle'])->name('recordatorios.toggle');
     Route::post  ('/recordatorios/{rec}/probar',[RecordatorioController::class, 'probar'])->name('recordatorios.probar');
 
-    // Flujo bot
+    // Flujo bot (visualización)
     Route::get('/flujo-bot', [AdminChatController::class, 'flujoBot'])->name('flujo_bot');
+
+    // Editor de flujos
+    Route::get   ('/flujos',                   [FlujoController::class, 'index'])->name('flujos');
+    Route::get   ('/flujos/crear',             [FlujoController::class, 'crear'])->name('flujos.crear');
+    Route::post  ('/flujos',                   [FlujoController::class, 'store'])->name('flujos.store');
+    Route::get   ('/flujos/{flujo}/editar',    [FlujoController::class, 'editar'])->name('flujos.editar');
+    Route::put   ('/flujos/{flujo}',           [FlujoController::class, 'update'])->name('flujos.update');
+    Route::delete('/flujos/{flujo}',           [FlujoController::class, 'destroy'])->name('flujos.destroy');
+    Route::patch ('/flujos/{flujo}/activar',   [FlujoController::class, 'activar'])->name('flujos.activar');
 
     // Test bot
     Route::get ('/test-bot',         [AdminChatController::class, 'testBot'])->name('test_bot');
