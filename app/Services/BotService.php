@@ -6,11 +6,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use App\Models\Carrito;
-use App\Models\Empresa;
 use App\Models\IaEmpresa;
-use App\Models\IaFlujo;
 use App\Models\Factventas;
 use App\Models\Localidad;
 use App\Models\Pedidosia;
@@ -675,17 +672,6 @@ class BotService
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
         if ($instrucciones)      $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
 
-        // Instrucción extra del flujo activo (nodo IA del editor visual)
-        $flujoActivo = Cache::remember('flujo_activo', 60, fn() => IaFlujo::where('activo', true)->first());
-        if ($flujoActivo) {
-            $nodos = $flujoActivo->definicion['drawflow']['Home']['data'] ?? [];
-            foreach ($nodos as $nodo) {
-                if (($nodo['class'] ?? '') === 'ia' && !empty($nodo['data']['instruccion'])) {
-                    $configNegocio .= "\n\nInstrucción del flujo activo:\n" . trim($nodo['data']['instruccion']);
-                }
-            }
-        }
-
         $memoria = trim($cliente->memoria_ia ?? '');
         if ($memoria)            $configNegocio .= "\n\n📝 Lo que sabés de este cliente (usalo para personalizar):\n{$memoria}";
 
@@ -1232,6 +1218,39 @@ Herramientas disponibles:
                 'precio'=> $match->precio,
             ]);
 
+            // Verificar disponibilidad para la localidad y día de reparto elegido
+            if ($cantidad > 0 && $client->localidad_id && $localPrices->isNotEmpty()) {
+                // Producto no configurado para esta localidad → no disponible
+                if (!$localPrices->has($match->cod)) {
+                    $errores[] = "'{$match->des}' no está disponible para tu localidad. Solo podés pedir los productos del listado. Informale al cliente.";
+                    continue;
+                }
+                // Verificar disponibilidad para el día elegido
+                $fechaElegida = Cache::get('fecha_reparto_elegida_' . $client->id);
+                if ($fechaElegida) {
+                    $diaElegido = (int) \Carbon\Carbon::parse($fechaElegida)->format('w');
+                    $diasCfg    = $localPrices->get($match->cod)->dias_reparto;
+                    $disponible = true;
+                    if ($diasCfg !== null) {
+                        if (empty($diasCfg)) {
+                            $disponible = false;
+                        } else {
+                            $diasNum    = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                            $disponible = in_array($diaElegido, $diasNum, true);
+                        }
+                    }
+                    if (!$disponible) {
+                        $diasLabel   = IaEmpresa::DIAS_LABEL;
+                        $diasNombres = empty($diasCfg)
+                            ? 'ningún día de reparto'
+                            : implode(', ', array_map(fn($d) => $diasLabel[is_array($d) ? (int)$d['dia'] : (int)$d] ?? '?', $diasCfg));
+                        $textoFecha  = \Carbon\Carbon::parse($fechaElegida)->locale('es')->isoFormat('dddd D [de] MMMM');
+                        $errores[]   = "'{$match->des}' no se reparte para el {$textoFecha}. Disponible los: {$diasNombres}. Informale al cliente que no puede agregar ese producto para ese reparto.";
+                        continue;
+                    }
+                }
+            }
+
             // notas_ia con "precio fijo" → se cobra por unidad aunque tipo sea Peso
             $precioFijo = !empty($match->notas_ia) && stripos($match->notas_ia, 'precio fijo') !== false;
             $esPeso     = $match->tipo !== 'Unidad' && !$precioFijo;
@@ -1555,7 +1574,6 @@ Herramientas disponibles:
         }
 
         $lineas = [];
-        $total  = 0;
 
         foreach ($carrito as $item) {
             $esPeso = $item['tipo'] !== 'Unidad';
@@ -1569,10 +1587,9 @@ Herramientas disponibles:
             $precioFmt = $this->fmt($item['precio']);
             $netoFmt   = $this->fmt($item['neto']);
             $lineas[]  = "{$item['des']} {$cant} × {$precioFmt} \$ = {$netoFmt} \$";
-            $total    += $item['neto'];
         }
 
-        $lineas[] = 'TOTAL aprox.: $' . $this->fmt($total) . ' _(puede variar según el peso final)_';
+        $lineas[] = '[El total se muestra solo al confirmar el pedido. No informes el total al cliente en este paso.]';
 
         return implode("\n", $lineas);
     }
@@ -1937,14 +1954,14 @@ Herramientas disponibles:
             }
         }
 
-        $avisoCarrito = '';
-        if (!empty($noDisponibles)) {
-            $lista        = implode(', ', $noDisponibles);
-            $avisoCarrito = " Se quitaron automáticamente del carrito los siguientes productos que no se reparten ese día: {$lista}. Informale al cliente.";
+        // Vaciar el carrito completo al cambiar de día para que el cliente repida con los productos del día elegido
+        $carritoRegistro = $this->getCarrito($client);
+        if ($carritoRegistro) {
+            $carritoRegistro->delete();
         }
 
         // Procesar con IA para que muestre los productos disponibles para ese día
-        return $this->process($client, "El cliente eligió el reparto del {$textoFecha}.{$avisoCarrito} Mostrá los productos disponibles para ese día y preguntá qué quiere pedir.");
+        return $this->process($client, "El cliente eligió el reparto del {$textoFecha}. Se vació el carrito para que arme uno nuevo con los productos disponibles para ese día. Mostrá los productos disponibles y preguntá qué quiere pedir.");
     }
 
     private function handleEntregaSeleccionada($client, string $id): string
@@ -1953,7 +1970,9 @@ Herramientas disponibles:
         $empresa         = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
         $data = [
             'tipo_entrega'   => $tipoEntrega,
-            'fecha_entrega'  => $this->getProximaFechaValida($client, $tipoEntrega, $empresa),
+            'fecha_entrega'  => Cache::get('fecha_reparto_elegida_' . $client->id)
+                             ?? Cache::get('proxima_fecha_entrega_' . $client->id)
+                             ?? $this->getProximaFechaValida($client, $tipoEntrega, $empresa),
         ];
         if ($tipoEntrega === 'envio') {
             $data['calle']      = $client->calle      ?? '';
