@@ -75,6 +75,163 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::delete('/flujos/{flujo}',           [FlujoController::class, 'destroy'])->name('flujos.destroy');
     Route::patch ('/flujos/{flujo}/activar',   [FlujoController::class, 'activar'])->name('flujos.activar');
 
+    // ── SEED TEMPORAL: visitar una vez y eliminar ──────────────────────────
+    Route::get('/seed-flujo-principal', function () {
+        \App\Models\IaFlujo::query()->update(['activo' => false]);
+
+        $h = fn(string $tipo, string $color, string $icon, string $body) =>
+            "<div class='df-node'><div class='df-head' style='background:{$color}'><span>{$icon}</span><span>{$tipo}</span></div><div class='df-body'>{$body}</div></div>";
+
+        $badge  = fn(string $t) => "<span class='df-badge'>{$t}</span>";
+        $prev   = fn(string $t) => "<div class='df-preview'>{$t}</div>";
+        $prevMb = fn(string $t) => "<div class='df-preview mb-1'>{$t}</div>";
+        $label  = fn(string $t) => "<div class='df-output-label'>{$t}</div>";
+
+        $def = ['drawflow' => ['Home' => ['data' => [
+
+            '1' => ['id'=>1,'name'=>'inicio','class'=>'inicio',
+                'data'=>['tipo'=>'inicio','trigger'=>'siempre','keywords'=>''],
+                'html'=>$h('Inicio','#22c55e','🟢',$badge('Siempre')),
+                'typenode'=>false,'inputs'=>(object)[],'pos_x'=>50,'pos_y'=>250,
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'2','output'=>'input_1']]]]],
+
+            '2' => ['id'=>2,'name'=>'condicion','class'=>'condicion',
+                'data'=>['tipo'=>'condicion','campo'=>'es_cliente_nuevo','valor'=>'','etiq_si'=>'Nuevo','etiq_no'=>'Ya registrado'],
+                'html'=>$h('Condición','#f59e0b','🔀',$badge('es_cliente_nuevo').$label('Nuevo / Ya registrado')),
+                'typenode'=>false,'pos_x'=>280,'pos_y'=>250,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'1','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'3','output'=>'input_1']]],'output_2'=>['connections'=>[['node'=>'10','output'=>'input_1']]]]],
+
+            '3' => ['id'=>3,'name'=>'mensaje','class'=>'mensaje',
+                'data'=>['tipo'=>'mensaje','texto'=>'¡Hola! Soy el asistente del negocio. ¿Cuál es tu nombre?'],
+                'html'=>$h('Mensaje','#3b82f6','💬',$prev('¡Hola! ¿Cuál es tu nombre?')),
+                'typenode'=>false,'pos_x'=>510,'pos_y'=>80,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'2','input'=>'output_1'],['node'=>'4','input'=>'output_2']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'4','output'=>'input_1']]]]],
+
+            '4' => ['id'=>4,'name'=>'pregunta','class'=>'pregunta',
+                'data'=>['tipo'=>'pregunta','texto'=>'¿Tu nombre es [nombre]?','opciones'=>"Sí\nNo"],
+                'html'=>$h('Pregunta','#8b5cf6','❓',$prevMb('¿Tu nombre es [nombre]?').$badge('Sí').$badge('No')),
+                'typenode'=>false,'pos_x'=>740,'pos_y'=>80,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'3','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'5','output'=>'input_1']]],'output_2'=>['connections'=>[['node'=>'3','output'=>'input_1']]],'output_3'=>['connections'=>[]]]],
+
+            '5' => ['id'=>5,'name'=>'mensaje','class'=>'mensaje',
+                'data'=>['tipo'=>'mensaje','texto'=>'¿En qué localidad estás? (Repartimos en: [localidades])'],
+                'html'=>$h('Mensaje','#3b82f6','💬',$prev('¿En qué localidad estás?')),
+                'typenode'=>false,'pos_x'=>970,'pos_y'=>80,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'4','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'6','output'=>'input_1']]]]],
+
+            '6' => ['id'=>6,'name'=>'condicion','class'=>'condicion',
+                'data'=>['tipo'=>'condicion','campo'=>'tiene_localidad','valor'=>'','etiq_si'=>'Con reparto','etiq_no'=>'Sin reparto'],
+                'html'=>$h('Condición','#f59e0b','🔀',$badge('tiene_localidad').$label('Con reparto / Sin reparto')),
+                'typenode'=>false,'pos_x'=>1200,'pos_y'=>80,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'5','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'7','output'=>'input_1']]],'output_2'=>['connections'=>[['node'=>'12','output'=>'input_1']]]]],
+
+            '7' => ['id'=>7,'name'=>'mensaje','class'=>'mensaje',
+                'data'=>['tipo'=>'mensaje','texto'=>'¿Cuál es tu calle y número de entrega? (ej: Italia 1234)'],
+                'html'=>$h('Mensaje','#3b82f6','💬',$prev('¿Cuál es tu calle y número?')),
+                'typenode'=>false,'pos_x'=>1430,'pos_y'=>80,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'6','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'8','output'=>'input_1']]]]],
+
+            '8' => ['id'=>8,'name'=>'pregunta','class'=>'pregunta',
+                'data'=>['tipo'=>'pregunta','texto'=>'¿Tu dirección es [dirección]?','opciones'=>"Sí\nNo, corregir"],
+                'html'=>$h('Pregunta','#8b5cf6','❓',$prevMb('¿Tu dirección es [dirección]?').$badge('Sí').$badge('No, corregir')),
+                'typenode'=>false,'pos_x'=>1660,'pos_y'=>80,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'7','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'9','output'=>'input_1']]],'output_2'=>['connections'=>[['node'=>'7','output'=>'input_1']]],'output_3'=>['connections'=>[]]]],
+
+            '9' => ['id'=>9,'name'=>'mensaje','class'=>'mensaje',
+                'data'=>['tipo'=>'mensaje','texto'=>'¿Tenés algún dato extra? (piso, depto, referencia) — respondé no para omitir.'],
+                'html'=>$h('Mensaje','#3b82f6','💬',$prev('¿Dato extra? (piso, depto...)')),
+                'typenode'=>false,'pos_x'=>1890,'pos_y'=>80,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'8','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'12','output'=>'input_1']]]]],
+
+            '10' => ['id'=>10,'name'=>'condicion','class'=>'condicion',
+                'data'=>['tipo'=>'condicion','campo'=>'texto_contiene','valor'=>'humano','etiq_si'=>'Modo humano','etiq_no'=>'Modo bot'],
+                'html'=>$h('Condición','#f59e0b','🔀',$badge('modo_humano').$label('Humano / Bot')),
+                'typenode'=>false,'pos_x'=>510,'pos_y'=>420,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'2','input'=>'output_2']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'11','output'=>'input_1']]],'output_2'=>['connections'=>[['node'=>'12','output'=>'input_1']]]]],
+
+            '11' => ['id'=>11,'name'=>'fin','class'=>'fin',
+                'data'=>['tipo'=>'fin'],
+                'html'=>$h('Fin','#ef4444','🔴',$badge('Operador toma el control')),
+                'typenode'=>false,'pos_x'=>740,'pos_y'=>320,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'10','input'=>'output_1']]]],
+                'outputs'=>(object)[]],
+
+            '12' => ['id'=>12,'name'=>'ia','class'=>'ia',
+                'data'=>['tipo'=>'ia','instruccion'=>''],
+                'html'=>$h('IA','#7c3aed','🤖',$badge('Respuesta libre de IA')),
+                'typenode'=>false,'pos_x'=>740,'pos_y'=>520,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'10','input'=>'output_2'],['node'=>'6','input'=>'output_2'],['node'=>'9','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'13','output'=>'input_1']]]]],
+
+            '13' => ['id'=>13,'name'=>'condicion','class'=>'condicion',
+                'data'=>['tipo'=>'condicion','campo'=>'tiene_carrito','valor'=>'','etiq_si'=>'Con carrito','etiq_no'=>'Sin carrito'],
+                'html'=>$h('Condición','#f59e0b','🔀',$badge('tiene_carrito').$label('Con carrito / Sin carrito')),
+                'typenode'=>false,'pos_x'=>970,'pos_y'=>520,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'12','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'16','output'=>'input_1']]],'output_2'=>['connections'=>[['node'=>'14','output'=>'input_1']]]]],
+
+            '14' => ['id'=>14,'name'=>'herramienta','class'=>'herramienta',
+                'data'=>['tipo'=>'herramienta','tool'=>'elegir_reparto'],
+                'html'=>$h('Herramienta','#f97316','🛠️',$badge('elegir_reparto')),
+                'typenode'=>false,'pos_x'=>1200,'pos_y'=>420,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'13','input'=>'output_2']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'15','output'=>'input_1']]]]],
+
+            '15' => ['id'=>15,'name'=>'herramienta','class'=>'herramienta',
+                'data'=>['tipo'=>'herramienta','tool'=>'ver_precios'],
+                'html'=>$h('Herramienta','#f97316','🛠️',$badge('ver_precios')),
+                'typenode'=>false,'pos_x'=>1200,'pos_y'=>620,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'14','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'16','output'=>'input_1']]]]],
+
+            '16' => ['id'=>16,'name'=>'herramienta','class'=>'herramienta',
+                'data'=>['tipo'=>'herramienta','tool'=>'agregar_al_carrito'],
+                'html'=>$h('Herramienta','#f97316','🛠️',$badge('agregar_al_carrito')),
+                'typenode'=>false,'pos_x'=>1430,'pos_y'=>520,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'13','input'=>'output_1'],['node'=>'15','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'17','output'=>'input_1']]]]],
+
+            '17' => ['id'=>17,'name'=>'herramienta','class'=>'herramienta',
+                'data'=>['tipo'=>'herramienta','tool'=>'ver_carrito'],
+                'html'=>$h('Herramienta','#f97316','🛠️',$badge('ver_carrito')),
+                'typenode'=>false,'pos_x'=>1660,'pos_y'=>520,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'16','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'18','output'=>'input_1']]]]],
+
+            '18' => ['id'=>18,'name'=>'herramienta','class'=>'herramienta',
+                'data'=>['tipo'=>'herramienta','tool'=>'crear_pedido'],
+                'html'=>$h('Herramienta','#f97316','🛠️',$badge('crear_pedido')),
+                'typenode'=>false,'pos_x'=>1890,'pos_y'=>520,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'17','input'=>'output_1']]]],
+                'outputs'=>['output_1'=>['connections'=>[['node'=>'19','output'=>'input_1']]]]],
+
+            '19' => ['id'=>19,'name'=>'fin','class'=>'fin',
+                'data'=>['tipo'=>'fin'],
+                'html'=>$h('Fin','#ef4444','🔴',$badge('Pedido confirmado')),
+                'typenode'=>false,'pos_x'=>2120,'pos_y'=>520,
+                'inputs'=>['input_1'=>['connections'=>[['node'=>'18','input'=>'output_1']]]],
+                'outputs'=>(object)[]],
+        ]]]];
+
+        \App\Models\IaFlujo::create([
+            'nombre'     => 'Flujo Principal',
+            'definicion' => $def,
+            'activo'     => true,
+        ]);
+
+        return response()->json(['ok' => true, 'msg' => 'Flujo creado. Eliminá esta ruta de web.php.']);
+    });
+    // ── FIN SEED TEMPORAL ────────────────────────────────────────────────────
+
     // Test bot
     Route::get ('/test-bot',         [AdminChatController::class, 'testBot'])->name('test_bot');
     Route::post('/test-bot/mensaje', [AdminChatController::class, 'testBotMensaje'])->name('test_bot.mensaje');

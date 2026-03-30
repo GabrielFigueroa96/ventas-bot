@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Models\Carrito;
 use App\Models\Empresa;
 use App\Models\IaEmpresa;
+use App\Models\IaFlujo;
 use App\Models\Factventas;
 use App\Models\Localidad;
 use App\Models\Pedidosia;
@@ -672,6 +673,17 @@ class BotService
 
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
         if ($instrucciones)      $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
+
+        // Instrucción extra del flujo activo (nodo IA del editor visual)
+        $flujoActivo = Cache::remember('flujo_activo', 60, fn() => IaFlujo::where('activo', true)->first());
+        if ($flujoActivo) {
+            $nodos = $flujoActivo->definicion['drawflow']['Home']['data'] ?? [];
+            foreach ($nodos as $nodo) {
+                if (($nodo['class'] ?? '') === 'ia' && !empty($nodo['data']['instruccion'])) {
+                    $configNegocio .= "\n\nInstrucción del flujo activo:\n" . trim($nodo['data']['instruccion']);
+                }
+            }
+        }
 
         $memoria = trim($cliente->memoria_ia ?? '');
         if ($memoria)            $configNegocio .= "\n\n📝 Lo que sabés de este cliente (usalo para personalizar):\n{$memoria}";

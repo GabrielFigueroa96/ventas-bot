@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\IaFlujo;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache as CacheFacade;
 
 class FlujoController extends Controller
 {
@@ -40,6 +41,7 @@ class FlujoController extends Controller
             'nombre'     => $request->nombre,
             'definicion' => $request->definicion ? json_decode($request->definicion, true) : null,
         ]);
+        CacheFacade::forget('flujo_activo');
         return response()->json(['ok' => true]);
     }
 
