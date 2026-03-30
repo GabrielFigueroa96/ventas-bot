@@ -787,6 +787,10 @@ Herramientas disponibles:
                 // Eliminar frases con precio para que GPT no las repita ni use precios viejos
                 $content = preg_replace('/cuesta\s+\$[\d\.,]+[^.]*\./i', 'ya fue informado al cliente.', $content);
                 $content = preg_replace('/\$[\d\.,]+\s*(?:\/\s*(?:kg|u|unidad|por\s+\w+))?/i', '', $content);
+                // Eliminar frases sobre días de reparto / zonas (pueden estar desactualizadas)
+                $content = preg_replace('/repartimos\s+(?:en\s+\S+\s+)?(?:los\s+)?(?:días?\s+)?[\w,\sy]+\./iu', '[días de reparto ya informados]', $content);
+                $content = preg_replace('/(?:solo|únicamente|solamente)\s+(?:los\s+)?(?:lunes|martes|miércoles|jueves|viernes|sábado|domingo)[^\n.]*/iu', '[días de reparto ya informados]', $content);
+                $content = preg_replace('/(?:no\s+repartimos|no\s+hay\s+reparto|sin\s+reparto)[^\n.]*/iu', '[información de reparto ya informada]', $content);
             }
             $messages[] = [
                 'role'    => $msg->direction === 'incoming' ? 'user' : 'assistant',
