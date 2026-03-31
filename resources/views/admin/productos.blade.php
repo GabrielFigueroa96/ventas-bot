@@ -16,8 +16,8 @@
 
         <select name="catalogo" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 w-full sm:w-auto">
             <option value="">Catálogo: todos</option>
-            <option value="si" @selected(request('catalogo') === 'si')>En catálogo: sí</option>
-            <option value="no" @selected(request('catalogo') === 'no')>En catálogo: no</option>
+            <option value="si" @selected(request('catalogo', 'si') === 'si')>En catálogo: sí</option>
+            <option value="no" @selected(request('catalogo', 'si') === 'no')>En catálogo: no</option>
         </select>
 
         <select name="disponible" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 w-full sm:w-auto">
@@ -65,10 +65,23 @@
             <div class="flex-1 min-w-0">
                 <p class="font-semibold text-gray-800 text-sm leading-tight truncate">{{ $producto->des }}</p>
                 <p class="text-xs text-gray-400 mt-0.5">{{ $producto->desgrupo }} · {{ $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg' }}</p>
+                @if($enCatalogo && $ia->localidades->isNotEmpty())
+                <div class="flex flex-wrap gap-1 mt-1">
+                    @foreach($ia->localidades as $pl)
+                    <span class="text-xs bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-full leading-none">{{ $pl->localidad->nombre }}</span>
+                    @endforeach
+                </div>
+                @endif
             </div>
 
             <div class="flex items-center gap-1 shrink-0">
                 @if($enCatalogo)
+                    <button onclick="toggleDisponible('{{ $cod }}', this)"
+                        data-disponible="{{ $ia->disponible ? '1' : '0' }}"
+                        class="text-xs px-2.5 py-1 rounded-full transition-colors font-medium
+                            {{ $ia->disponible ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400' }}">
+                        {{ $ia->disponible ? '👁' : '🚫' }}
+                    </button>
                     <button onclick="quitarCatalogo('{{ $cod }}', this)"
                         class="text-xs bg-green-100 text-green-700 hover:bg-red-50 hover:text-red-600 px-2.5 py-1 rounded-full transition-colors font-medium">
                         ✓ Cat.
@@ -84,27 +97,6 @@
                     </button>
                 @endif
             </div>
-        </div>
-
-        {{-- Precios --}}
-        <div class="flex items-center gap-3 px-3 pb-3 border-t border-gray-50 pt-2">
-            <span class="text-xs text-gray-400">Sistema: <span class="font-medium text-gray-600 tabular-nums">${{ number_format($producto->PRE, 2, ',', '.') }}</span></span>
-            @if($enCatalogo)
-            <div class="flex items-center gap-1 text-xs">
-                <span class="text-gray-400">Bot: $</span>
-                <input type="number" step="0.01" min="0"
-                    value="{{ number_format($ia->precio, 2, '.', '') }}"
-                    data-url="{{ route('admin.productos.precio', $cod) }}"
-                    class="precio-input w-20 border border-gray-200 rounded px-2 py-0.5 text-right text-xs tabular-nums focus:outline-none focus:ring-2 focus:ring-red-300">
-                <span class="precio-status text-green-500 hidden">✓</span>
-            </div>
-            <button onclick="toggleDisponible('{{ $cod }}', this)"
-                data-disponible="{{ $ia->disponible ? '1' : '0' }}"
-                class="ml-auto text-xs px-2.5 py-1 rounded-full transition-colors font-medium
-                    {{ $ia->disponible ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400' }}">
-                {{ $ia->disponible ? '👁 Visible' : '🚫 Oculto' }}
-            </button>
-            @endif
         </div>
 
         {{-- Panel colapsable --}}
@@ -171,8 +163,7 @@
             <tr>
                 <th class="px-3 py-3 text-left w-12"></th>
                 <th class="px-3 py-3 text-left">Producto</th>
-                <th class="px-3 py-3 text-right w-28">Precio sistema</th>
-                <th class="px-3 py-3 text-right w-32">Precio bot</th>
+                <th class="px-3 py-3 text-left">Localidades</th>
                 <th class="px-3 py-3 text-center w-24">Catálogo</th>
                 <th class="px-3 py-3 text-center w-24">Visible</th>
                 <th class="px-3 py-3 w-10"></th>
@@ -199,21 +190,15 @@
                 <p class="font-medium text-gray-800 leading-tight">{{ $producto->des }}</p>
                 <p class="text-xs text-gray-400">{{ $producto->desgrupo }} · {{ $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg' }}</p>
             </td>
-            <td class="px-3 py-2 text-right text-gray-500 tabular-nums">
-                ${{ number_format($producto->PRE, 2, ',', '.') }}
-            </td>
-            <td class="px-3 py-2 text-right tabular-nums">
-                @if($enCatalogo)
-                    <div class="flex items-center justify-end gap-1">
-                        <span class="text-gray-400 text-xs">$</span>
-                        <input type="number" step="0.01" min="0"
-                            value="{{ number_format($ia->precio, 2, '.', '') }}"
-                            data-url="{{ route('admin.productos.precio', $cod) }}"
-                            class="precio-input w-24 border border-gray-200 rounded px-2 py-0.5 text-right text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
-                        <span class="precio-status text-green-500 text-xs hidden">✓</span>
+            <td class="px-3 py-2">
+                @if($enCatalogo && $ia->localidades->isNotEmpty())
+                    <div class="flex flex-wrap gap-1">
+                        @foreach($ia->localidades as $pl)
+                        <span class="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full leading-none">{{ $pl->localidad->nombre }}</span>
+                        @endforeach
                     </div>
                 @else
-                    <span class="text-gray-300">—</span>
+                    <span class="text-gray-300 text-xs">—</span>
                 @endif
             </td>
             <td class="px-3 py-2 text-center">
@@ -254,7 +239,7 @@
         {{-- Fila detalle colapsable (desktop) --}}
         @if($enCatalogo)
         <tr id="row-{{ $cod }}" class="hidden bg-gray-50">
-            <td colspan="7" class="px-4 py-3">
+            <td colspan="5" class="px-4 py-3">
                 <div class="grid grid-cols-3 gap-3">
                     <div class="relative">
                         <div class="flex items-center justify-between mb-1">
@@ -308,7 +293,7 @@
 
         @empty
         <tr>
-            <td colspan="7" class="px-4 py-8 text-center text-sm text-gray-400">No hay productos con esos filtros.</td>
+            <td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">No hay productos con esos filtros.</td>
         </tr>
         @endforelse
         </tbody>
@@ -563,21 +548,5 @@ document.addEventListener('change', async function(e) {
     }
 });
 
-document.querySelectorAll('.precio-input').forEach(input => {
-    let original = input.value;
-    input.addEventListener('blur', async () => {
-        if (input.value === original) return;
-        const status = input.parentElement.querySelector('.precio-status');
-        try {
-            await fetch(input.dataset.url, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                body: JSON.stringify({ precio: input.value }),
-            });
-            original = input.value;
-            if (status) { status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 2000); }
-        } catch (_) {}
-    });
-});
 </script>
 @endsection

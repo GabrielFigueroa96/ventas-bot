@@ -17,7 +17,7 @@ class ProductoController extends Controller
     public function index(Request $request)
     {
         $search     = $request->input('search');
-        $filtroCat  = $request->input('catalogo');   // 'si' | 'no' | null
+        $filtroCat  = $request->input('catalogo', 'si');   // 'si' | 'no' | null
         $filtroDisp = $request->input('disponible'); // 'si' | 'no' | null
 
         $productos = Producto::with(['iaProducto', 'iaProducto.localidades.localidad'])
