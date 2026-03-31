@@ -7,7 +7,11 @@
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
+        width: 100%;
     }
+    .msg-row { width: 100%; }
+    .msg-row-out { display: flex; justify-content: flex-end; }
+    .msg-row-in  { display: flex; justify-content: flex-start; }
     .bubble {
         max-width: 75%;
         padding: 0.5rem 0.75rem;
@@ -17,13 +21,11 @@
         word-break: break-word;
     }
     .bubble-in {
-        align-self: flex-start;
         background: #f0f0f0;
         color: #111;
         border-bottom-left-radius: 2px;
     }
     .bubble-out {
-        align-self: flex-end;
         background: #dcf8c6;
         color: #111;
         border-bottom-right-radius: 2px;
@@ -32,8 +34,9 @@
         font-size: 0.65rem;
         color: #999;
         margin-top: 2px;
-        text-align: right;
     }
+    .msg-row-out .bubble-time { text-align: right; }
+    .msg-row-in  .bubble-time { text-align: left; }
     .bubble em   { font-style: italic; }
     .bubble code { background: rgba(0,0,0,.07); padding: 1px 4px; border-radius: 3px; font-size: .8em; }
 </style>
@@ -76,7 +79,7 @@
         <div id="chat-scroll" class="flex-1 overflow-y-auto p-4">
             <div id="chat-messages">
                 @foreach($mensajes as $m)
-                <div class="flex {{ $m->direction === 'incoming' ? 'justify-start' : 'justify-end' }}">
+                <div class="msg-row {{ $m->direction === 'incoming' ? 'msg-row-in' : 'msg-row-out' }}">
                     <div>
                         <div class="bubble {{ $m->direction === 'incoming' ? 'bubble-in' : 'bubble-out' }}">{!! nl2br(e($m->message)) !!}</div>
                         <div class="bubble-time">{{ $m->created_at->format('H:i') }}</div>
@@ -120,7 +123,7 @@ scrollBottom();
 
 function addBubble(text, direction, time) {
     const wrap = document.createElement('div');
-    wrap.className = 'flex ' + (direction === 'incoming' ? 'justify-start' : 'justify-end');
+    wrap.className = 'msg-row ' + (direction === 'incoming' ? 'msg-row-in' : 'msg-row-out');
     wrap.innerHTML = `
         <div>
             <div class="bubble ${direction === 'incoming' ? 'bubble-in' : 'bubble-out'}">${escHtml(text)}</div>

@@ -21,7 +21,8 @@
         html.sb-pre-collapsed #sidebar .sb-section { display: none; }
         html.sb-pre-collapsed #sidebar .nav-link { flex-direction: column; justify-content: center; padding: 8px 0; gap: 0; }
         html.sb-pre-collapsed #sidebar .nav-link svg { width: 20px; height: 20px; }
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        #sidebar { overflow: hidden; }
 
         .nav-link {
             display: flex;

@@ -49,9 +49,13 @@ class SeguimientoClientes extends Command
             ->with('cliente')
             ->get();
 
+        $estadosOcupados = ['esperando_nombre', 'verificando_nombre', 'esperando_localidad', 'verificando_localidad', 'esperando_calle', 'verificando_calle', 'esperando_dato_extra', 'confirmando_entrega', 'confirmando_pago', 'confirmando_final', 'eligiendo_reparto'];
+
         foreach ($carritos as $carrito) {
             $cliente = $carrito->cliente;
             if (!$cliente || $cliente->estado === 'humano' || $cliente->modo === 'humano') continue;
+            // No interrumpir si está en medio de un flujo activo
+            if (in_array($cliente->estado, $estadosOcupados, true)) continue;
 
             $yaEnviado = Seguimiento::where('cliente_id', $cliente->id)
                 ->where('tipo', 'carrito_abandonado')
@@ -151,6 +155,7 @@ class SeguimientoClientes extends Command
         $nombre   = $cliente->name ?? 'cliente';
         $codcli   = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
         $favorito = Pedido::where('codcli', $codcli)
+            ->where('fecha', '>=', now()->subMonths(4)->format('Y-m-d'))
             ->selectRaw('descrip, COUNT(*) as veces')
             ->groupBy('descrip')
             ->orderByDesc('veces')
@@ -170,6 +175,7 @@ class SeguimientoClientes extends Command
         $nombre   = $cliente->name ?? 'cliente';
         $codcli   = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
         $favorito = Pedido::where('codcli', $codcli)
+            ->where('fecha', '>=', now()->subMonths(4)->format('Y-m-d'))
             ->selectRaw('descrip, COUNT(*) as veces')
             ->groupBy('descrip')
             ->orderByDesc('veces')

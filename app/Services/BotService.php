@@ -553,11 +553,48 @@ class BotService
         $proximoRepartoTexto = '';
         $proximoRepartoFecha = '';
         $corteAviso          = '';
+        $fechasCortadasAviso = []; // días con reparto que cerraron el pedido pero otros siguen abiertos
 
         if (!empty($fechasDisponibles)) {
             $primero             = $fechasDisponibles[0];
             $proximoRepartoFecha = $primero['fecha'];
             $proximoRepartoTexto = $primero['texto'];
+
+            // Detectar días de reparto próximos (7 días) que NO están disponibles por corte
+            if (!empty($diasReparto)) {
+                $fechasDisponiblesSet = collect($fechasDisponibles)->pluck('fecha')->flip();
+                $diasConfigMap = collect($diasConfig)->keyBy('dia');
+                for ($i = 0; $i <= 7; $i++) {
+                    $candidato = now()->addDays($i);
+                    $diaSemana = (int) $candidato->format('w');
+                    $fechaStr  = $candidato->format('Y-m-d');
+                    if (!\in_array($diaSemana, $diasReparto, true)) continue;
+                    if (\in_array($fechaStr, $fechasCerradas, true)) continue;
+                    if ($fechasDisponiblesSet->has($fechaStr)) continue; // ya disponible, ok
+                    // Está en diasReparto pero no en fechasDisponibles → pasó el corte
+                    $cfg = $diasConfigMap->get($diaSemana);
+                    $tieneHasta = isset($cfg['hasta_dia']) && $cfg['hasta_dia'] !== null && $cfg['hasta_dia'] !== '';
+                    if ($tieneHasta) {
+                        $hastaNum  = (int) $cfg['hasta_dia'];
+                        $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
+                        $diff      = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
+                        $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
+                        if (now()->gt($fechaCierre)) {
+                            $fechasCortadasAviso[] = "el reparto del "
+                                . $candidato->locale('es')->isoFormat('dddd D [de] MMMM')
+                                . " cerró el {$diasLabel[$hastaNum]} a las "
+                                . \Carbon\Carbon::today()->setTimeFromTimeString($hastaHora)->format('H:i') . "hs";
+                        }
+                    } elseif (!$tieneHasta && $globalHoraCorte && $i === 0) {
+                        $corteHoy = \Carbon\Carbon::today()->setTimeFromTimeString($globalHoraCorte);
+                        if (now()->gt($corteHoy)) {
+                            $fechasCortadasAviso[] = "el reparto de hoy ("
+                                . $candidato->locale('es')->isoFormat('dddd D [de] MMMM')
+                                . ") cerró a las " . \Carbon\Carbon::today()->setTimeFromTimeString($globalHoraCorte)->format('H:i') . "hs";
+                        }
+                    }
+                }
+            }
         } elseif (!empty($diasReparto)) {
             // Hay días configurados pero ninguno disponible ahora — determinar si es por cierre o por apertura futura
             $diasConfigMap = collect($diasConfig)->keyBy('dia');
@@ -663,6 +700,9 @@ class BotService
         }
 
         if ($corteAviso)     $configNegocio .= "\n\n{$corteAviso}";
+        if (!empty($fechasCortadasAviso)) {
+            $configNegocio .= "\n⚠️ PEDIDOS CERRADOS (ventan ya pasó): " . implode('; ', $fechasCortadasAviso) . ". Si el cliente pregunta por ese día, explicale que el pedido para ese reparto ya está cerrado, pero puede hacer su pedido para los repartos disponibles.";
+        }
         if ($puedePedir && empty($fechasDisponibles) && !empty($diasReparto)) {
             $configNegocio .= "\n\nIMPORTANTE: En este momento NO hay repartos disponibles para tomar pedidos. No podés reservar ni armar pedidos hasta que abra la próxima ventana de pedidos. Si el cliente pregunta cuándo puede pedir, indicale la información del aviso de cierre/apertura de arriba.";
         }
@@ -779,6 +819,17 @@ Herramientas disponibles:
 " : "") . "- Si recibís una imagen, describila e intentá relacionarla con un pedido.",
         ];
 
+        // Productos que están en el catálogo pero NO disponibles hoy (por día o localidad)
+        // Se usan para limpiar el historial y que GPT no los sugiera
+        $disponiblesNorm = $productos->map(fn($p) => mb_strtolower(trim(\Illuminate\Support\Str::ascii($p->des))))->flip();
+        $noDisponiblesPattern = $todosProductos
+            ->filter(fn($p) => !$disponiblesNorm->has(mb_strtolower(trim(\Illuminate\Support\Str::ascii($p->des)))))
+            ->sortByDesc(fn($p) => mb_strlen($p->des)) // más largo primero para evitar match parcial
+            ->pluck('des')
+            ->filter(fn($n) => mb_strlen(trim($n)) >= 4) // ignorar nombres muy cortos
+            ->map(fn($n) => preg_quote($n, '/'))
+            ->implode('|');
+
         foreach ($history as $msg) {
             $content = $msg->message ?: '(imagen)';
             // En mensajes del bot, borrar precios de productos (pueden estar desactualizados)
@@ -787,6 +838,10 @@ Herramientas disponibles:
                 // Eliminar frases con precio para que GPT no las repita ni use precios viejos
                 $content = preg_replace('/cuesta\s+\$[\d\.,]+[^.]*\./i', 'ya fue informado al cliente.', $content);
                 $content = preg_replace('/\$[\d\.,]+\s*(?:\/\s*(?:kg|u|unidad|por\s+\w+))?/i', '', $content);
+                // Reemplazar nombres de productos que ya no están disponibles hoy
+                if ($noDisponiblesPattern !== '') {
+                    $content = preg_replace('/(?:' . $noDisponiblesPattern . ')/iu', '[producto no disponible hoy]', $content);
+                }
                 // Eliminar cualquier oración que mezcle días de la semana con palabras de reparto/pedido
                 // (pueden estar desactualizadas — la info correcta siempre viene del system prompt)
                 $diasPattern = 'lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo';
