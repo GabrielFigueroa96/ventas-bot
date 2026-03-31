@@ -1439,7 +1439,7 @@ Herramientas disponibles:
         $resultado = $this->formatCarrito($registro->items);
 
         // Validar existencia y precios actuales
-        $alertas = $this->validarCarrito($registro->items, $localPrices);
+        $alertas = $this->validarCarrito($registro->items, $localPrices, $client);
         if (!empty($alertas)) {
             $resultado .= "\n\n" . implode("\n", $alertas);
             $resultado .= "\n\nPodés actualizar los precios o eliminar los productos con problema antes de confirmar.";
@@ -1693,7 +1693,7 @@ Herramientas disponibles:
         return $alertas;
     }
 
-    private function validarCarrito(array $carrito, ?\Illuminate\Support\Collection $localPrices = null): array
+    private function validarCarrito(array $carrito, ?\Illuminate\Support\Collection $localPrices = null, $client = null): array
     {
         if (empty($carrito)) {
             return [];
@@ -1706,11 +1706,32 @@ Herramientas disponibles:
             ->get()
             ->keyBy('cod');
 
+        $fechaElegida = $client ? Cache::get('fecha_reparto_elegida_' . $client->id) : null;
+        $diaElegido   = $fechaElegida ? (int) \Carbon\Carbon::parse($fechaElegida)->format('w') : null;
+        $diasLabel    = IaEmpresa::DIAS_LABEL;
+
         $alertas = [];
         foreach ($carrito as $item) {
             if (!isset($item['cod']) || !$productosActuales->has($item['cod'])) {
                 $alertas[] = "❌ {$item['des']}: producto no disponible actualmente";
                 continue;
+            }
+
+            // Validar disponibilidad para el día de reparto elegido
+            if ($diaElegido !== null && $localPrices->isNotEmpty() && $localPrices->has($item['cod'])) {
+                $diasCfg = $localPrices->get($item['cod'])->dias_reparto;
+                if ($diasCfg !== null) {
+                    $diasNum    = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                    $disponible = !empty($diasNum) && in_array($diaElegido, $diasNum, true);
+                    if (!$disponible) {
+                        $textoFecha  = \Carbon\Carbon::parse($fechaElegida)->locale('es')->isoFormat('dddd D [de] MMMM');
+                        $diasNombres = empty($diasNum)
+                            ? 'ningún día'
+                            : implode(', ', array_map(fn($d) => $diasLabel[$d] ?? '?', $diasNum));
+                        $alertas[] = "❌ {$item['des']}: no se reparte el {$textoFecha}. Disponible los: {$diasNombres}. Eliminalo del carrito antes de confirmar.";
+                        continue;
+                    }
+                }
             }
 
             $preActual = $this->precioFinal((float) $productosActuales[$item['cod']]->precio, $item['cod'], $localPrices);
@@ -2212,6 +2233,19 @@ Herramientas disponibles:
                 continue;
             }
 
+            // Verificar disponibilidad para el día de entrega
+            if ($localPrices->isNotEmpty() && $localPrices->has($item['cod'])) {
+                $diasCfg = $localPrices->get($item['cod'])->dias_reparto;
+                if ($diasCfg !== null) {
+                    $diaEntrega = (int) \Carbon\Carbon::parse($fecha)->format('w');
+                    $diasNum    = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                    if (!empty($diasNum) && !in_array($diaEntrega, $diasNum, true)) {
+                        $omitidos[] = $item['des'] . ' (no disponible para ese día de reparto)';
+                        continue;
+                    }
+                }
+            }
+
             // Verificar si el precio base cambió desde que se armó el carrito
             $preConExtra = $this->precioFinal((float) $precioActual[$item['cod']]->precio, $item['cod'], $localPrices);
             if (abs($preConExtra - $precio) > 0.01) {
@@ -2222,6 +2256,10 @@ Herramientas disponibles:
             }
 
             $itemsParaInsertar[] = compact('item', 'precio', 'neto');
+        }
+
+        if (empty($itemsParaInsertar)) {
+            return 'No hay productos disponibles para ese día de reparto. ' . implode(', ', $omitidos) . '. Revisá el carrito antes de confirmar.';
         }
 
         // Todo en una sola transacción: asignación de nro, items, cabecera y limpieza de carrito

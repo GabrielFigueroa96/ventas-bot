@@ -495,9 +495,8 @@ class AdminController extends Controller
             'notif_estado_template'  => $request->input('notif_estado_template'),
             'bot_info'           => $request->input('bot_info'),
             'bot_instrucciones'  => $request->input('bot_instrucciones'),
-            'bot_permite_retiro'     => $request->boolean('bot_permite_retiro'),
-            'bot_permite_envio'      => $request->boolean('bot_permite_envio'),
-            'bot_dias_reparto'       => $request->has('bot_dias_reparto') ? array_map('intval', $request->input('bot_dias_reparto')) : [],
+            'bot_permite_retiro'     => false,
+            'bot_permite_envio'      => true,
             'bot_medios_pago'        => $request->has('bot_medios_pago') ? $request->input('bot_medios_pago') : null,
             'pedido_minimo'          => (float) $request->input('pedido_minimo', 0),
             'bot_puede_pedir'        => $request->boolean('bot_puede_pedir'),
@@ -515,7 +514,7 @@ class AdminController extends Controller
             'pv'                     => $request->input('pv'),
             'bot_horarios'           => $this->parseHorarios($request->input('bot_horarios', '')),
             'bot_fechas_cerrado'     => $this->parseFechasCerradas($request->input('bot_fechas_cerrado', '')),
-            'bot_hora_corte'         => $request->input('bot_hora_corte') ?: null,
+            'bot_hora_corte'         => null,
             'max_pedidos_pendientes' => (int) $request->input('max_pedidos_pendientes', 0),
         ];
 
