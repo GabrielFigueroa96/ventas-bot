@@ -9,11 +9,12 @@
         gap: 0.5rem;
         width: 100%;
     }
-    .msg-row { width: 100%; }
-    .msg-row-out { display: flex; justify-content: flex-end; }
-    .msg-row-in  { display: flex; justify-content: flex-start; }
+    .msg-row { width: 100%; display: flex; }
+    .msg-row-out { justify-content: flex-end; }
+    .msg-row-in  { justify-content: flex-start; }
+    .msg-row > div { max-width: 75%; }
     .bubble {
-        max-width: 75%;
+        width: 100%;
         padding: 0.5rem 0.75rem;
         border-radius: 0.75rem;
         font-size: 0.85rem;

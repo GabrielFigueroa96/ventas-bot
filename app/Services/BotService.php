@@ -642,10 +642,37 @@ class BotService
             Cache::put('proxima_fecha_entrega_' . $cliente->id, $proximoRepartoFecha, now()->addMinutes(30));
         }
 
-        // Texto de fechas disponibles para el prompt
+        // Texto de fechas disponibles para el prompt + ventana de pedidos de cada una
         $hayMultiplesFechas = count($fechasDisponibles) > 1;
-        $fechasTexto = '';
+        $fechasTexto   = '';
+        $ventanasTexto = [];
         if (!empty($fechasDisponibles)) {
+            $diasConfigMap2 = collect($diasConfig)->keyBy('dia');
+            foreach ($fechasDisponibles as $f) {
+                $cfg2       = $diasConfigMap2->get($f['dia']);
+                $tieneHasta = isset($cfg2['hasta_dia']) && $cfg2['hasta_dia'] !== null && $cfg2['hasta_dia'] !== '';
+                $tieneDesde = isset($cfg2['desde_dia']) && $cfg2['desde_dia'] !== null && $cfg2['desde_dia'] !== '';
+                $partes = [];
+                if ($tieneDesde) {
+                    $desdeNum  = (int) $cfg2['desde_dia'];
+                    $desdeHora = !empty($cfg2['desde_hora']) ? $cfg2['desde_hora'] : '00:00';
+                    $diff      = ($f['dia'] - $desdeNum + 7) % 7 ?: 7;
+                    $fechaAp   = \Carbon\Carbon::parse($f['fecha'])->subDays($diff)->setTimeFromTimeString($desdeHora);
+                    $partes[]  = "abre el {$diasLabel[$desdeNum]} {$fechaAp->locale('es')->isoFormat('D [de] MMMM')} a las {$fechaAp->format('H:i')}hs";
+                }
+                if ($tieneHasta) {
+                    $hastaNum  = (int) $cfg2['hasta_dia'];
+                    $hastaHora = !empty($cfg2['hasta_hora']) ? $cfg2['hasta_hora'] : '23:59';
+                    $diff      = ($f['dia'] - $hastaNum + 7) % 7 ?: 7;
+                    $fechaCi   = \Carbon\Carbon::parse($f['fecha'])->subDays($diff)->setTimeFromTimeString($hastaHora);
+                    $partes[]  = "cierra el {$diasLabel[$hastaNum]} {$fechaCi->locale('es')->isoFormat('D [de] MMMM')} a las {$fechaCi->format('H:i')}hs";
+                } elseif ($globalHoraCorte) {
+                    $partes[] = "cierra el mismo día a las {$globalHoraCorte}hs";
+                }
+                if (!empty($partes)) {
+                    $ventanasTexto[] = "Reparto {$f['texto']}: " . implode(', ', $partes) . ".";
+                }
+            }
             $fechasTexto = implode(', ', array_map(fn($f) => $f['texto'], $fechasDisponibles));
         }
         $fechaYaElegida     = $fechaElegida !== null;
@@ -674,6 +701,7 @@ class BotService
 
         $configNegocio = "\n{$entregasTexto}\n{$mediosTexto}";
         if ($diasTexto)                       $configNegocio .= "\n{$diasTexto}";
+        if (!empty($ventanasTexto))           $configNegocio .= "\n" . implode("\n", $ventanasTexto);
         if ($todasLasZonas)                   $configNegocio .= "\nZonas de entrega disponibles: {$todasLasZonas}";
         if ($puedeMasVendidos && $masVendidosGlobal) $configNegocio .= "\nProductos más vendidos del negocio: {$masVendidosGlobal}";
 
