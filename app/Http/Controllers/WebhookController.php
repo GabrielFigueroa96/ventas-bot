@@ -305,7 +305,7 @@ class WebhookController extends Controller
             ->where('respondio', false)
             ->update(['respondio' => true]);
 
-        if ($client->modo === 'humano' || $client->estado === 'humano') {
+        if ($client->modo === 'humano') {
             return response()->json(['status' => 'human_mode']);
         }
 

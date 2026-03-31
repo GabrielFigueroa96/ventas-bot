@@ -2047,7 +2047,7 @@ Herramientas disponibles:
                 $data['numero']       ?? '',
                 $data['localidad']    ?? '',
                 $data['dato_extra']   ?? '',
-                ''
+                $data['obs']          ?? ''
             );
             $this->sendReply($client, $result);
             return $result;
@@ -2171,7 +2171,7 @@ Herramientas disponibles:
                 ]);
             }
 
-            $total = array_sum(array_column($carrito, 'neto'));
+            $total = array_sum(array_map(fn($i) => $i['neto'], $itemsParaInsertar));
             Pedidosia::create([
                 'nro'          => $nro,
                 'codcli'       => $codcli,

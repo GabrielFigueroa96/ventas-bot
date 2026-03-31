@@ -330,6 +330,10 @@ class AdminChatController extends Controller
         Carrito::where('cliente_id', $cliente->id)->delete();
         Cache::forget('fecha_reparto_elegida_' . $cliente->id);
         Cache::forget('proxima_fecha_entrega_' . $cliente->id);
+        Cache::forget('pedido_conf_' . $cliente->id);
+        Cache::forget('reg_nombre_' . $cliente->id);
+        Cache::forget('reg_localidad_' . $cliente->id);
+        Cache::forget('reg_calle_' . $cliente->id);
         $cliente->update(['estado' => 'activo', 'modo' => 'bot', 'memoria_ia' => null]);
 
         return response()->json(['ok' => true]);
