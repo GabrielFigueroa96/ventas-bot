@@ -734,6 +734,7 @@ Pasos:
 6. Si el cliente dice el horario o turno preferido, guardalo en obs (no en fecha_entrega).
 
 IMPORTANTE: Nunca calcules precios ni totales manualmente. Los precios pueden incluir recargos por zona que solo el sistema conoce. Siempre usá ver_carrito para mostrar importes.
+IMPORTANTE: No informes el total del carrito al cliente mientras está eligiendo productos. El total se muestra solo cuando el cliente confirma el pedido (en los botones de confirmación que envía el sistema).
 
 Reglas de cantidad para agregar_al_carrito:
 - Producto POR PESO: pasá siempre kg. '3 vacío' → 3 kg. 'medio kilo' → 0.5.
@@ -1516,34 +1517,6 @@ Herramientas disponibles:
         return 'Botones enviados';
     }
 
-    /**
-     * Filtra los productos según el día de reparto elegido.
-     * Un producto es disponible para un día si:
-     * - No tiene configuración en ia_producto_localidad para esa localidad, O
-     * - Tiene configuración pero dias_reparto es null (usa todos los días de la localidad), O
-     * - Tiene dias_reparto y el día está incluido.
-     */
-    private function filtrarProductosPorDia(\Illuminate\Support\Collection $productos, int $dia, ?int $localidadId): \Illuminate\Support\Collection
-    {
-        if (!$localidadId) return $productos;
-
-        $configs = ProductoLocalidad::where('localidad_id', $localidadId)
-            ->whereNotNull('dias_reparto')
-            ->get()
-            ->keyBy('cod');
-
-        if ($configs->isEmpty()) return $productos;
-
-        return $productos->filter(function ($p) use ($dia, $configs) {
-            if (!$configs->has($p->cod)) return true; // sin override → disponible siempre
-            $diasCfg = $configs->get($p->cod)->dias_reparto;
-            if ($diasCfg === null) return true;       // sin restricción → disponible siempre
-            if (empty($diasCfg)) return false;        // array vacío → no disponible ningún día
-            $diasNum = array_map(fn($d) => is_array($d) ? (int) $d['dia'] : (int) $d, $diasCfg);
-            return \in_array($dia, $diasNum, true);
-        });
-    }
-
     private function getLocalPrices($client): \Illuminate\Support\Collection
     {
         if (!$client->localidad_id) {
@@ -1588,8 +1561,6 @@ Herramientas disponibles:
             $netoFmt   = $this->fmt($item['neto']);
             $lineas[]  = "{$item['des']} {$cant} × {$precioFmt} \$ = {$netoFmt} \$";
         }
-
-        $lineas[] = '[El total se muestra solo al confirmar el pedido. No informes el total al cliente en este paso.]';
 
         return implode("\n", $lineas);
     }
@@ -1930,31 +1901,8 @@ Herramientas disponibles:
         $client->update(['estado' => null]);
 
         $textoFecha = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
-        $dia        = (int) \Carbon\Carbon::parse($fecha)->format('w');
 
-        // Eliminar del carrito los productos que no se reparten ese día
-        $carritoRegistro = $this->getCarrito($client);
-        $noDisponibles   = [];
-        if ($carritoRegistro && !empty($carritoRegistro->items) && $client->localidad_id) {
-            $todosProductos = Producto::paraBot()->get();
-            $disponibles    = $this->filtrarProductosPorDia($todosProductos, $dia, $client->localidad_id)
-                ->pluck('cod')->toArray();
-
-            $itemsFiltrados = [];
-            foreach ($carritoRegistro->items as $item) {
-                if (isset($item['cod']) && !\in_array($item['cod'], $disponibles)) {
-                    $noDisponibles[] = $item['des'];
-                } else {
-                    $itemsFiltrados[] = $item;
-                }
-            }
-
-            if (!empty($noDisponibles)) {
-                $carritoRegistro->update(['items' => $itemsFiltrados]);
-            }
-        }
-
-        // Vaciar el carrito completo al cambiar de día para que el cliente repida con los productos del día elegido
+        // Vaciar el carrito para que el cliente arme uno nuevo con los productos del día elegido
         $carritoRegistro = $this->getCarrito($client);
         if ($carritoRegistro) {
             $carritoRegistro->delete();
@@ -2123,14 +2071,6 @@ Herramientas disponibles:
 
         // Si el carrito viene de editar_pedido, reutilizar el nro original
         $pedidoNroOriginal = $registro?->pedido_nro ?? null;
-        if ($pedidoNroOriginal) {
-            $codcliCheck = $client->cuenta ? $client->cuenta->cod : $client->id;
-            Pedido::where('nro', $pedidoNroOriginal)->where('codcli', $codcliCheck)->delete();
-            Pedidosia::where('nro', $pedidoNroOriginal)->delete();
-            $nro = $pedidoNroOriginal;
-        } else {
-            $nro = (Pedido::max('nro') ?? 0) + 1;
-        }
         $fecha  = $fechaEntrega ?: now()->format('Y-m-d');
         $codcli = $client->cuenta ? $client->cuenta->cod : $client->id;
         $nomcli = $client->cuenta ? $client->cuenta->nom : $client->name;
@@ -2169,6 +2109,7 @@ Herramientas disponibles:
 
         $alertas  = [];
         $omitidos = [];
+        $itemsParaInsertar = [];
 
         foreach ($carrito as $item) {
             $precio = $item['precio'];
@@ -2189,28 +2130,47 @@ Herramientas disponibles:
                 $alertas[] = "{$item['des']} (precio actualizado a $" . $this->fmt($preConExtra) . ')';
             }
 
-            Pedido::create([
-                'fecha'      => $fecha,
-                'nro'        => $nro,
-                'nomcli'     => $nomcli,
-                'codcli'     => $codcli,
-                'codigo'     => $item['cod'] ?? null,
-                'descrip'    => $item['des'],
-                'kilos'      => $item['kilos'],
-                'cant'       => $item['cant'],
-                'precio'     => $precio,
-                'neto'       => $neto,
-                'estado'     => Pedido::ESTADO_PENDIENTE,
-                'obs'        => $obs,
-                'pedido_at'  => now(),
-                'updated_at' => now(),
-                'suc'        => $suc,
-                'pv'         => $pv,
-                'venta'      => 0,
-            ]);
+            $itemsParaInsertar[] = compact('item', 'precio', 'neto');
         }
 
-        DB::transaction(function () use ($nro, $codcli, $client, $nomcli, $fecha, $tipoEntrega, $calle, $numero, $localidad, $datoExtra, $formaPago, $carrito, $obs, $registro) {
+        // Todo en una sola transacción: asignación de nro, items, cabecera y limpieza de carrito
+        DB::transaction(function () use (
+            $pedidoNroOriginal, $codcli, $client, $nomcli, $fecha,
+            $tipoEntrega, $calle, $numero, $localidad, $datoExtra,
+            $formaPago, $carrito, $obs, $registro, $suc, $pv,
+            $itemsParaInsertar, &$nro
+        ) {
+            if ($pedidoNroOriginal) {
+                Pedido::where('nro', $pedidoNroOriginal)->where('codcli', $codcli)->delete();
+                Pedidosia::where('nro', $pedidoNroOriginal)->delete();
+                $nro = $pedidoNroOriginal;
+            } else {
+                // Lock para evitar nro duplicado en inserciones concurrentes
+                $nro = (Pedido::lockForUpdate()->max('nro') ?? 0) + 1;
+            }
+
+            foreach ($itemsParaInsertar as ['item' => $item, 'precio' => $precio, 'neto' => $neto]) {
+                Pedido::create([
+                    'fecha'      => $fecha,
+                    'nro'        => $nro,
+                    'nomcli'     => $nomcli,
+                    'codcli'     => $codcli,
+                    'codigo'     => $item['cod'] ?? null,
+                    'descrip'    => $item['des'],
+                    'kilos'      => $item['kilos'],
+                    'cant'       => $item['cant'],
+                    'precio'     => $precio,
+                    'neto'       => $neto,
+                    'estado'     => Pedido::ESTADO_PENDIENTE,
+                    'obs'        => $obs,
+                    'pedido_at'  => now(),
+                    'updated_at' => now(),
+                    'suc'        => $suc,
+                    'pv'         => $pv,
+                    'venta'      => 0,
+                ]);
+            }
+
             $total = array_sum(array_column($carrito, 'neto'));
             Pedidosia::create([
                 'nro'          => $nro,
@@ -2229,7 +2189,7 @@ Herramientas disponibles:
                 'estado'       => Pedidosia::ESTADO_PENDIENTE,
                 'pedido_at'    => now(),
             ]);
-            // Limpiar carrito dentro de la transacción
+
             $registro?->delete();
         });
 
