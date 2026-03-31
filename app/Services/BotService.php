@@ -378,19 +378,25 @@ class BotService
             ? ProductoLocalidad::where('localidad_id', $cliente->localidad_id)->get()->keyBy('cod')
             : collect();
 
-        if ($cliente->localidad_id && $prodLocConfigs->isNotEmpty()) {
-            // Solo productos configurados para esta localidad, y si hay día elegido también por ese día
-            $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diaElegido) {
-                if (!$prodLocConfigs->has($p->cod)) return false; // no configurado para esta localidad
-                if ($diaElegido === null) return true;            // sin fecha elegida: mostrar todos los de la localidad
-                // Con fecha elegida: verificar restricción de días
-                $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
-                if ($diasCfg === null) return true;              // sin restricción → disponible todos los días
-                if (empty($diasCfg)) return false;               // array vacío → no disponible ningún día
-                $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
-                return in_array($diaElegido, $diasNum, true);
-            });
+        if ($cliente->localidad_id) {
+            if ($prodLocConfigs->isNotEmpty()) {
+                // Solo productos configurados para esta localidad, y si hay día elegido también por ese día
+                $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diaElegido) {
+                    if (!$prodLocConfigs->has($p->cod)) return false; // no configurado para esta localidad
+                    if ($diaElegido === null) return true;            // sin fecha elegida: mostrar todos los de la localidad
+                    // Con fecha elegida: verificar restricción de días
+                    $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
+                    if ($diasCfg === null) return true;              // sin restricción → disponible todos los días
+                    if (empty($diasCfg)) return false;               // array vacío → no disponible ningún día
+                    $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                    return in_array($diaElegido, $diasNum, true);
+                });
+            } else {
+                // Cliente tiene localidad asignada pero no hay productos configurados para ella → sin productos
+                $productos = collect();
+            }
         } else {
+            // Sin localidad asignada: mostrar catálogo completo
             $productos = $todosProductos;
         }
 
@@ -747,8 +753,23 @@ class BotService
             $configNegocio .= "\n\nContacto con asesores: {$linksTexto}\nCuando no puedas responder algo, el cliente pida hablar con una persona o quiera asesoramiento personalizado, compartí estos links indicando que puede contactar a un asesor directamente.";
         }
 
+        // Patrón de productos no disponibles hoy (para sanear memoria y historial)
+        $disponiblesNorm = $productos->map(fn($p) => mb_strtolower(trim(\Illuminate\Support\Str::ascii($p->des))))->flip();
+        $noDisponiblesPattern = $todosProductos
+            ->filter(fn($p) => !$disponiblesNorm->has(mb_strtolower(trim(\Illuminate\Support\Str::ascii($p->des)))))
+            ->sortByDesc(fn($p) => mb_strlen($p->des))
+            ->pluck('des')
+            ->filter(fn($n) => mb_strlen(trim($n)) >= 4)
+            ->map(fn($n) => preg_quote($n, '/'))
+            ->implode('|');
+
         $memoria = trim($cliente->memoria_ia ?? '');
-        if ($memoria)            $configNegocio .= "\n\n📝 Lo que sabés de este cliente (usalo para personalizar):\n{$memoria}";
+        if ($memoria) {
+            if ($noDisponiblesPattern !== '') {
+                $memoria = preg_replace('/(?:' . $noDisponiblesPattern . ')/iu', '[no disponible hoy]', $memoria);
+            }
+            $configNegocio .= "\n\n📝 Lo que sabés de este cliente (usalo para personalizar):\n{$memoria}";
+        }
 
         $nombreIa  = trim($empresa?->nombre_ia ?? '');
         $identidad = $nombreIa ? "Te llamás {$nombreIa}." : '';
@@ -849,17 +870,6 @@ Herramientas disponibles:
 " . ($puedePedir ? "- Cuando el cliente responde afirmativamente ('sí', 'dale', 'sí quiero', etc.) luego de que se le mostró un producto: NO llamés ver_producto. Preguntale directamente la cantidad y llamá agregar_al_carrito con lo que confirme. Si ya dijo la cantidad, llamá agregar_al_carrito directamente.
 " : "") . "- Si recibís una imagen, describila e intentá relacionarla con un pedido.",
         ];
-
-        // Productos que están en el catálogo pero NO disponibles hoy (por día o localidad)
-        // Se usan para limpiar el historial y que GPT no los sugiera
-        $disponiblesNorm = $productos->map(fn($p) => mb_strtolower(trim(\Illuminate\Support\Str::ascii($p->des))))->flip();
-        $noDisponiblesPattern = $todosProductos
-            ->filter(fn($p) => !$disponiblesNorm->has(mb_strtolower(trim(\Illuminate\Support\Str::ascii($p->des)))))
-            ->sortByDesc(fn($p) => mb_strlen($p->des)) // más largo primero para evitar match parcial
-            ->pluck('des')
-            ->filter(fn($n) => mb_strlen(trim($n)) >= 4) // ignorar nombres muy cortos
-            ->map(fn($n) => preg_quote($n, '/'))
-            ->implode('|');
 
         foreach ($history as $msg) {
             $content = $msg->message ?: '(imagen)';
