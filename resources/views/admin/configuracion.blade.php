@@ -347,6 +347,25 @@
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+                <h2 class="text-sm font-semibold text-gray-700">Contactos de asesores</h2>
+                <p class="text-xs text-gray-400">Cuando el bot no sepa responder algo o el cliente pida hablar con una persona, compartirá estos números de WhatsApp.</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Asesor 1</label>
+                        <input type="text" name="contacto_asesor_1" value="{{ old('contacto_asesor_1', $config->contacto_asesor_1) }}"
+                            placeholder="Ej: 5493415550001 (con código de país, sin +)"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Asesor 2 <span class="text-gray-400 font-normal">(opcional)</span></label>
+                        <input type="text" name="contacto_asesor_2" value="{{ old('contacto_asesor_2', $config->contacto_asesor_2) }}"
+                            placeholder="Ej: 5493415550002 (con código de país, sin +)"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300">
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
                 <h2 class="text-sm font-semibold text-gray-700">Notificaciones al negocio</h2>
 
                 @if($config->telefono_pedidos)

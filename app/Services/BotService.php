@@ -732,13 +732,21 @@ class BotService
             $configNegocio .= "\n⚠️ PEDIDOS CERRADOS (ventan ya pasó): " . implode('; ', $fechasCortadasAviso) . ". Si el cliente pregunta por ese día, explicale que el pedido para ese reparto ya está cerrado, pero puede hacer su pedido para los repartos disponibles.";
         }
         if ($puedePedir && empty($fechasDisponibles) && !empty($diasReparto)) {
-            $configNegocio .= "\n\nIMPORTANTE: En este momento NO hay repartos disponibles para tomar pedidos. No podés reservar ni armar pedidos hasta que abra la próxima ventana de pedidos. Si el cliente pregunta cuándo puede pedir, indicale la información del aviso de cierre/apertura de arriba.";
+            $configNegocio .= "\n\nIMPORTANTE: En este momento NO hay repartos disponibles para tomar pedidos. No podés reservar ni armar pedidos hasta que abra la próxima ventana de pedidos. Si el cliente pregunta cuándo puede pedir, indicale la información del aviso de cierre/apertura de arriba. NO ofrezcas avisar ni notificar al cliente cuando se abra la próxima ventana — esa funcionalidad no existe.";
         }
         if (!$puedePedir)    $configNegocio .= "\n\nIMPORTANTE: No podés tomar pedidos. Solo informás precios y describís productos. Si el cliente quiere pedir, indicale que contacte al negocio directamente.";
         if (!$puedeSupgerir) $configNegocio .= "\nNo sugieras productos de forma proactiva. Solo respondé lo que el cliente consulte.";
 
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
         if ($instrucciones)      $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
+
+        $contacto1 = trim($empresa?->contacto_asesor_1 ?? '');
+        $contacto2 = trim($empresa?->contacto_asesor_2 ?? '');
+        if ($contacto1 || $contacto2) {
+            $links = array_filter([$contacto1, $contacto2]);
+            $linksTexto = implode(' o ', array_map(fn($n) => "https://wa.me/{$n}", $links));
+            $configNegocio .= "\n\nContacto con asesores: {$linksTexto}\nCuando no puedas responder algo, el cliente pida hablar con una persona o quiera asesoramiento personalizado, compartí estos links indicando que puede contactar a un asesor directamente.";
+        }
 
         $memoria = trim($cliente->memoria_ia ?? '');
         if ($memoria)            $configNegocio .= "\n\n📝 Lo que sabés de este cliente (usalo para personalizar):\n{$memoria}";

@@ -485,6 +485,8 @@ class AdminController extends Controller
         $data = [
             'nombre_ia'          => $request->input('nombre_ia'),
             'telefono_pedidos'   => $request->input('telefono_pedidos'),
+            'contacto_asesor_1'  => $request->input('contacto_asesor_1') ?: null,
+            'contacto_asesor_2'  => $request->input('contacto_asesor_2') ?: null,
             'two_factor_enabled'    => $request->boolean('two_factor_enabled'),
             'notif_negocio_enabled'  => $request->input('telefono_pedidos')
                 ? $request->boolean('notif_negocio_enabled')

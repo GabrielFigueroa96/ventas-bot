@@ -11,6 +11,8 @@ class IaEmpresa extends Model
     protected $fillable = [
         'nombre_ia',
         'telefono_pedidos',
+        'contacto_asesor_1',
+        'contacto_asesor_2',
         'imagen_bienvenida',
         'imagen_tienda',
         'bot_info',
