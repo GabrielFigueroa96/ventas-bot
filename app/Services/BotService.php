@@ -737,8 +737,8 @@ class BotService
         if (!$puedePedir)    $configNegocio .= "\n\nIMPORTANTE: No podés tomar pedidos. Solo informás precios y describís productos. Si el cliente quiere pedir, indicale que contacte al negocio directamente.";
         if (!$puedeSupgerir) $configNegocio .= "\nNo sugieras productos de forma proactiva. Solo respondé lo que el cliente consulte.";
 
+        if ($instrucciones)      $configNegocio .= "\n\n⚠️ REGLAS OBLIGATORIAS (máxima prioridad — siempre aplicar, sin excepciones):\n{$instrucciones}";
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
-        if ($instrucciones)      $configNegocio .= "\n\nInstrucciones especiales:\n{$instrucciones}";
 
         $contacto1 = trim($empresa?->contacto_asesor_1 ?? '');
         $contacto2 = trim($empresa?->contacto_asesor_2 ?? '');
