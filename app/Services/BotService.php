@@ -819,15 +819,16 @@ FLUJO 2 — TOMAR PEDIDO
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
 " . ($hayMultiplesFechas && !$fechaYaElegida ? "0. ANTES de mostrar productos o agregar al carrito, usá elegir_reparto para que el cliente elija para qué fecha quiere el pedido. Los productos varían según el día de reparto." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : "")) . "
-1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación extra ni resumas antes. Si el cliente dice si, dale, esta bien o similar con una cantidad implícita o explícita → accioná.
-2. Podés agregar múltiples productos en una sola llamada a agregar_al_carrito.
-3. Mostrá el resumen con ver_carrito. Si hay alertas de precio (⚠️), ofrecé actualizar y cuando el cliente confirme llamá actualizar_precios_carrito (NO ver_carrito). Si hay ❌ producto no disponible, ofrecé eliminar el ítem con agregar_al_carrito cantidad 0.
-4. Cuando el carrito esté listo, preguntá si el cliente confirma. Luego llamá DIRECTAMENTE crear_pedido. NUNCA preguntes forma de pago ni tipo de entrega antes de llamar crear_pedido — el sistema envía botones interactivos para eso. Solo pasá tipo_entrega o forma_pago como argumento si el cliente los mencionó explícitamente en esta conversación.
-5. Una vez creado el pedido (ves 'Botones enviados' en la respuesta del sistema), no envíes ningún mensaje: el cliente ya está viendo los botones de confirmación.
-6. Si el cliente dice el horario o turno preferido, guardalo en obs (no en fecha_entrega).
+1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada.
+2. Después de agregar, llamá ver_carrito y en el MISMO mensaje preguntá algo como ¿Lo pedimos o querés agregar algo más?. NUNCA hagas primero ¿algo más? y después mostrés el carrito — hacé las dos cosas juntas.
+3. Si el cliente confirma (sí, dale, listo, eso es todo, ya está, perfecto, etc.) → llamá DIRECTAMENTE crear_pedido. Si quiere agregar más → volvé al paso 1 y después al paso 2.
+4. Si ver_carrito muestra alertas de precio (⚠️), ofrecé actualizar; cuando confirme llamá actualizar_precios_carrito (no ver_carrito). Si hay ❌ producto no disponible, ofrecé eliminarlo con agregar_al_carrito cantidad 0.
+5. NUNCA preguntes forma de pago ni tipo de entrega antes de llamar crear_pedido — el sistema envía botones interactivos para eso. Solo pasá tipo_entrega o forma_pago si el cliente los mencionó explícitamente.
+6. Una vez creado el pedido (ves 'Botones enviados' en la respuesta del sistema), no envíes ningún mensaje: el cliente ya está viendo los botones de confirmación.
+7. Si el cliente menciona horario o turno preferido, guardalo en obs.
 
 IMPORTANTE: Nunca calcules precios ni totales manualmente. Los precios pueden incluir recargos por zona que solo el sistema conoce. Siempre usá ver_carrito para mostrar importes.
-IMPORTANTE: No informes el total del carrito al cliente mientras está eligiendo productos. El total se muestra solo cuando el cliente confirma el pedido (en los botones de confirmación que envía el sistema).
+IMPORTANTE: El total no se informa mientras el cliente elige — se muestra en los botones de confirmación que envía el sistema.
 
 Reglas de cantidad para agregar_al_carrito:
 - Producto POR PESO: pasá siempre kg. '3 vacío' → 3 kg. 'medio kilo' → 0.5.
@@ -1352,6 +1353,10 @@ Herramientas disponibles:
             $precioFijo = !empty($match->notas_ia) && stripos($match->notas_ia, 'precio fijo') !== false;
             $esPeso     = $match->tipo !== 'Unidad' && !$precioFijo;
             $precio     = $this->precioFinal((float) $match->precio, $match->cod, $localPrices);
+            if ($precio === null) {
+                $errores[] = "'{$match->des}' no tiene precio configurado para tu zona. Avisale al cliente que ese producto no está disponible para su localidad.";
+                continue;
+            }
 
             $cant  = 0;
             $kilos = 0;
@@ -1481,6 +1486,7 @@ Herramientas disponibles:
                 continue;
             }
             $precioNuevo = $this->precioFinal((float) $productos[$item['cod']]->precio, $item['cod'], $localPrices);
+            if ($precioNuevo === null) continue; // sin precio de localidad, dejar como está
             if (abs($precioNuevo - (float) $item['precio']) > 0.01) {
                 $actualizados[] = $item['des'];
             }
@@ -1627,12 +1633,12 @@ Herramientas disponibles:
      * Si existe un override en ia_producto_localidad con precio no nulo, lo usa.
      * Si no, usa el precio base del producto.
      */
-    private function precioFinal(float $precioBase, $cod, \Illuminate\Support\Collection $localPrices): float
+    private function precioFinal(float $precioBase, $cod, \Illuminate\Support\Collection $localPrices): ?float
     {
         if ($localPrices->has($cod) && $localPrices->get($cod)->precio !== null) {
             return (float) $localPrices->get($cod)->precio;
         }
-        return $precioBase;
+        return null; // sin precio configurado para esta localidad
     }
 
     private function formatCarrito(array $carrito): string
@@ -1739,7 +1745,7 @@ Herramientas disponibles:
             }
 
             $preActual = $this->precioFinal((float) $productosActuales[$item['cod']]->precio, $item['cod'], $localPrices);
-            if (abs($preActual - $item['precio']) > 0.01) {
+            if ($preActual !== null && abs($preActual - $item['precio']) > 0.01) {
                 $precioViejo = $this->fmt($item['precio']);
                 $precioNuevo = $this->fmt($preActual);
                 $alertas[] = "⚠️ {$item['des']}: precio cambió de \${$precioViejo} a \${$precioNuevo}/u";
@@ -2250,8 +2256,12 @@ Herramientas disponibles:
                 }
             }
 
-            // Verificar si el precio base cambió desde que se armó el carrito
+            // Verificar si el precio de localidad cambió desde que se armó el carrito
             $preConExtra = $this->precioFinal((float) $precioActual[$item['cod']]->precio, $item['cod'], $localPrices);
+            if ($preConExtra === null) {
+                $omitidos[] = $item['des'] . ' (sin precio configurado para esta localidad)';
+                continue;
+            }
             if (abs($preConExtra - $precio) > 0.01) {
                 $base   = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
                 $neto   = round($preConExtra * $base, 2);
@@ -2559,9 +2569,11 @@ Herramientas disponibles:
         }
         if ($solicitaPrecio) {
             $localPrices = $this->getLocalPrices($client);
-            $precio      = $this->fmt($this->precioFinal((float) $producto->precio, $producto->cod, $localPrices));
-            $unidad      = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
-            $caption    .= "\n\${$precio} ({$unidad})";
+            $precio      = $this->precioFinal((float) $producto->precio, $producto->cod, $localPrices);
+            if ($precio !== null) {
+                $unidad   = $producto->tipo === 'Unidad' ? 'por unidad' : 'por kg';
+                $caption .= "\n\$" . $this->fmt($precio) . " ({$unidad})";
+            }
         }
 
         // Enviar imagen con descripción y precio como caption (todo en 1 mensaje)
@@ -2699,9 +2711,10 @@ Herramientas disponibles:
             foreach ($grupos as $nombreGrupo => $items) {
                 $lineas[] = "_{$nombreGrupo}_";
                 foreach ($items as $p) {
-                    $precio   = $this->fmt($this->precioFinal((float) $p->precio, $p->cod, $localPrices));
+                    $precio = $this->precioFinal((float) $p->precio, $p->cod, $localPrices);
+                    if ($precio === null) continue;
                     $unidad   = $tipo === 'Unidad' ? '/u' : '/kg';
-                    $lineas[] = "• {$p->des}: \${$precio}{$unidad}";
+                    $lineas[] = "• {$p->des}: \$" . $this->fmt($precio) . "{$unidad}";
                 }
             }
             $bloques[] = implode("\n", $lineas);
