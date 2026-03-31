@@ -19,20 +19,26 @@
         html.sb-pre-collapsed #sidebar { width: 4rem; }
         html.sb-pre-collapsed #sidebar .sb-text,
         html.sb-pre-collapsed #sidebar .sb-section { display: none; }
+        html.sb-pre-collapsed #sidebar .nav-link { flex-direction: column; justify-content: center; padding: 8px 0; gap: 0; }
+        html.sb-pre-collapsed #sidebar .nav-link svg { width: 20px; height: 20px; }
         body { font-family: 'Inter', sans-serif; }
 
         .nav-link {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 10px;
-            padding: 7px 12px;
+            justify-content: center;
+            gap: 4px;
+            padding: 8px 4px 7px;
             border-radius: 6px;
-            font-size: 13.5px;
+            font-size: 9.5px;
             font-weight: 500;
             color: rgba(255,255,255,0.45);
             text-decoration: none;
             transition: background 0.15s, color 0.15s;
-            white-space: nowrap;
+            white-space: normal;
+            text-align: center;
+            line-height: 1.2;
             border-left: 2px solid transparent;
         }
         .nav-link:hover {
@@ -45,17 +51,18 @@
             border-left-color: #ef4444;
         }
         .nav-link.active svg { color: #f87171; }
-        .nav-link svg { flex-shrink: 0; width: 16px; height: 16px; }
+        .nav-link svg { flex-shrink: 0; width: 18px; height: 18px; }
 
         .nav-section {
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 600;
             letter-spacing: 0.08em;
-            color: rgba(255,255,255,0.22);
+            color: rgba(255,255,255,0.2);
             text-transform: uppercase;
-            padding: 14px 14px 5px;
+            padding: 10px 6px 3px;
+            text-align: center;
         }
-        .nav-section:first-child { padding-top: 6px; }
+        .nav-section:first-child { padding-top: 4px; }
 
         /* Scrollbar sidebar */
         nav::-webkit-scrollbar { width: 3px; }
@@ -82,9 +89,13 @@
             #sidebar.collapsed .nav-link.active { border-right: 2px solid #ef4444; }
             #sidebar.collapsed .nav-link svg { width: 20px; height: 20px; }
             #sidebar.collapsed .sb-header { justify-content: center; padding: 1rem 0; }
-            #sidebar.collapsed .sb-footer-row { flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px; }
+            #sidebar.collapsed #sb-toggle { transform: none; }
             #sidebar.collapsed #sb-toggle svg { transform: rotate(180deg); }
             #sidebar.collapsed nav { padding-left: 0; padding-right: 0; }
+        }
+        /* ── Sidebar expandido compacto ── */
+        @media (min-width: 1024px) {
+            #sidebar:not(.collapsed) nav { padding-left: 4px; padding-right: 4px; }
         }
     </style>
 </head>
@@ -122,23 +133,21 @@
 <div id="overlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden" onclick="closeSidebar()"></div>
 
 {{-- ── Sidebar ──────────────────────────────────────────────────── --}}
-<aside id="sidebar" class="w-56 flex flex-col shrink-0 lg:sticky lg:top-0 lg:h-screen" style="background:#0d1829">
+<aside id="sidebar" class="w-20 flex flex-col shrink-0 lg:sticky lg:top-0 lg:h-screen" style="background:#0d1829">
 
     {{-- Header --}}
-    <div class="px-4 py-4 relative" style="border-bottom:1px solid rgba(255,255,255,0.07)">
-        <p class="sb-text text-xs font-semibold mb-2" style="color:rgba(255,255,255,0.28);letter-spacing:.06em">PANEL ADMIN</p>
-        <div class="sb-header flex items-center gap-2.5">
+    <div class="py-3 relative flex flex-col items-center" style="border-bottom:1px solid rgba(255,255,255,0.07)">
+        <div class="sb-header flex items-center justify-center">
             @if(!empty($logoTienda))
                 <img src="{{ asset($logoTienda) }}" alt="{{ $empresaNombre }}"
                      class="w-7 h-7 rounded-lg object-cover shrink-0">
             @else
                 <div class="w-7 h-7 rounded-lg flex items-center justify-center text-sm shrink-0" style="background:rgba(239,68,68,0.2)">🥩</div>
             @endif
-            <p class="sb-text text-white font-semibold text-sm truncate">{{ $empresaNombre }}</p>
         </div>
         {{-- Toggle colapsar (solo desktop) --}}
         <button id="sb-toggle" onclick="toggleSidebar()" title="Retraer menú"
-            class="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 items-center justify-center w-6 h-6 rounded-md transition-colors"
+            class="hidden lg:flex mt-2 items-center justify-center w-6 h-6 rounded-md transition-colors"
             style="color:rgba(255,255,255,0.3)" onmouseover="this.style.color='rgba(255,255,255,0.7)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'">
             <svg class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
@@ -165,13 +174,12 @@
     </nav>
 
     {{-- Footer usuario --}}
-    <div class="px-3 py-3" style="border-top:1px solid rgba(255,255,255,0.07)">
-        <div class="sb-footer-row flex items-center gap-2.5 px-2 py-2 rounded-lg" style="background:rgba(255,255,255,0.05)">
+    <div class="py-3 flex flex-col items-center gap-2" style="border-top:1px solid rgba(255,255,255,0.07)">
+        <div class="sb-footer-row flex flex-col items-center gap-2">
             <div class="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style="background:#b91c1c">
                 {{ strtoupper(substr($userName, 0, 1)) }}
             </div>
-            <span class="sb-text text-xs font-medium truncate flex-1" style="color:rgba(255,255,255,0.55)">{{ $userName }}</span>
-            <a href="{{ route('admin.cuenta') }}" title="Cambiar contraseña" class="transition-colors shrink-0"
+            <a href="{{ route('admin.cuenta') }}" title="Cambiar contraseña" class="transition-colors"
                style="color:rgba(255,255,255,0.3)"
                onmouseover="this.style.color='rgba(255,255,255,0.7)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
