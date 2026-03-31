@@ -475,10 +475,17 @@ class BotService
                 : '';
         }
 
-        // Historial de últimos 10 mensajes para mantener contexto del pedido
+        // Detectar si el mensaje requiere la lista de productos
+        // Si es una consulta puramente operativa (estado, pedido, saludo, gracias, dirección, pago)
+        // no hace falta mandar 1000+ tokens de catálogo
+        $needsProductList = $this->mensajeNecesitaProductos($message, $cliente);
+
+        // Historial: 10 mensajes normalmente, 14 si el cliente está armando un carrito
+        $carritoActivo = $this->getCarrito($cliente);
+        $historialTake = ($carritoActivo && !empty($carritoActivo->items)) ? 14 : 10;
         $history = Message::where('cliente_id', $cliente->id)
             ->latest()
-            ->take(20)
+            ->take($historialTake)
             ->get()
             ->reverse();
 
@@ -687,14 +694,6 @@ class BotService
         ]);
         $mediosOpciones = array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados);
 
-        $paso3Fecha = $proximoRepartoTexto
-            ? "Informale que el próximo reparto es el {$proximoRepartoTexto}. No menciones la fecha en formato numérico, solo el día y mes en texto."
-            : '';
-        $paso3Entrega = count($entregasOpciones) === 1
-            ? '¿Te lo ' . (in_array('envío', $entregasOpciones) ? 'enviamos' : 'pasás a buscar') . '?'
-            : '¿' . implode(' o ', array_map('ucfirst', $entregasOpciones)) . '?';
-        $paso3Pago = '¿Cómo abonás? (' . implode(', ', $mediosOpciones) . ')';
-
         $puedePedir       = $empresa?->bot_puede_pedir        ?? true;
         $puedeSupgerir    = $empresa?->bot_puede_sugerir       ?? true;
         $puedeMasVendidos = $empresa?->bot_puede_mas_vendidos  ?? false;
@@ -771,10 +770,7 @@ Cliente: {$nombre}{$cuentaTexto}
       . ($hayMultiplesFechas ? " También hay repartos disponibles para: " . implode(', ', array_filter(array_map(fn($f) => $f['fecha'] !== $fechaElegida ? $f['texto'] : null, $fechasDisponibles))) . ". Si el cliente quiere cambiar de fecha, usá elegir_reparto." : "")
     : ($fechasTexto ? "Repartos disponibles: {$fechasTexto}." : '')) . "
 
-Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : " (mostrá estos solo si el cliente ya eligió fecha de reparto — si no eligió, usá elegir_reparto primero)") . ":
-{$lista}
-
-" . ($puedeSupgerir ? "════════════════════════════════
+" . ($needsProductList ? "Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : " (disponibilidad puede variar según el día de reparto elegido)") . ":\n{$lista}\n\n" : "Catálogo no incluido en este contexto. Si el cliente consulta por un producto específico, usá ver_producto.\n\n") . ($puedeSupgerir ? "════════════════════════════════
 FLUJO 1 — SUGERIR
 ════════════════════════════════
 Activar cuando: el cliente saluda, no sabe qué quiere, pide recomendación o menciona una ocasión (asado, cumpleaños, etc.).
@@ -820,7 +816,6 @@ Reglas de cantidad para agregar_al_carrito:
 - El total es siempre aproximado para productos por peso. Recordáselo.
 - Formato numérico argentino: el cliente puede escribir con punto para miles y coma para decimales. Interpretá correctamente: '1.500' = 1500 | '2,5' = 2.5 | '0,750' = 0.75 | '1.200,50' = 1200.5
 
-NUNCA menciones un producto fuera de la lista. NUNCA inventes ni estimes precios.
 Al llamar agregar_al_carrito, usá el nombre del producto EXACTAMENTE como aparece en la lista de productos disponibles. NUNCA inferas el nombre a partir del historial de conversación — el historial puede referenciar pedidos anteriores que no reflejan lo que el cliente pide ahora. Si el nombre que el cliente dice puede corresponder a varios productos de la lista, llamá ver_producto primero para que el cliente elija." : "════════════════════════════════
 FLUJO 2 — SOLO INFORMAR (NO SE TOMAN PEDIDOS)
 ════════════════════════════════
@@ -884,12 +879,12 @@ Herramientas disponibles:
                 $repartoPattern = 'repart|pedido|habilitad|ventana|abre|cierra|tomar|disponible';
                 $content = preg_replace_callback(
                     '/[^.!?\n]*(?:' . $diasPattern . ')[^.!?\n]*(?:' . $repartoPattern . ')[^.!?\n]*[.!?]?/iu',
-                    fn($m) => '[días de reparto actualizados]',
+                    fn($_) => '[días de reparto actualizados]',
                     $content
                 );
                 $content = preg_replace_callback(
                     '/[^.!?\n]*(?:' . $repartoPattern . ')[^.!?\n]*(?:' . $diasPattern . ')[^.!?\n]*[.!?]?/iu',
-                    fn($m) => '[días de reparto actualizados]',
+                    fn($_) => '[días de reparto actualizados]',
                     $content
                 );
             }
@@ -960,7 +955,7 @@ Herramientas disponibles:
         // Si no puede pedir, solo expone las tools de consulta
         if (!$puedePedir) {
             return array_values(array_filter($this->allTools($tiposEntrega, $mediosPago), function ($tool) {
-                return in_array($tool['function']['name'], ['ver_producto', 'lista_productos', 'consultar_saldo']);
+                return in_array($tool['function']['name'], ['ver_producto', 'consultar_saldo']);
             }));
         }
 
@@ -1506,7 +1501,6 @@ Herramientas disponibles:
     {
         if (empty($diasConfig)) return [];
 
-        $diasLabel     = IaEmpresa::DIAS_LABEL;
         $diasReparto   = array_map(fn($d) => (int) $d['dia'], $diasConfig);
         $diasConfigMap = collect($diasConfig)->keyBy('dia');
         $disponibles   = [];
@@ -2266,7 +2260,7 @@ Herramientas disponibles:
         DB::transaction(function () use (
             $pedidoNroOriginal, $codcli, $client, $nomcli, $fecha,
             $tipoEntrega, $calle, $numero, $localidad, $datoExtra,
-            $formaPago, $carrito, $obs, $registro, $suc, $pv,
+            $formaPago, $obs, $registro, $suc, $pv,
             $itemsParaInsertar, &$nro
         ) {
             if ($pedidoNroOriginal) {
@@ -2355,7 +2349,7 @@ Herramientas disponibles:
             $detalle = "👤 {$client->phone} | 📅 {$fecha} | 📦 {$entregaTexto} | 💳 {$formaPago}\n\n{$itemsTexto}";
             if ($obs) $detalle .= "\n📝 {$obs}";
 
-            $this->enviarNotifPedido($telLocal, $nro, $nomcli, $detalle, $total);
+            $this->enviarNotifPedido($telLocal, (int) $nro, $nomcli, $detalle, $total);
         }
 
         $msg = "Pedido #{$nro} registrado: {$resumen}.";
@@ -2725,17 +2719,28 @@ Herramientas disponibles:
         }
 
         $response = null;
-        $intentos = 2;
+        $intentos = 3;
         for ($i = 0; $i < $intentos; $i++) {
-            $response = Http::withToken($this->openaiKey())
+            $httpResponse = Http::withToken($this->openaiKey())
                 ->timeout(30)
-                ->post(self::OPENAI_URL, $payload)
-                ->json();
+                ->post(self::OPENAI_URL, $payload);
+
+            $response = $httpResponse->json();
 
             if (isset($response['choices'])) break;
 
+            // Rate limit (429): extraer tiempo de espera del mensaje y reintentar
+            if ($httpResponse->status() === 429) {
+                $errorMsg = $response['error']['message'] ?? '';
+                preg_match('/try again in ([\d.]+)s/i', $errorMsg, $m);
+                $waitSecs = isset($m[1]) ? (int) ceil((float) $m[1]) + 1 : 10;
+                Log::warning("OpenAI rate limit (intento " . ($i + 1) . "), esperando {$waitSecs}s: {$errorMsg}");
+                if ($i < $intentos - 1) sleep($waitSecs);
+                continue;
+            }
+
             Log::warning("OpenAI intento " . ($i + 1) . " fallido: " . json_encode($response));
-            if ($i < $intentos - 1) sleep(1);
+            if ($i < $intentos - 1) sleep(2);
         }
 
         if (!isset($response['choices'])) {
@@ -3194,5 +3199,57 @@ Herramientas disponibles:
         } catch (\Throwable $e) {
             Log::error('sendMessengerImage error: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Determina si el mensaje del cliente requiere la lista completa de productos.
+     * Si no la necesita, se ahorra ~1000-2000 tokens de input.
+     */
+    private function mensajeNecesitaProductos(string $message, $cliente): bool
+    {
+        // Si hay carrito activo con ítems, siempre incluir (está en medio de un pedido)
+        $carrito = $this->getCarrito($cliente);
+        if ($carrito && !empty($carrito->items)) {
+            return true;
+        }
+
+        // Si el cliente está en un estado de flujo activo de pedido
+        $estadosConProductos = ['eligiendo_reparto'];
+        if (in_array($cliente->estado ?? '', $estadosConProductos, true)) {
+            return true;
+        }
+
+        $msg = mb_strtolower(trim($message));
+
+        // Palabras que claramente necesitan catálogo
+        $keywordsProductos = [
+            'quiero', 'pedido', 'pedir', 'comprar', 'precio', 'cuánto', 'cuanto',
+            'kilo', 'kg', 'unidad', 'carne', 'pollo', 'cerdo', 'vacio', 'vacío',
+            'asado', 'chorizo', 'costilla', 'entraña', 'entrada', 'bife', 'milanesa',
+            'hamburguesa', 'morcilla', 'bondiola', 'lomo', 'cuadril', 'nalga',
+            'carrito', 'agregar', 'lista', 'catálogo', 'catalogo', 'disponible',
+            'tienen', 'hay ', 'tenés', 'tenes', 'mostrame', 'mostrar', 'ver precios',
+            'qué tienen', 'que tienen', 'que hay', 'qué hay', 'sugerí', 'sugeri',
+            'recomend', 'para el asado', 'para hoy',
+        ];
+
+        foreach ($keywordsProductos as $kw) {
+            if (str_contains($msg, $kw)) {
+                return true;
+            }
+        }
+
+        // Mensajes cortos ambiguos (≤3 palabras y no son operativos) → incluir por seguridad
+        $palabras = str_word_count($msg);
+        if ($palabras <= 3) {
+            $keywordsOperativas = ['gracias', 'ok', 'listo', 'perfecto', 'buenísimo', 'genial',
+                'estado', 'pedido', 'cancelar', 'cuando', 'llega', 'horario', 'dirección', 'hola'];
+            foreach ($keywordsOperativas as $kw) {
+                if (str_contains($msg, $kw)) return false;
+            }
+            return true; // corto y no operativo → mejor incluir
+        }
+
+        return false;
     }
 }
