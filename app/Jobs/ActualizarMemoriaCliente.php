@@ -44,8 +44,8 @@ class ActualizarMemoriaCliente implements ShouldQueue
             $totalPedidos  = $pedidos->groupBy('nro')->count();
             $primerPedido  = $pedidos->min('fecha');
             $ultimoPedido  = $pedidos->max('fecha');
-            $pagos = Pedido::where('codcli', $codcli)
-                ->join('ia_pedidos', 'tablapedidos.nro', '=', 'ia_pedidos.nro')
+            $pagos = Pedido::where('pedidos.codcli', $codcli)
+                ->join('ia_pedidos', 'pedidos.nro', '=', 'ia_pedidos.nro')
                 ->selectRaw('ia_pedidos.forma_pago, COUNT(*) as veces')
                 ->groupBy('ia_pedidos.forma_pago')
                 ->orderByDesc('veces')

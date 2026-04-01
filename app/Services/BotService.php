@@ -819,13 +819,12 @@ FLUJO 2 — TOMAR PEDIDO
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
 " . ($hayMultiplesFechas && !$fechaYaElegida ? "0. ANTES de mostrar productos o agregar al carrito, usá elegir_reparto para que el cliente elija para qué fecha quiere el pedido. Los productos varían según el día de reparto." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : "")) . "
-1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada.
-2. Después de agregar, llamá ver_carrito y en el MISMO mensaje preguntá algo como ¿Lo pedimos o querés agregar algo más?. NUNCA hagas primero ¿algo más? y después mostrés el carrito — hacé las dos cosas juntas.
-3. Si el cliente confirma (sí, dale, listo, eso es todo, ya está, perfecto, etc.) → llamá DIRECTAMENTE crear_pedido. Si quiere agregar más → volvé al paso 1 y después al paso 2.
-4. Si ver_carrito muestra alertas de precio (⚠️), ofrecé actualizar; cuando confirme llamá actualizar_precios_carrito (no ver_carrito). Si hay ❌ producto no disponible, ofrecé eliminarlo con agregar_al_carrito cantidad 0.
-5. NUNCA preguntes forma de pago ni tipo de entrega antes de llamar crear_pedido — el sistema envía botones interactivos para eso. Solo pasá tipo_entrega o forma_pago si el cliente los mencionó explícitamente.
-6. Una vez creado el pedido (ves 'Botones enviados' en la respuesta del sistema), no envíes ningún mensaje: el cliente ya está viendo los botones de confirmación.
-7. Si el cliente menciona horario o turno preferido, guardalo en obs.
+1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada. Si el nombre del producto es reconocible (aunque no sea idéntico al de la lista), usá el más cercano sin preguntar. Para productos que se venden por peso, interpretá el número como kilos (ej: "3 bondiolas" = 3 kg) salvo que el cliente diga explícitamente "unidades" o "u".
+2. Después de agregar, llamá DIRECTAMENTE crear_pedido. Esto le muestra al cliente el carrito con los botones de confirmar/cancelar. Si quiere agregar más, va a escribirte y volvés al paso 1.
+3. Si crear_pedido o ver_carrito muestran alertas de precio (⚠️), ofrecé actualizar; cuando confirme llamá actualizar_precios_carrito. Si hay ❌ producto no disponible, ofrecé eliminarlo con agregar_al_carrito cantidad 0.
+4. NUNCA preguntes forma de pago ni tipo de entrega antes de llamar crear_pedido — el sistema envía botones interactivos para eso. Solo pasá tipo_entrega o forma_pago si el cliente los mencionó explícitamente.
+5. Una vez creado el pedido (ves 'Botones enviados' en la respuesta del sistema), no envíes ningún mensaje: el cliente ya está viendo los botones de confirmación.
+6. Si el cliente menciona horario o turno preferido, guardalo en obs.
 
 IMPORTANTE: Nunca calcules precios ni totales manualmente. Los precios pueden incluir recargos por zona que solo el sistema conoce. Siempre usá ver_carrito para mostrar importes.
 IMPORTANTE: El total no se informa mientras el cliente elige — se muestra en los botones de confirmación que envía el sistema.
