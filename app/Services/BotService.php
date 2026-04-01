@@ -205,7 +205,7 @@ class BotService
                     $diasLabel = IaEmpresa::DIAS_LABEL;
                     $dias      = $match->dias_reparto ?? [];
                     $diasTexto = !empty($dias)
-                        ? 'Repartimos en tu zona los: ' . implode(', ', array_map(fn($d) => $diasLabel[$d], $dias)) . '. '
+                        ? 'Repartimos en tu zona los: ' . implode(', ', array_map(fn($d) => $diasLabel[is_array($d) ? (int)$d['dia'] : (int)$d] ?? '?', $dias)) . '. '
                         : '';
                     $response = "{$diasTexto}¿Cuál es tu calle y número de entrega? (ej: Italia 1234)";
                 } else {
