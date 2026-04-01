@@ -697,7 +697,7 @@ class AdminController extends Controller
         $pedidos = Pedidosia::with(['items', 'cliente'])
             ->whereDate('fecha', $fecha)
             ->where('tipo_entrega', 'envio')
-            ->whereIn('estado', [Pedidosia::ESTADO_EN_CAMINO, Pedidosia::ESTADO_EN_REPARTO])
+            ->whereIn('estado', [Pedidosia::ESTADO_CONFIRMADO, Pedidosia::ESTADO_EN_CAMINO, Pedidosia::ESTADO_EN_REPARTO])
             ->orderBy('localidad')
             ->orderBy('nro')
             ->get();
