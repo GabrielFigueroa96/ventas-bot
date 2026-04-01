@@ -1755,6 +1755,20 @@ Herramientas disponibles:
         return $alertas;
     }
 
+    private function textoContactoNegocio($empresa): string
+    {
+        $numeros = array_filter([
+            $empresa?->contacto_asesor_1 ?? null,
+            $empresa?->contacto_asesor_2 ?? null,
+        ]);
+
+        if (empty($numeros)) {
+            return 'Comunicate directamente con el negocio.';
+        }
+
+        return 'Podés comunicarte directamente al ' . implode(' o al ', $numeros) . '.';
+    }
+
     // Formatea precio sin separador de miles; omite decimales si son ,00
     private function fmt(float $val): string
     {
@@ -2464,6 +2478,16 @@ Herramientas disponibles:
             return 'Número de pedido inválido.';
         }
 
+        // Verificar ventana de pedidos
+        $empresa         = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
+        $localidadObj    = $client->localidad_id ? Localidad::find($client->localidad_id) : null;
+        $diasConfig      = $localidadObj ? $localidadObj->diasConfig() : ($empresa?->bot_dias_reparto ?? []);
+        $fechasCerradas  = $empresa?->bot_fechas_cerrado ?? [];
+        $globalHoraCorte = $empresa?->bot_hora_corte ?? null;
+        if (!empty($diasConfig) && empty($this->getFechasReparto($diasConfig, $fechasCerradas, $globalHoraCorte))) {
+            return 'En este momento no es posible cancelar pedidos porque la ventana de pedidos está cerrada. ' . $this->textoContactoNegocio($empresa);
+        }
+
         $codcli  = $client->cuenta ? $client->cuenta->cod : $client->id;
         $pedidos = Pedido::where('codcli', $codcli)
             ->where('nro', $nro)
@@ -2484,6 +2508,16 @@ Herramientas disponibles:
     {
         if ($nro <= 0) {
             return 'Número de pedido inválido.';
+        }
+
+        // Verificar ventana de pedidos
+        $empresa         = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
+        $localidadObj    = $client->localidad_id ? Localidad::find($client->localidad_id) : null;
+        $diasConfig      = $localidadObj ? $localidadObj->diasConfig() : ($empresa?->bot_dias_reparto ?? []);
+        $fechasCerradas  = $empresa?->bot_fechas_cerrado ?? [];
+        $globalHoraCorte = $empresa?->bot_hora_corte ?? null;
+        if (!empty($diasConfig) && empty($this->getFechasReparto($diasConfig, $fechasCerradas, $globalHoraCorte))) {
+            return 'En este momento no es posible modificar pedidos porque la ventana de pedidos está cerrada. ' . $this->textoContactoNegocio($empresa);
         }
 
         // Verificar estado en ia_pedidos primero
