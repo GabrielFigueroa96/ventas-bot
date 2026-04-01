@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Cliente;
 use App\Models\Localidad;
+use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Recordatorio;
 use App\Services\BotService;
@@ -121,6 +122,15 @@ class RecordatorioController extends Controller
             } else {
                 $bot->sendWhatsapp($phone, $mensaje);
             }
+
+            if ($cliente->id) {
+                Message::create([
+                    'cliente_id' => $cliente->id,
+                    'message'    => "[Recordatorio: {$recordatorio->nombre}]\n{$mensaje}",
+                    'direction'  => 'outgoing',
+                ]);
+            }
+
             return response()->json(['ok' => true, 'mensaje' => $mensaje]);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);

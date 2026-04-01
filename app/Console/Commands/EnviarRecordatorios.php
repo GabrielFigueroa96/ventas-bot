@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Cliente;
+use App\Models\Message;
 use App\Models\Pedido;
 use App\Models\Recordatorio;
 use App\Services\BotService;
@@ -60,6 +61,14 @@ class EnviarRecordatorios extends Command
                     } else {
                         $bot->sendWhatsapp($cliente->phone, $mensaje);
                     }
+
+                    // Guardar en historial para que aparezca en la conversación
+                    Message::create([
+                        'cliente_id' => $cliente->id,
+                        'message'    => "[Recordatorio: {$recordatorio->nombre}]\n{$mensaje}",
+                        'direction'  => 'outgoing',
+                    ]);
+
                     $enviados++;
                 } catch (\Throwable $e) {
                     Log::error("Recordatorio #{$recordatorio->id} cliente #{$cliente->id}: {$e->getMessage()}");

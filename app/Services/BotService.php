@@ -1690,6 +1690,7 @@ Herramientas disponibles:
                 continue;
             }
             $precioNuevo = $this->precioFinal((float) $productos[$item['cod']]->precio, $item['cod'], $localPrices);
+            if ($precioNuevo === null) continue; // sin precio de localidad, dejar como está
             if (abs($precioNuevo - (float) $item['precio']) > 0.01) {
                 $alertas[] = "⚠️ {$item['des']}: precio actualizado a $" . $this->fmt($precioNuevo);
             }
