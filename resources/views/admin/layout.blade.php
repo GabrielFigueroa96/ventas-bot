@@ -19,26 +19,25 @@
         html.sb-pre-collapsed #sidebar { width: 4rem; }
         html.sb-pre-collapsed #sidebar .sb-text,
         html.sb-pre-collapsed #sidebar .sb-section { display: none; }
-        html.sb-pre-collapsed #sidebar .nav-link { flex-direction: column; justify-content: center; padding: 8px 0; gap: 0; }
+        html.sb-pre-collapsed #sidebar .nav-link { justify-content: center; padding: 8px 0; gap: 0; }
         html.sb-pre-collapsed #sidebar .nav-link svg { width: 20px; height: 20px; }
         body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
         #sidebar { overflow: hidden; }
 
         .nav-link {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             align-items: center;
-            justify-content: center;
-            gap: 4px;
-            padding: 8px 4px 7px;
+            gap: 8px;
+            padding: 7px 10px;
             border-radius: 6px;
-            font-size: 9.5px;
+            font-size: 11.5px;
             font-weight: 500;
             color: rgba(255,255,255,0.45);
             text-decoration: none;
             transition: background 0.15s, color 0.15s;
-            white-space: normal;
-            text-align: center;
+            white-space: nowrap;
+            text-align: left;
             line-height: 1.2;
             border-left: 2px solid transparent;
         }
@@ -60,8 +59,8 @@
             letter-spacing: 0.08em;
             color: rgba(255,255,255,0.2);
             text-transform: uppercase;
-            padding: 10px 6px 3px;
-            text-align: center;
+            padding: 10px 10px 3px;
+            text-align: left;
         }
         .nav-section:first-child { padding-top: 4px; }
 
@@ -86,7 +85,7 @@
             #sidebar.collapsed { width: 4rem; }
             #sidebar.collapsed .sb-text { display: none; }
             #sidebar.collapsed .sb-section { opacity: 0; height: 0; padding: 0; overflow: hidden; margin: 0; }
-            #sidebar.collapsed .nav-link { justify-content: center; padding: 8px 0; gap: 0; border-left-color: transparent; }
+            #sidebar.collapsed .nav-link { justify-content: center; padding: 8px 0; gap: 0; border-left-color: transparent; width: 4rem; }
             #sidebar.collapsed .nav-link.active { border-right: 2px solid #ef4444; }
             #sidebar.collapsed .nav-link svg { width: 20px; height: 20px; }
             #sidebar.collapsed .sb-header { justify-content: center; padding: 1rem 0; }
@@ -134,7 +133,7 @@
 <div id="overlay" class="hidden fixed inset-0 bg-black/50 z-40 lg:hidden" onclick="closeSidebar()"></div>
 
 {{-- ── Sidebar ──────────────────────────────────────────────────── --}}
-<aside id="sidebar" class="w-20 flex flex-col shrink-0 lg:sticky lg:top-0 lg:h-screen" style="background:#0d1829">
+<aside id="sidebar" class="w-44 flex flex-col shrink-0 lg:sticky lg:top-0 lg:h-screen" style="background:#0d1829">
 
     {{-- Header --}}
     <div class="py-3 relative flex flex-col items-center" style="border-bottom:1px solid rgba(255,255,255,0.07)">
