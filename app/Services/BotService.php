@@ -460,7 +460,7 @@ class BotService
         $localidad   = $cliente->cuenta?->loca ?? $cliente->localidad ?? null;
         $provincia   = $cliente->cuenta?->prov ?? $cliente->provincia ?? null;
         $cuentaTexto = $cliente->cuenta
-            ? "\nCuenta: {$cliente->cuenta->nom} | {$cliente->cuenta->dom}, {$cliente->cuenta->loca}"
+            ? "\nCuenta comercial (NO es el nombre del cliente): {$cliente->cuenta->nom} | {$cliente->cuenta->dom}, {$cliente->cuenta->loca}"
             : ($localidad ? "\nLocalidad: {$localidad}" . ($provincia ? ", {$provincia}" : '') : '');
 
         // Dirección preferida: primero la del perfil del cliente, si no la última usada en pedido
@@ -782,7 +782,7 @@ Para cualquier otra consulta ajena al negocio, decí amablemente que no podés a
 Formato de precios: NUNCA uses separador de miles. Usá coma para decimales solo si hay centavos. Ejemplos correctos: \$1500 | \$36000 | \$2800,50. Nunca: \$1.500,00 ni \$36,000 ni \$21000,00.
 IMPORTANTE: Los datos de días de reparto, zonas, productos disponibles y precios que aparecen en este system prompt son siempre los correctos y actuales. Si el historial de conversación dice algo diferente sobre días de reparto, zonas o productos, ignoralo — el historial puede estar desactualizado.
 Hoy es {$fecha}.
-Cliente: {$nombre}{$cuentaTexto}
+Nombre del cliente (usá este para dirigirte a él): {$nombre}{$cuentaTexto}
 Último pedido: {$ultimoPedidoTexto}
 {$favoritosTexto}
 {$ultimaDirTexto}{$configNegocio}
