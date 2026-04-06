@@ -509,8 +509,13 @@ class BotService
         // ya fueron computados arriba (antes del filtrado de productos)
         $diasReparto = array_map(fn($d) => (int) $d['dia'], $diasConfig);
         if (!empty($diasReparto)) {
-            $diasNombres = implode(', ', array_map(fn($d) => $diasLabel[$d] ?? $d, $diasReparto));
-            $diasTexto   = $localidad
+            $diasConfigMap = collect($diasConfig)->keyBy('dia');
+            $diasNombres   = implode(', ', array_map(function ($d) use ($diasLabel, $diasConfigMap) {
+                $nombre  = $diasLabel[$d] ?? $d;
+                $horario = $diasConfigMap->get($d)['horario_reparto'] ?? null;
+                return $horario ? "{$nombre} ({$horario})" : $nombre;
+            }, $diasReparto));
+            $diasTexto = $localidad
                 ? "Días de reparto para {$localidad}: {$diasNombres}."
                 : "Días de reparto: {$diasNombres}.";
         } else {

@@ -32,12 +32,13 @@
         <div class="space-y-2" id="dias-rows-{{ $loc?->id ?? 'new' }}">
             @foreach($diasLabel as $num => $label)
             @php
-                $cfg        = old("dias[{$num}]", $diasMap->get($num));
-                $checked    = !empty($cfg);
-                $desdeDay   = $cfg['desde_dia']  ?? '';
-                $desdeHora  = $cfg['desde_hora'] ?? '';
-                $hastaDay   = $cfg['hasta_dia']  ?? '';
-                $hastaHora  = $cfg['hasta_hora'] ?? '';
+                $cfg           = old("dias[{$num}]", $diasMap->get($num));
+                $checked       = !empty($cfg);
+                $desdeDay      = $cfg['desde_dia']      ?? '';
+                $desdeHora     = $cfg['desde_hora']     ?? '';
+                $hastaDay      = $cfg['hasta_dia']      ?? '';
+                $hastaHora     = $cfg['hasta_hora']     ?? '';
+                $horarioReparto = $cfg['horario_reparto'] ?? '';
             @endphp
             <div class="dia-row border border-gray-100 rounded-lg px-3 py-2 bg-gray-50">
                 <label class="flex items-center gap-2 cursor-pointer select-none">
@@ -50,6 +51,13 @@
 
                 <div class="dia-config mt-2 ml-6 {{ $checked ? '' : 'hidden' }}">
                     <div class="grid grid-cols-2 gap-3 text-xs">
+                        <div class="col-span-2">
+                            <p class="text-gray-400 mb-1 font-medium">Horario de reparto <span class="font-normal">(se informa al cliente)</span></p>
+                            <input type="text" name="dias[{{ $num }}][horario_reparto]"
+                                value="{{ $horarioReparto }}"
+                                placeholder="Ej: de 9 a 13hs"
+                                class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300">
+                        </div>
                         <div>
                             <p class="text-gray-400 mb-1 font-medium">Apertura de pedidos</p>
                             <div class="flex gap-2">

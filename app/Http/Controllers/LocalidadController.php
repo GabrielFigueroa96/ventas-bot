@@ -63,6 +63,9 @@ class LocalidadController extends Controller
                 $entry['hasta_dia']  = isset($cfg['hasta_dia'])  && $cfg['hasta_dia']  !== '' ? (int) $cfg['hasta_dia']  : null;
                 $entry['hasta_hora'] = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : null;
             }
+            if (!empty($cfg['horario_reparto'])) {
+                $entry['horario_reparto'] = trim($cfg['horario_reparto']);
+            }
             $result[] = $entry;
         }
         return $result ?: null;
