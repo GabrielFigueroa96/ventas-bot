@@ -460,7 +460,7 @@ class BotService
         $localidad   = $cliente->cuenta?->loca ?? $cliente->localidad ?? null;
         $provincia   = $cliente->cuenta?->prov ?? $cliente->provincia ?? null;
         $cuentaTexto = $cliente->cuenta
-            ? "\nCuenta comercial (NO es el nombre del cliente): {$cliente->cuenta->nom} | {$cliente->cuenta->dom}, {$cliente->cuenta->loca}"
+            ? "\nDirección de cuenta: {$cliente->cuenta->dom}, {$cliente->cuenta->loca}"
             : ($localidad ? "\nLocalidad: {$localidad}" . ($provincia ? ", {$provincia}" : '') : '');
 
         // Dirección preferida: primero la del perfil del cliente, si no la última usada en pedido
@@ -894,6 +894,12 @@ Herramientas disponibles:
                     fn($_) => '[días de reparto actualizados]',
                     $content
                 );
+            }
+            // Si el bot usó el nombre de la cuenta en lugar del nombre del cliente, corregirlo en el historial
+            if ($msg->direction === 'outgoing' && $cliente->cuenta?->nom && $cliente->name
+                && mb_strtolower(trim($cliente->cuenta->nom)) !== mb_strtolower(trim($cliente->name))) {
+                $nomCuenta = preg_quote(trim($cliente->cuenta->nom), '/');
+                $content   = preg_replace('/\b' . $nomCuenta . '\b/iu', $cliente->name, $content);
             }
             $messages[] = [
                 'role'    => $msg->direction === 'incoming' ? 'user' : 'assistant',
