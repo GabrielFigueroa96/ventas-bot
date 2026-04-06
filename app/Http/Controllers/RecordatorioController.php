@@ -159,8 +159,6 @@ class RecordatorioController extends Controller
 
     private function buildCatalogo(Recordatorio $rec): string
     {
-        $diasRec = !empty($rec->dias) ? array_map('intval', $rec->dias) : [];
-
         $localidadObj = $rec->filtro_localidad
             ? Localidad::where('nombre', $rec->filtro_localidad)->where('activo', true)->first()
             : null;
@@ -171,15 +169,7 @@ class RecordatorioController extends Controller
             $prodLocConfigs = ProductoLocalidad::where('localidad_id', $localidadObj->id)->get()->keyBy('cod');
 
             if ($prodLocConfigs->isNotEmpty()) {
-                $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diasRec) {
-                    if (!$prodLocConfigs->has($p->cod)) return false;
-                    if (empty($diasRec)) return true;
-                    $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
-                    if ($diasCfg === null) return true;
-                    if (empty($diasCfg)) return false;
-                    $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
-                    return !empty(array_intersect($diasRec, $diasNum));
-                });
+                $productos = $todosProductos->filter(fn($p) => $prodLocConfigs->has($p->cod));
 
                 $productos = $productos->map(function ($p) use ($prodLocConfigs) {
                     $override = $prodLocConfigs->get($p->cod);

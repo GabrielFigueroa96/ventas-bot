@@ -166,8 +166,6 @@ class EnviarRecordatorios extends Command
 
     private function buildCatalogo(Recordatorio $rec): string
     {
-        $diasRec = !empty($rec->dias) ? array_map('intval', $rec->dias) : [];
-
         // Obtener localidad para filtrar productos
         $localidadObj = $rec->filtro_localidad
             ? Localidad::where('nombre', $rec->filtro_localidad)->where('activo', true)->first()
@@ -179,15 +177,8 @@ class EnviarRecordatorios extends Command
             $prodLocConfigs = ProductoLocalidad::where('localidad_id', $localidadObj->id)->get()->keyBy('cod');
 
             if ($prodLocConfigs->isNotEmpty()) {
-                $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diasRec) {
-                    if (!$prodLocConfigs->has($p->cod)) return false;
-                    if (empty($diasRec)) return true; // sin días configurados: mostrar todos
-                    $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
-                    if ($diasCfg === null) return true;  // sin restricción de días
-                    if (empty($diasCfg)) return false;
-                    $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
-                    return !empty(array_intersect($diasRec, $diasNum));
-                });
+                // Mostrar todos los productos de la localidad, sin filtrar por día de envío
+                $productos = $todosProductos->filter(fn($p) => $prodLocConfigs->has($p->cod));
 
                 // Para precio: usar override de localidad si existe
                 $productos = $productos->map(function ($p) use ($prodLocConfigs) {

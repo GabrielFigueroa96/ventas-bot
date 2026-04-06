@@ -14,6 +14,7 @@ class Kernel extends ConsoleKernel
     {
         $schedule->command('pedidos:notificar')->everyMinute();
         $schedule->command('recordatorios:enviar')->everyMinute();
+        $schedule->command('recordatorios:ventana')->everyMinute();
         $schedule->command('clientes:seguimiento')->hourly();
         $schedule->call(fn() => \App\Models\Carrito::where('updated_at', '<', now()->subDays(30))->delete())->daily();
         $schedule->command('queue:work --stop-when-empty --tries=1')->everyMinute()->withoutOverlapping();

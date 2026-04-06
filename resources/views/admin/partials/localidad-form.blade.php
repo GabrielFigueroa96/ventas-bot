@@ -95,6 +95,57 @@
         </div>
     </div>
 
+    {{-- Recordatorios automáticos --}}
+    <div class="border border-gray-200 rounded-xl p-4 space-y-4">
+        <p class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Recordatorios automáticos</p>
+        <p class="text-xs text-gray-400">Variables disponibles: <code>{nombre}</code>, <code>{dia_reparto}</code>, <code>{horas}</code> (solo cierre)</p>
+
+        {{-- Apertura --}}
+        <div class="space-y-2">
+            <label class="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <input type="checkbox" name="rec_apertura" value="1" id="rec_apertura_check"
+                    {{ old('rec_apertura', $loc?->rec_apertura) ? 'checked' : '' }}
+                    class="accent-red-600"
+                    onchange="document.getElementById('rec_apertura_fields').classList.toggle('hidden', !this.checked)">
+                Aviso de apertura de pedidos
+            </label>
+            <div id="rec_apertura_fields" class="{{ old('rec_apertura', $loc?->rec_apertura) ? '' : 'hidden' }} pl-5 space-y-2">
+                <textarea name="rec_apertura_mensaje" rows="2"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none"
+                    placeholder="¡Hola {nombre}! Ya podés pedir para el {dia_reparto} 🥩">{{ old('rec_apertura_mensaje', $loc?->rec_apertura_mensaje) }}</textarea>
+                <input type="text" name="rec_apertura_template" value="{{ old('rec_apertura_template', $loc?->rec_apertura_template) }}"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none"
+                    placeholder="Template de WhatsApp (opcional, recomendado para clientes fuera de 24hs)">
+            </div>
+        </div>
+
+        {{-- Cierre --}}
+        <div class="space-y-2">
+            <label class="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <input type="checkbox" name="rec_cierre" value="1" id="rec_cierre_check"
+                    {{ old('rec_cierre', $loc?->rec_cierre) ? 'checked' : '' }}
+                    class="accent-red-600"
+                    onchange="document.getElementById('rec_cierre_fields').classList.toggle('hidden', !this.checked)">
+                Aviso de cierre de pedidos
+            </label>
+            <div id="rec_cierre_fields" class="{{ old('rec_cierre', $loc?->rec_cierre) ? '' : 'hidden' }} pl-5 space-y-2">
+                <div class="flex items-center gap-2 text-sm">
+                    <span class="text-gray-500">Enviar</span>
+                    <input type="number" name="rec_cierre_horas" min="1" max="48"
+                        value="{{ old('rec_cierre_horas', $loc?->rec_cierre_horas ?? 2) }}"
+                        class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center focus:ring-2 focus:ring-red-300 focus:outline-none">
+                    <span class="text-gray-500">horas antes del cierre</span>
+                </div>
+                <textarea name="rec_cierre_mensaje" rows="2"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none"
+                    placeholder="¡{nombre}! Cerramos pedidos para el {dia_reparto} en {horas}hs. Acá la lista 👇">{{ old('rec_cierre_mensaje', $loc?->rec_cierre_mensaje) }}</textarea>
+                <input type="text" name="rec_cierre_template" value="{{ old('rec_cierre_template', $loc?->rec_cierre_template) }}"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none"
+                    placeholder="Template de WhatsApp (opcional)">
+            </div>
+        </div>
+    </div>
+
     <div class="flex items-center gap-4">
         <label class="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" name="activo" value="1"

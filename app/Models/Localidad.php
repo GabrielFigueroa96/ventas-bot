@@ -7,11 +7,18 @@ use Illuminate\Database\Eloquent\Model;
 class Localidad extends Model
 {
     protected $table    = 'ia_localidades';
-    protected $fillable = ['nombre', 'provincia', 'dias_reparto', 'activo'];
+    protected $fillable = [
+        'nombre', 'provincia', 'dias_reparto', 'activo',
+        'rec_apertura', 'rec_apertura_mensaje', 'rec_apertura_template',
+        'rec_cierre', 'rec_cierre_horas', 'rec_cierre_mensaje', 'rec_cierre_template',
+    ];
 
     protected $casts = [
-        'dias_reparto' => 'array',
-        'activo'       => 'boolean',
+        'dias_reparto'  => 'array',
+        'activo'        => 'boolean',
+        'rec_apertura'  => 'boolean',
+        'rec_cierre'    => 'boolean',
+        'rec_cierre_horas' => 'integer',
     ];
 
     public function clientes()

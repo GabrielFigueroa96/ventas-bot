@@ -23,6 +23,7 @@ class LocalidadController extends Controller
         ]);
         $data['activo']       = $request->boolean('activo', true);
         $data['dias_reparto'] = $this->buildDiasReparto($request);
+        $this->fillRecordatorios($request, $data);
 
         Localidad::create($data);
         return redirect()->route('admin.localidades')->with('ok', 'Localidad creada.');
@@ -38,9 +39,21 @@ class LocalidadController extends Controller
         ]);
         $data['activo']       = $request->boolean('activo', true);
         $data['dias_reparto'] = $this->buildDiasReparto($request);
+        $this->fillRecordatorios($request, $data);
 
         $localidad->update($data);
         return redirect()->route('admin.localidades')->with('ok', 'Localidad actualizada.');
+    }
+
+    private function fillRecordatorios(Request $request, array &$data): void
+    {
+        $data['rec_apertura']          = $request->boolean('rec_apertura');
+        $data['rec_apertura_mensaje']  = $request->input('rec_apertura_mensaje') ?: null;
+        $data['rec_apertura_template'] = $request->input('rec_apertura_template') ?: null;
+        $data['rec_cierre']            = $request->boolean('rec_cierre');
+        $data['rec_cierre_horas']      = $request->filled('rec_cierre_horas') ? (int) $request->input('rec_cierre_horas') : null;
+        $data['rec_cierre_mensaje']    = $request->input('rec_cierre_mensaje') ?: null;
+        $data['rec_cierre_template']   = $request->input('rec_cierre_template') ?: null;
     }
 
     private function buildDiasReparto(Request $request): ?array
