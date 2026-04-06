@@ -6,6 +6,7 @@ use App\Models\Cliente;
 use App\Models\Localidad;
 use App\Models\Message;
 use App\Models\Producto;
+use App\Models\ProductoLocalidad;
 use App\Models\Recordatorio;
 use App\Services\BotService;
 use Illuminate\Http\Request;
@@ -107,15 +108,20 @@ class RecordatorioController extends Controller
             $cliente = new Cliente(['phone' => $phone, 'name' => 'Prueba']);
         }
 
-        $mensaje   = $this->construirMensaje($recordatorio, $cliente);
+        $catalogo  = $recordatorio->tipo === 'catalogo' ? $this->buildCatalogo($recordatorio) : null;
+        $mensaje   = $this->construirMensaje($recordatorio, $cliente, $catalogo);
         $imagenUrl = $recordatorio->imagen_url ?? null;
         $template  = trim($recordatorio->template_nombre ?? '');
+        $nombre    = $cliente->name ?? 'cliente';
 
         $bot = app(BotService::class);
 
         try {
-            if ($template) {
-                $nombre = $cliente->name ?? 'cliente';
+            if ($catalogo !== null && $template) {
+                $bot->sendRecordatorioTemplate($phone, $template, $nombre, $mensaje);
+                sleep(1);
+                $bot->sendWhatsapp($phone, $catalogo);
+            } elseif ($template) {
                 $bot->sendRecordatorioTemplate($phone, $template, $nombre, $mensaje);
             } elseif ($imagenUrl) {
                 $bot->sendWhatsappImageByUrl($phone, $imagenUrl, $mensaje);
@@ -124,49 +130,93 @@ class RecordatorioController extends Controller
             }
 
             if ($cliente->id) {
+                $historial = $catalogo !== null ? $mensaje . "\n\n" . $catalogo : $mensaje;
                 Message::create([
                     'cliente_id' => $cliente->id,
-                    'message'    => "[Recordatorio: {$recordatorio->nombre}]\n{$mensaje}",
+                    'message'    => "[Recordatorio: {$recordatorio->nombre}]\n{$historial}",
                     'direction'  => 'outgoing',
                 ]);
             }
 
-            return response()->json(['ok' => true, 'mensaje' => $mensaje]);
+            return response()->json(['ok' => true, 'mensaje' => $catalogo !== null ? $mensaje . "\n\n" . $catalogo : $mensaje]);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
         }
     }
 
-    private function construirMensaje(Recordatorio $rec, Cliente $cliente): string
+    private function construirMensaje(Recordatorio $rec, Cliente $cliente, ?string $catalogo = null): string
     {
         $nombre  = $cliente->name ?? 'cliente';
         $mensaje = str_replace('{nombre}', $nombre, $rec->mensaje);
 
         if ($rec->tipo === 'catalogo') {
-            $formatPrecio = fn($p) => ($p->precio == floor($p->precio))
-                ? '$' . number_format($p->precio, 0, ',', '')
-                : '$' . number_format($p->precio, 2, ',', '');
-
-            $productos = Producto::paraBot()->orderBy('tablaplu.desgrupo')->orderBy('tablaplu.des')->get();
-
-            $lineas = [];
-            foreach (['Peso', 'Unidad'] as $tipo) {
-                $grupo = $productos->where('tipo', $tipo)->groupBy(fn($p) => $p->desgrupo ?: 'Varios');
-                if ($grupo->isEmpty()) continue;
-                foreach ($grupo as $nombreGrupo => $items) {
-                    $lineas[] = "*{$nombreGrupo}*";
-                    foreach ($items as $p) {
-                        $unidad   = $tipo === 'Peso' ? '/kg' : '/u';
-                        $lineas[] = "• {$p->des} — {$formatPrecio($p)}{$unidad}";
-                    }
-                    $lineas[] = '';
-                }
-            }
-
-            $catalogo = trim(implode("\n", $lineas));
-            $mensaje  = str_replace('{catalogo}', $catalogo, $mensaje);
+            $contenido = $catalogo ?? $this->buildCatalogo($rec);
+            $mensaje   = str_replace('{catalogo}', $contenido, $mensaje);
         }
 
         return $mensaje;
+    }
+
+    private function buildCatalogo(Recordatorio $rec): string
+    {
+        $diasRec = !empty($rec->dias) ? array_map('intval', $rec->dias) : [];
+
+        $localidadObj = $rec->filtro_localidad
+            ? Localidad::where('nombre', $rec->filtro_localidad)->where('activo', true)->first()
+            : null;
+
+        $todosProductos = Producto::paraBot()->orderBy('tablaplu.desgrupo')->orderBy('tablaplu.des')->get();
+
+        if ($localidadObj) {
+            $prodLocConfigs = ProductoLocalidad::where('localidad_id', $localidadObj->id)->get()->keyBy('cod');
+
+            if ($prodLocConfigs->isNotEmpty()) {
+                $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diasRec) {
+                    if (!$prodLocConfigs->has($p->cod)) return false;
+                    if (empty($diasRec)) return true;
+                    $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
+                    if ($diasCfg === null) return true;
+                    if (empty($diasCfg)) return false;
+                    $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                    return !empty(array_intersect($diasRec, $diasNum));
+                });
+
+                $productos = $productos->map(function ($p) use ($prodLocConfigs) {
+                    $override = $prodLocConfigs->get($p->cod);
+                    if ($override && $override->precio !== null) {
+                        $p->precio = $override->precio;
+                    }
+                    return $p;
+                });
+            } else {
+                $productos = collect();
+            }
+        } else {
+            $productos = $todosProductos;
+        }
+
+        if ($productos->isEmpty()) {
+            return '(sin productos disponibles)';
+        }
+
+        $formatPrecio = fn($p) => ($p->precio == floor($p->precio))
+            ? '$' . number_format($p->precio, 0, ',', '')
+            : '$' . number_format($p->precio, 2, ',', '');
+
+        $lineas = [];
+        foreach (['Peso', 'Unidad'] as $tipo) {
+            $grupo = $productos->where('tipo', $tipo)->groupBy(fn($p) => $p->desgrupo ?: 'Varios');
+            if ($grupo->isEmpty()) continue;
+            foreach ($grupo as $nombreGrupo => $items) {
+                $lineas[] = "*{$nombreGrupo}*";
+                foreach ($items as $p) {
+                    $unidad   = $tipo === 'Peso' ? '/kg' : '/u';
+                    $lineas[] = "• {$p->des} — {$formatPrecio($p)}{$unidad}";
+                }
+                $lineas[] = '';
+            }
+        }
+
+        return trim(implode("\n", $lineas));
     }
 }
