@@ -331,6 +331,13 @@ class BotService
     private function buildMessages(string $message, $cliente, ?array $image = null): array
     {
         $nombre  = $cliente->name ?? 'cliente';
+        Log::info("buildMessages nombre debug", [
+            'cliente_id'   => $cliente->id,
+            'cliente_name' => $cliente->name,
+            'nombre_var'   => $nombre,
+            'cuenta_cod'   => $cliente->cuenta_cod,
+            'cuenta_nom'   => $cliente->cuenta?->nom,
+        ]);
         $codcli  = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
         $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
         $empresa = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
