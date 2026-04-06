@@ -331,13 +331,6 @@ class BotService
     private function buildMessages(string $message, $cliente, ?array $image = null): array
     {
         $nombre  = $cliente->name ?? 'cliente';
-        Log::info("buildMessages nombre debug", [
-            'cliente_id'   => $cliente->id,
-            'cliente_name' => $cliente->name,
-            'nombre_var'   => $nombre,
-            'cuenta_cod'   => $cliente->cuenta_cod,
-            'cuenta_nom'   => $cliente->cuenta?->nom,
-        ]);
         $codcli  = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
         $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
         $empresa = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
@@ -716,11 +709,11 @@ class BotService
         // Horario y calendario (por día, múltiples turnos)
         if (!empty($botHorarios)) {
             $horarioLineas = [];
-            foreach (IaEmpresa::DIAS_LABEL as $num => $nombre) {
+            foreach (IaEmpresa::DIAS_LABEL as $num => $diaLabel) {
                 $turnos = $botHorarios[(string)$num] ?? null;
                 if (!empty($turnos)) {
                     $turnosStr     = implode(' y ', array_map(fn($t) => "{$t['de']} a {$t['a']}hs", $turnos));
-                    $horarioLineas[] = "{$nombre}: {$turnosStr}";
+                    $horarioLineas[] = "{$diaLabel}: {$turnosStr}";
                 }
             }
             if ($horarioLineas) {
@@ -871,8 +864,6 @@ Herramientas disponibles:
 - ver_producto → detalle e imagen de un producto específico. Usá esta herramienta cuando el cliente pregunta por un producto (disponibilidad, precio, descripción, si hay X, cómo es el X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial pueden estar desactualizados — usá siempre ver_producto para el precio real.
 " . ($puedePedir ? "- Cuando el cliente responde afirmativamente ('sí', 'dale', 'sí quiero', etc.) luego de que se le mostró un producto: NO llamés ver_producto. Preguntale directamente la cantidad y llamá agregar_al_carrito con lo que confirme. Si ya dijo la cantidad, llamá agregar_al_carrito directamente.
 " : "") . "- Si recibís una imagen, describila e intentá relacionarla con un pedido.";
-
-        Log::info("BotService system prompt [{$cliente->id}]", ['prompt' => $systemContent]);
 
         $messages[] = ['role' => 'system', 'content' => $systemContent];
 
