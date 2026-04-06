@@ -20,6 +20,7 @@
         html.sb-pre-collapsed #sidebar .sb-text,
         html.sb-pre-collapsed #sidebar .sb-section { display: none; }
         html.sb-pre-collapsed #sidebar .nav-link { justify-content: center; padding: 8px 0; gap: 0; }
+        html.sb-pre-collapsed #sidebar .sb-header { justify-content: center; }
         html.sb-pre-collapsed #sidebar .nav-link svg { width: 20px; height: 20px; }
         body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
         #sidebar { overflow: hidden; }
@@ -88,8 +89,8 @@
             #sidebar.collapsed .nav-link { justify-content: center; padding: 8px 0; gap: 0; border-left-color: transparent; width: 4rem; }
             #sidebar.collapsed .nav-link.active { border-right: 2px solid #ef4444; }
             #sidebar.collapsed .nav-link svg { width: 20px; height: 20px; }
-            #sidebar.collapsed .sb-header { justify-content: center; padding: 1rem 0; }
-            #sidebar.collapsed #sb-toggle { transform: none; }
+            #sidebar.collapsed .sb-header { justify-content: center; }
+            #sidebar.collapsed .sb-toggle { margin-left: 0; }
             #sidebar.collapsed #sb-toggle svg { transform: rotate(180deg); }
             #sidebar.collapsed nav { padding-left: 0; padding-right: 0; }
         }
@@ -136,18 +137,19 @@
 <aside id="sidebar" class="w-44 flex flex-col shrink-0 lg:sticky lg:top-0 lg:h-screen" style="background:#0d1829">
 
     {{-- Header --}}
-    <div class="py-3 relative flex flex-col items-center" style="border-bottom:1px solid rgba(255,255,255,0.07)">
-        <div class="sb-header flex items-center justify-center">
+    <div class="px-3 py-3 flex items-center justify-between shrink-0" style="border-bottom:1px solid rgba(255,255,255,0.07)">
+        <div class="sb-header flex items-center gap-2 min-w-0">
             @if(!empty($logoTienda))
                 <img src="{{ asset($logoTienda) }}" alt="{{ $empresaNombre }}"
                      class="w-7 h-7 rounded-lg object-cover shrink-0">
             @else
                 <div class="w-7 h-7 rounded-lg flex items-center justify-center text-sm shrink-0" style="background:rgba(239,68,68,0.2)">🥩</div>
             @endif
+            <span class="sb-text text-white font-semibold text-sm truncate">{{ $empresaNombre }}</span>
         </div>
         {{-- Toggle colapsar (solo desktop) --}}
         <button id="sb-toggle" onclick="toggleSidebar()" title="Retraer menú"
-            class="hidden lg:flex mt-2 items-center justify-center w-6 h-6 rounded-md transition-colors"
+            class="sb-toggle hidden lg:flex items-center justify-center w-6 h-6 rounded-md shrink-0 transition-colors"
             style="color:rgba(255,255,255,0.3)" onmouseover="this.style.color='rgba(255,255,255,0.7)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'">
             <svg class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>

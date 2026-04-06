@@ -791,11 +791,12 @@ Nombre del cliente: {$nombre}. SIEMPRE usá este nombre para dirigirte al client
       . ($hayMultiplesFechas ? " También hay repartos disponibles para: " . implode(', ', array_filter(array_map(fn($f) => $f['fecha'] !== $fechaElegida ? $f['texto'] : null, $fechasDisponibles))) . ". Si el cliente quiere cambiar de fecha, usá elegir_reparto." : "")
     : ($fechasTexto ? "Repartos disponibles: {$fechasTexto}." : '')) . "
 
-" . ($needsProductList ? "Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : " (disponibilidad puede variar según el día de reparto elegido)") . ":\n{$lista}\n\n" : "Catálogo no incluido en este contexto. Si el cliente consulta por un producto específico, usá ver_producto.\n\n") . ($puedeSupgerir ? "════════════════════════════════
+" . ($needsProductList ? "Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : ($hayMultiplesFechas ? " (hay múltiples fechas de reparto — los productos con [solo X] solo están disponibles ese día; NO atribuyas un producto a un día específico sin que el cliente haya elegido fecha con elegir_reparto)" : " (disponibilidad puede variar según el día de reparto elegido)")) . ":\n{$lista}\n\n" : "Catálogo no incluido en este contexto. Si el cliente consulta por un producto específico, usá ver_producto.\n\n") . ($puedeSupgerir ? "════════════════════════════════
 FLUJO 1 — SUGERIR
 ════════════════════════════════
 Activar cuando: el cliente saluda, no sabe qué quiere, pide recomendación o menciona una ocasión (asado, cumpleaños, etc.).
 Pasos:
+" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente quiere saber qué puede pedir, usá elegir_reparto para que elija fecha primero — los productos varían según el día. NO listés productos de un día específico sin que haya elegido." : "") . "
 1. Si menciona una ocasión, calculá cantidades según las porciones estándar y mostrá solo productos de la lista disponible.
 2. Si no menciona ocasión, sugerí sus favoritos que estén en la lista disponible (ignorá los que no estén en la lista)" . ($puedeMasVendidos ? " o los más populares" : "") . ".
 3. Ofrecé achuras cuando sea pertinente (una sola vez, sin insistir).
