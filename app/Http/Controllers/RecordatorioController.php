@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Cliente;
 use App\Models\Localidad;
 use App\Models\Message;
-use App\Models\Pedido;
+use App\Models\Producto;
 use App\Models\Recordatorio;
 use App\Services\BotService;
 use Illuminate\Http\Request;
@@ -28,7 +28,7 @@ class RecordatorioController extends Controller
             'mensaje'           => 'required|string',
             'imagen_url'        => 'nullable|url|max:500',
             'template_nombre'   => 'nullable|string|max:200',
-            'tipo'              => 'required|in:libre,recomendacion,repetir_pedido',
+            'tipo'              => 'required|in:libre,catalogo',
             'filtro_localidad'  => 'nullable|string|max:100',
             'filtro_provincia'  => 'nullable|string|max:100',
             'dias'              => 'nullable|array',
@@ -63,7 +63,7 @@ class RecordatorioController extends Controller
             'mensaje'           => 'required|string',
             'imagen_url'        => 'nullable|url|max:500',
             'template_nombre'   => 'nullable|string|max:200',
-            'tipo'              => 'required|in:libre,recomendacion,repetir_pedido',
+            'tipo'              => 'required|in:libre,catalogo',
             'filtro_localidad'  => 'nullable|string|max:100',
             'filtro_provincia'  => 'nullable|string|max:100',
             'dias'              => 'nullable|array',
@@ -139,33 +139,32 @@ class RecordatorioController extends Controller
 
     private function construirMensaje(Recordatorio $rec, Cliente $cliente): string
     {
-        $nombre = $cliente->name ?? 'cliente';
-        $codcli = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
-
+        $nombre  = $cliente->name ?? 'cliente';
         $mensaje = str_replace('{nombre}', $nombre, $rec->mensaje);
 
-        if ($rec->tipo === 'repetir_pedido') {
-            $ultimoPedido = $codcli
-                ? Pedido::where('codcli', $codcli)->orderByDesc('reg')->get()->groupBy('nro')->first()
-                : null;
+        if ($rec->tipo === 'catalogo') {
+            $formatPrecio = fn($p) => ($p->precio == floor($p->precio))
+                ? '$' . number_format($p->precio, 0, ',', '')
+                : '$' . number_format($p->precio, 2, ',', '');
 
-            if ($ultimoPedido) {
-                $nro    = $ultimoPedido->first()->nro;
-                $items  = $ultimoPedido->map(fn($p) => $p->kilos > 0 ? "{$p->kilos}kg {$p->descrip}" : "{$p->cant}u {$p->descrip}")->implode(', ');
-                $resumen = "Último pedido #$nro: $items";
-            } else {
-                $resumen = '(sin pedidos previos)';
+            $productos = Producto::paraBot()->orderBy('tablaplu.desgrupo')->orderBy('tablaplu.des')->get();
+
+            $lineas = [];
+            foreach (['Peso', 'Unidad'] as $tipo) {
+                $grupo = $productos->where('tipo', $tipo)->groupBy(fn($p) => $p->desgrupo ?: 'Varios');
+                if ($grupo->isEmpty()) continue;
+                foreach ($grupo as $nombreGrupo => $items) {
+                    $lineas[] = "*{$nombreGrupo}*";
+                    foreach ($items as $p) {
+                        $unidad   = $tipo === 'Peso' ? '/kg' : '/u';
+                        $lineas[] = "• {$p->des} — {$formatPrecio($p)}{$unidad}";
+                    }
+                    $lineas[] = '';
+                }
             }
-            $mensaje = str_replace('{ultimo_pedido}', $resumen, $mensaje);
-        }
 
-        if ($rec->tipo === 'recomendacion') {
-            $items = $codcli
-                ? Pedido::where('codcli', $codcli)->selectRaw('descrip, COUNT(*) as veces')->groupBy('descrip')->orderByDesc('veces')->take(3)->pluck('descrip')
-                : collect();
-
-            $top     = $items->isNotEmpty() ? $items->map(fn($d) => "• {$d}")->implode("\n") : 'nuestros productos';
-            $mensaje = str_replace('{recomendaciones}', $top, $mensaje);
+            $catalogo = trim(implode("\n", $lineas));
+            $mensaje  = str_replace('{catalogo}', $catalogo, $mensaje);
         }
 
         return $mensaje;
