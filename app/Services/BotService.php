@@ -770,9 +770,7 @@ class BotService
         $nombreIa  = trim($empresa?->nombre_ia ?? '');
         $identidad = $nombreIa ? "Te llamás {$nombreIa}." : '';
 
-        $messages[] = [
-            'role'    => 'system',
-            'content' => "Sos el asistente virtual del negocio. {$identidad} Amable, breve y directo. Respondé siempre en español argentino.
+        $systemContent = "Sos el asistente virtual del negocio. {$identidad} Amable, breve y directo. Respondé siempre en español argentino.
 Respondés consultas sobre: pedidos, precios, productos, horarios, dirección, formas de pago, días de reparto y cualquier información del negocio que tengas disponible.
 Para cualquier otra consulta ajena al negocio, decí amablemente que no podés ayudar con eso.
 Formato de precios: NUNCA uses separador de miles. Usá coma para decimales solo si hay centavos. Ejemplos correctos: \$1500 | \$36000 | \$2800,50. Nunca: \$1.500,00 ni \$36,000 ni \$21000,00.
@@ -865,8 +863,11 @@ Herramientas disponibles:
 " : "") . "- ver_precios → lista de precios actualizada (mostrala tal cual, sin reformatear)
 - ver_producto → detalle e imagen de un producto específico. Usá esta herramienta cuando el cliente pregunta por un producto (disponibilidad, precio, descripción, si hay X, cómo es el X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial pueden estar desactualizados — usá siempre ver_producto para el precio real.
 " . ($puedePedir ? "- Cuando el cliente responde afirmativamente ('sí', 'dale', 'sí quiero', etc.) luego de que se le mostró un producto: NO llamés ver_producto. Preguntale directamente la cantidad y llamá agregar_al_carrito con lo que confirme. Si ya dijo la cantidad, llamá agregar_al_carrito directamente.
-" : "") . "- Si recibís una imagen, describila e intentá relacionarla con un pedido.",
-        ];
+" : "") . "- Si recibís una imagen, describila e intentá relacionarla con un pedido.";
+
+        Log::info("BotService system prompt [{$cliente->id}]", ['prompt' => $systemContent]);
+
+        $messages[] = ['role' => 'system', 'content' => $systemContent];
 
         foreach ($history as $msg) {
             $content = $msg->message ?: '(imagen)';
