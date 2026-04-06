@@ -520,7 +520,7 @@ class BotService
                 : "Días de reparto: {$diasNombres}.";
         } else {
             $diasTexto = $localidadObj === null && $cliente->localidad
-                ? "No hay reparto configurado para {$cliente->localidad}. Solo retiro en local."
+                ? "No hay reparto configurado para {$cliente->localidad}."
                 : '';
         }
 
@@ -549,15 +549,9 @@ class BotService
             ->implode(' | ');
 
         // Tipos de entrega habilitados
-        $permiteEnvio  = $empresa?->bot_permite_envio  ?? true;
-        $permiteRetiro = $empresa?->bot_permite_retiro ?? true;
-        $entregasTexto = 'Tipos de entrega disponibles: ' . implode(' y ', array_filter([
-            $permiteEnvio  ? 'envío' : null,
-            $permiteRetiro ? 'retiro en local'   : null,
-        ])) . '.';
-        if (!$permiteEnvio && !$permiteRetiro) {
-            $entregasTexto = 'Por el momento no se aceptan pedidos (entrega deshabilitada).';
-        }
+        $permiteEnvio  = $empresa?->bot_permite_envio ?? true;
+        $permiteRetiro = false;
+        $entregasTexto = $permiteEnvio ? 'Tipo de entrega: envío a domicilio.' : 'Por el momento no se aceptan pedidos (entrega deshabilitada).';
 
         // Medios de pago habilitados
         $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
@@ -699,10 +693,7 @@ class BotService
             : null;
 
         // Texto dinámico para el paso 3 del flujo de pedido
-        $entregasOpciones = array_filter([
-            $permiteEnvio  ? 'envío' : null,
-            $permiteRetiro ? 'retiro en local'   : null,
-        ]);
+        $entregasOpciones = $permiteEnvio ? ['envío'] : [];
         $mediosOpciones = array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados);
 
         $puedePedir       = $empresa?->bot_puede_pedir        ?? true;
@@ -734,7 +725,7 @@ class BotService
                 fn($f) => \Carbon\Carbon::parse($f)->locale('es')->isoFormat('D [de] MMMM'),
                 $fechasCerradas
             ));
-            $configNegocio .= "\nFechas en que el local estará cerrado (sin entregas ni retiros): {$cerradasFmt}.";
+            $configNegocio .= "\nFechas sin entregas: {$cerradasFmt}.";
         }
 
         if ($corteAviso)     $configNegocio .= "\n\n{$corteAviso}";
@@ -960,11 +951,7 @@ Herramientas disponibles:
         $puedePedir = $empresa?->bot_puede_pedir ?? true;
 
         // Enums dinámicos según configuración
-        $tiposEntrega = array_values(array_filter([
-            ($empresa?->bot_permite_envio  ?? true) ? 'envio'  : null,
-            ($empresa?->bot_permite_retiro ?? true) ? 'retiro' : null,
-        ]));
-        if (empty($tiposEntrega)) $tiposEntrega = ['retiro'];
+        $tiposEntrega = ($empresa?->bot_permite_envio ?? true) ? ['envio'] : [];
 
         $mediosPago = $empresa?->bot_medios_pago ?? ['efectivo', 'transferencia', 'cuenta_corriente', 'otro'];
 
@@ -1044,7 +1031,7 @@ Herramientas disponibles:
                             'tipo_entrega' => [
                                 'type'        => 'string',
                                 'enum'        => $tiposEntrega,
-                                'description' => 'envio: se lleva al cliente (domicilio, local comercial, etc.). retiro: el cliente pasa a buscar.',
+                                'description' => 'Siempre envio: se lleva al cliente a su domicilio.',
                             ],
                             'forma_pago' => [
                                 'type'        => 'string',
@@ -1828,20 +1815,14 @@ Herramientas disponibles:
     {
         $fechasCerradas = $empresa?->bot_fechas_cerrado ?? [];
 
-        if ($tipoEntrega === 'retiro') {
-            $horarios     = $empresa?->bot_horarios ?? [];
-            $diasAbiertos = array_keys(array_filter($horarios, fn($t) => !empty($t)));
-            $dias         = !empty($diasAbiertos) ? array_map('intval', $diasAbiertos) : [1, 2, 3, 4, 5, 6];
-        } else {
-            $localidadObj = $client->localidad_id
-                ? $client->localidadObj
-                : ($client->localidad
-                    ? Localidad::where('activo', true)
-                        ->whereRaw('LOWER(nombre) = ?', [strtolower($client->localidad)])
-                        ->first()
-                    : null);
-            $dias = array_map('intval', $localidadObj?->dias_reparto ?? []);
-        }
+        $localidadObj = $client->localidad_id
+            ? $client->localidadObj
+            : ($client->localidad
+                ? Localidad::where('activo', true)
+                    ->whereRaw('LOWER(nombre) = ?', [strtolower($client->localidad)])
+                    ->first()
+                : null);
+        $dias = array_map('intval', $localidadObj?->dias_reparto ?? []);
 
         // Si el cliente pidió una fecha específica, usarla si es válida
         if ($fechaSolicitada) {
@@ -1889,11 +1870,11 @@ Herramientas disponibles:
     public function iniciarConfirmacionPedido($client, array $args = []): string
     {
         $empresa       = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
-        $permiteEnvio  = $empresa?->bot_permite_envio  ?? true;
-        $permiteRetiro = $empresa?->bot_permite_retiro ?? true;
+        $permiteEnvio  = $empresa?->bot_permite_envio ?? true;
+        $permiteRetiro = false;
 
         // Verificar localidad para envío
-        if ($permiteEnvio && !$permiteRetiro) {
+        if ($permiteEnvio) {
             if (!$client->localidad) {
                 return 'No tengo registrada tu localidad. ¿En qué localidad estás para saber si tenemos reparto en tu zona?';
             }
@@ -1923,17 +1904,8 @@ Herramientas disponibles:
         ));
         $total = array_sum(array_column($items, 'neto'));
 
-        // Tipo de entrega: del argumento de la IA, o forzado por configuración
-        $tipoProvisto = null;
-        if (isset($args['tipo_entrega']) && in_array($args['tipo_entrega'], ['envio', 'retiro'])) {
-            // Solo usar el tipo provisto si la configuración lo permite
-            if (($args['tipo_entrega'] === 'envio'  && $permiteEnvio)  ||
-                ($args['tipo_entrega'] === 'retiro' && $permiteRetiro)) {
-                $tipoProvisto = $args['tipo_entrega'];
-            }
-        }
-        if ($permiteEnvio  && !$permiteRetiro) $tipoProvisto = 'envio';
-        if (!$permiteEnvio && $permiteRetiro)  $tipoProvisto = 'retiro';
+        // Tipo de entrega: siempre envio
+        $tipoProvisto = $permiteEnvio ? 'envio' : null;
 
         // Forma de pago provista por la IA
         $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
@@ -1988,19 +1960,8 @@ Herramientas disponibles:
             return 'Botones enviados';
         }
 
-        // Ambas opciones disponibles y la IA no indicó tipo: preguntar
-        $client->update(['estado' => 'confirmando_entrega']);
-        $this->sendInteractiveButtons(
-            $client->phone,
-            "{$itemsText}\n\n*Total: $" . $this->fmt($total) . '*',
-            '¿Cómo recibís tu pedido?',
-            [
-                ['id' => 'entrega_envio',  'title' => 'Envío'],
-                ['id' => 'entrega_retiro', 'title' => 'Retiro en local'],
-            ]
-        );
-
-        return 'Botones enviados';
+        // Sin tipo de entrega disponible
+        return 'En este momento no se pueden tomar pedidos.';
     }
 
     public function handleInteractiveResponse($client, string $id): string
@@ -2153,7 +2114,7 @@ Herramientas disponibles:
         $fechaLabel = isset($data['fecha_entrega'])
             ? ' — ' . \Carbon\Carbon::parse($data['fecha_entrega'])->locale('es')->isoFormat('dddd D [de] MMMM')
             : '';
-        $tipoLabel  = (($data['tipo_entrega'] ?? 'retiro') === 'envio' ? 'Envío' : 'Retiro en local') . $fechaLabel;
+        $tipoLabel  = 'Envío' . $fechaLabel;
 
         $body = "{$itemsText}\n\n"
             . "📦 {$tipoLabel}\n"
@@ -2183,7 +2144,7 @@ Herramientas disponibles:
             $result = $this->createOrder(
                 $client,
                 $data['fecha_entrega'] ?? now()->format('Y-m-d'),
-                $data['tipo_entrega'] ?? 'retiro',
+                $data['tipo_entrega'] ?? 'envio',
                 $data['medio_pago']   ?? 'efectivo',
                 $data['calle']        ?? '',
                 $data['numero']       ?? '',
@@ -2202,7 +2163,7 @@ Herramientas disponibles:
 
     // -------------------------------------------------------------------------
 
-    private function createOrder($client, string $fechaEntrega = '', string $tipoEntrega = 'retiro', string $formaPago = 'efectivo', string $calle = '', string $numero = '', string $localidad = '', string $datoExtra = '', string $obs = ''): string
+    private function createOrder($client, string $fechaEntrega = '', string $tipoEntrega = 'envio', string $formaPago = 'efectivo', string $calle = '', string $numero = '', string $localidad = '', string $datoExtra = '', string $obs = ''): string
     {
         $registro = $this->getCarrito($client);
         $carrito  = $registro ? $registro->items : [];
