@@ -52,6 +52,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::put   ('/localidades/{localidad}',        [LocalidadController::class, 'update'])->name('localidades.update');
     Route::delete('/localidades/{localidad}',        [LocalidadController::class, 'destroy'])->name('localidades.destroy');
     Route::patch ('/localidades/{localidad}/toggle', [LocalidadController::class, 'toggle'])->name('localidades.toggle');
+    Route::post  ('/localidades/{localidad}/probar', [LocalidadController::class, 'probar'])->name('localidades.probar');
 
     // Recordatorios
     Route::get   ('/recordatorios',          [RecordatorioController::class, 'index'])->name('recordatorios');
