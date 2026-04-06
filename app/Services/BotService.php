@@ -555,12 +555,8 @@ class BotService
 
         // Medios de pago habilitados
         $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
-        $mediosLabel       = IaEmpresa::MEDIOS_PAGO;
-        $mediosTexto       = 'Medios de pago aceptados: ' . implode(', ', array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados)) . '.';
 
-        // Horario y calendario del local
         // $fechasCerradas, $globalHoraCorte, $fechasDisponibles ya calculados arriba
-        $botHorarios = $empresa?->bot_horarios ?? [];
 
         $proximoRepartoTexto = '';
         $proximoRepartoFecha = '';
@@ -692,34 +688,16 @@ class BotService
             ? \Carbon\Carbon::parse($fechaElegida)->locale('es')->isoFormat('dddd D [de] MMMM')
             : null;
 
-        // Texto dinámico para el paso 3 del flujo de pedido
-        $entregasOpciones = $permiteEnvio ? ['envío'] : [];
-        $mediosOpciones = array_map(fn($m) => $mediosLabel[$m] ?? $m, $mediosHabilitados);
-
         $puedePedir       = $empresa?->bot_puede_pedir        ?? true;
         $puedeSupgerir    = $empresa?->bot_puede_sugerir       ?? true;
         $puedeMasVendidos = $empresa?->bot_puede_mas_vendidos  ?? false;
 
-        $configNegocio = "\n{$entregasTexto}\n{$mediosTexto}";
+        $configNegocio = "\n{$entregasTexto}";
         if ($diasTexto)                       $configNegocio .= "\n{$diasTexto}";
         if (!empty($ventanasTexto))           $configNegocio .= "\n" . implode("\n", $ventanasTexto);
         if ($todasLasZonas)                   $configNegocio .= "\nZonas de entrega disponibles: {$todasLasZonas}";
         if ($puedeMasVendidos && $masVendidosGlobal) $configNegocio .= "\nProductos más vendidos del negocio: {$masVendidosGlobal}";
 
-        // Horario y calendario (por día, múltiples turnos)
-        if (!empty($botHorarios)) {
-            $horarioLineas = [];
-            foreach (IaEmpresa::DIAS_LABEL as $num => $diaLabel) {
-                $turnos = $botHorarios[(string)$num] ?? null;
-                if (!empty($turnos)) {
-                    $turnosStr     = implode(' y ', array_map(fn($t) => "{$t['de']} a {$t['a']}hs", $turnos));
-                    $horarioLineas[] = "{$diaLabel}: {$turnosStr}";
-                }
-            }
-            if ($horarioLineas) {
-                $configNegocio .= "\nHorarios de atención:\n" . implode("\n", $horarioLineas);
-            }
-        }
         if (!empty($fechasCerradas)) {
             $cerradasFmt = implode(', ', array_map(
                 fn($f) => \Carbon\Carbon::parse($f)->locale('es')->isoFormat('D [de] MMMM'),
