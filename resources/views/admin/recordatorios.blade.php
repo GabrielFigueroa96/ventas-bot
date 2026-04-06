@@ -35,9 +35,8 @@
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Tipo</label>
                     <select name="tipo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none">
-                        <option value="libre"          {{ old('tipo', $editando?->tipo) === 'libre'           ? 'selected' : '' }}>Libre</option>
-                        <option value="recomendacion"  {{ old('tipo', $editando?->tipo) === 'recomendacion'  ? 'selected' : '' }}>Recomendación personalizada</option>
-                        <option value="repetir_pedido" {{ old('tipo', $editando?->tipo) === 'repetir_pedido' ? 'selected' : '' }}>Repetir pedido anterior</option>
+                        <option value="libre"    {{ old('tipo', $editando?->tipo) === 'libre'    ? 'selected' : '' }}>Libre</option>
+                        <option value="catalogo" {{ old('tipo', $editando?->tipo) === 'catalogo' ? 'selected' : '' }}>Lista de precios</option>
                     </select>
                 </div>
             </div>
@@ -46,8 +45,7 @@
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Mensaje</label>
                 <p class="text-xs text-gray-400 mb-1">
                     Variables: <code>{nombre}</code>
-                    — tipo recomendación: <code>{recomendaciones}</code>
-                    — tipo repetir: <code>{ultimo_pedido}</code>
+                    — tipo lista de precios: <code>{catalogo}</code>
                 </p>
                 <textarea name="mensaje" rows="4" required
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none"
@@ -147,9 +145,8 @@
                 <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-semibold text-gray-800">{{ $rec->nombre }}</span>
                     <span class="text-xs px-2 py-0.5 rounded-full
-                        {{ $rec->tipo === 'libre' ? 'bg-gray-100 text-gray-600' :
-                           ($rec->tipo === 'recomendacion' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700') }}">
-                        {{ ['libre'=>'Libre','recomendacion'=>'Recomendación','repetir_pedido'=>'Repetir pedido'][$rec->tipo] }}
+                        {{ $rec->tipo === 'catalogo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' }}">
+                        {{ ['libre'=>'Libre','catalogo'=>'Lista de precios'][$rec->tipo] ?? $rec->tipo }}
                     </span>
                     <span class="text-xs text-gray-400">🕐 {{ substr($rec->hora,0,5) }} · {{ $rec->diasTexto() }}</span>
                     @if($rec->filtro_localidad)

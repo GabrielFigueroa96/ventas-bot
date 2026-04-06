@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Cliente;
 use App\Models\Message;
-use App\Models\Pedido;
+use App\Models\Producto;
 use App\Models\Recordatorio;
 use App\Services\BotService;
 use App\Services\TenantManager;
@@ -142,6 +142,32 @@ class EnviarRecordatorios extends Command
                 : 'nuestros productos';
 
             $mensaje = str_replace('{recomendaciones}', $top, $mensaje);
+        }
+
+        // Tipo: catalogo — adjunta lista de productos con precios
+        if ($rec->tipo === 'catalogo') {
+            $formatPrecio = fn($p) => ($p->precio == floor($p->precio))
+                ? '$' . number_format($p->precio, 0, ',', '')
+                : '$' . number_format($p->precio, 2, ',', '');
+
+            $productos = Producto::paraBot()->orderBy('tablaplu.desgrupo')->orderBy('tablaplu.des')->get();
+
+            $lineas = [];
+            foreach (['Peso', 'Unidad'] as $tipo) {
+                $grupo = $productos->where('tipo', $tipo)->groupBy(fn($p) => $p->desgrupo ?: 'Varios');
+                if ($grupo->isEmpty()) continue;
+                foreach ($grupo as $nombreGrupo => $items) {
+                    $lineas[] = "*{$nombreGrupo}*";
+                    foreach ($items as $p) {
+                        $unidad = $tipo === 'Peso' ? '/kg' : '/u';
+                        $lineas[] = "• {$p->des} — {$formatPrecio($p)}{$unidad}";
+                    }
+                    $lineas[] = '';
+                }
+            }
+
+            $catalogo = trim(implode("\n", $lineas));
+            $mensaje  = str_replace('{catalogo}', $catalogo, $mensaje);
         }
 
         return $mensaje;
