@@ -791,8 +791,8 @@ FLUJO 2 — TOMAR PEDIDO
 ════════════════════════════════
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
-" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. ANTES de mostrar productos o agregar al carrito, usá elegir_reparto para que el cliente elija para qué fecha quiere el pedido. Los productos varían según el día de reparto." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : "")) . "
-1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada. Si el nombre del producto es reconocible (aunque no sea idéntico al de la lista), usá el más cercano sin preguntar. Para productos que se venden por peso, interpretá el número como kilos (ej: \'3 bondiolas\' = 3 kg) salvo que el cliente diga explícitamente \'unidades\' o \'u\'.
+" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.), llamá elegir_reparto con esa fecha ANTES de agregar al carrito — aunque ya sepas el producto y la cantidad. Si no menciona día, llamá elegir_reparto para que elija." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : "")) . "
+1. En cuanto tenés producto + cantidad (y fecha ya elegida si hay múltiples repartos), llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada. Si el nombre del producto es reconocible (aunque no sea idéntico al de la lista), usá el más cercano sin preguntar. Para productos que se venden por peso, interpretá el número como kilos (ej: \'3 bondiolas\' = 3 kg) salvo que el cliente diga explícitamente \'unidades\' o \'u\'.
 2. Después de agregar, llamá DIRECTAMENTE crear_pedido. Esto le muestra al cliente el carrito con los botones de confirmar/cancelar. Si quiere agregar más, va a escribirte y volvés al paso 1.
 3. Si crear_pedido o ver_carrito muestran alertas de precio (⚠️), ofrecé actualizar; cuando confirme llamá actualizar_precios_carrito. Si hay ❌ producto no disponible, ofrecé eliminarlo con agregar_al_carrito cantidad 0.
 4. NUNCA preguntes forma de pago ni tipo de entrega antes de llamar crear_pedido — el sistema envía botones interactivos para eso. Solo pasá tipo_entrega o forma_pago si el cliente los mencionó explícitamente.
@@ -955,8 +955,16 @@ Herramientas disponibles:
                 'type'     => 'function',
                 'function' => [
                     'name'        => 'elegir_reparto',
-                    'description' => 'Muestra las fechas de reparto disponibles y permite al cliente elegir para cuál quiere hacer el pedido. La lista de productos se actualiza según el día elegido. Usala cuando el cliente quiere hacer un pedido y hay múltiples fechas disponibles, o cuando el cliente quiere cambiar la fecha de reparto ya elegida.',
-                    'parameters'  => ['type' => 'object', 'properties' => new \stdClass()],
+                    'description' => 'Selecciona la fecha de reparto. Si el cliente mencionó un día ("para el viernes", "el miércoles"), pasalo en fecha_sugerida y el sistema lo resuelve automáticamente sin mostrar botones. Si no mencionó día, omitir fecha_sugerida y se muestran los botones para que elija.',
+                    'parameters'  => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'fecha_sugerida' => [
+                                'type'        => 'string',
+                                'description' => 'Día mencionado por el cliente, en texto libre: "viernes", "el miércoles", "para mañana", etc. El sistema busca la fecha disponible que coincida.',
+                            ],
+                        ],
+                    ],
                 ],
             ],
             [
@@ -1143,7 +1151,7 @@ Herramientas disponibles:
 
                 try {
                     $result = match ($funcName) {
-                        'elegir_reparto'             => $this->elegirReparto($cliente),
+                        'elegir_reparto'             => $this->elegirReparto($cliente, $args['fecha_sugerida'] ?? null),
                         'agregar_al_carrito'         => $this->agregarAlCarrito($cliente, $args['items'] ?? []),
                         'ver_carrito'                => $this->verCarrito($cliente),
                         'vaciar_carrito'             => $this->vaciarCarrito($cliente),
@@ -1549,7 +1557,7 @@ Herramientas disponibles:
      * Muestra las fechas de reparto disponibles via botones interactivos.
      * El cliente elige y el sistema guarda la fecha en cache.
      */
-    private function elegirReparto($client): string
+    private function elegirReparto($client, ?string $fechaSugerida = null): string
     {
         $empresa    = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
         $localidadObj = $client->localidad_id ? Localidad::find($client->localidad_id) : null;
@@ -1568,12 +1576,38 @@ Herramientas disponibles:
             return 'No hay fechas de reparto disponibles en este momento para tu localidad.';
         }
 
+        // Si el bot detectó un día mencionado por el cliente, intentar matchearlo
+        if ($fechaSugerida) {
+            $sugerida = mb_strtolower(trim($fechaSugerida));
+            $diasNombres = ['lunes'=>1,'martes'=>2,'miércoles'=>3,'miercoles'=>3,'jueves'=>4,'viernes'=>5,'sábado'=>6,'sabado'=>6,'domingo'=>0];
+            $match = null;
+
+            // Buscar si menciona "mañana"
+            if (str_contains($sugerida, 'mañana') || str_contains($sugerida, 'manana')) {
+                $mañana = now()->addDay()->format('Y-m-d');
+                $match  = collect($fechasDisponibles)->firstWhere('fecha', $mañana);
+            }
+
+            // Buscar nombre de día de la semana
+            if (!$match) {
+                foreach ($diasNombres as $nombreDia => $numDia) {
+                    if (str_contains($sugerida, $nombreDia)) {
+                        $match = collect($fechasDisponibles)->first(
+                            fn($f) => (int)\Carbon\Carbon::parse($f['fecha'])->format('w') === $numDia
+                        );
+                        break;
+                    }
+                }
+            }
+
+            if ($match) {
+                return $this->confirmarFechaReparto($client, $match);
+            }
+            // Si no matchea, caer en el flujo normal de botones
+        }
+
         if (count($fechasDisponibles) === 1) {
-            // Solo una opción: elegir automáticamente
-            $f = $fechasDisponibles[0];
-            Cache::put('fecha_reparto_elegida_' . $client->id, $f['fecha'], now()->addHours(6));
-            Cache::put('proxima_fecha_entrega_' . $client->id, $f['fecha'], now()->addMinutes(30));
-            return "El próximo reparto es el {$f['texto']}. Podés pedirme los productos que querés para ese día.";
+            return $this->confirmarFechaReparto($client, $fechasDisponibles[0]);
         }
 
         // Múltiples fechas: enviar botones (máximo 3 por limitación de WhatsApp)
@@ -1591,6 +1625,72 @@ Herramientas disponibles:
         );
 
         return 'Botones enviados';
+    }
+
+    private function confirmarFechaReparto($client, array $f): string
+    {
+        $fechaAnterior = Cache::get('fecha_reparto_elegida_' . $client->id);
+        Cache::put('fecha_reparto_elegida_' . $client->id, $f['fecha'], now()->addHours(6));
+        Cache::put('proxima_fecha_entrega_' . $client->id, $f['fecha'], now()->addMinutes(30));
+
+        // Si había una fecha distinta y hay carrito, validar productos para el nuevo día
+        $aviso = '';
+        if ($fechaAnterior && $fechaAnterior !== $f['fecha']) {
+            $carrito = $this->getCarrito($client);
+            if ($carrito && !empty($carrito->items)) {
+                $diaNuevo    = (int) \Carbon\Carbon::parse($f['fecha'])->format('w');
+                $localPrices = $this->getLocalPrices($client);
+                $cods        = array_column($carrito->items, 'cod');
+                $productos   = Producto::paraBot()->whereIn('tablaplu.cod', $cods)->get()->keyBy('cod');
+
+                $itemsFiltrados  = [];
+                $eliminados      = [];
+                $preciosActualizados = [];
+
+                foreach ($carrito->items as $item) {
+                    // 1. Verificar disponibilidad en la nueva fecha
+                    $disponible = $productos->has($item['cod']); // si no está en paraBot(), fue dado de baja
+                    if ($disponible) {
+                        $diasCfg = $localPrices->get($item['cod'])->dias_reparto ?? null;
+                        if ($diasCfg !== null && !empty($diasCfg)) {
+                            $diasNum    = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                            $disponible = in_array($diaNuevo, $diasNum, true);
+                        }
+                    }
+
+                    if (!$disponible) {
+                        $eliminados[] = $item['des'];
+                        continue;
+                    }
+
+                    // 2. Actualizar precio si cambió
+                    $precioNuevo = $this->precioFinal((float) $productos[$item['cod']]->precio, $item['cod'], $localPrices);
+                    if ($precioNuevo !== null && abs($precioNuevo - (float)$item['precio']) > 0.01) {
+                        $preciosActualizados[] = $item['des'];
+                        $base        = $item['tipo'] !== 'Unidad' ? $item['kilos'] : $item['cant'];
+                        $item['precio'] = $precioNuevo;
+                        $item['neto']   = round($precioNuevo * $base, 2);
+                    }
+
+                    $itemsFiltrados[] = $item;
+                }
+
+                $carrito->update(['items' => $itemsFiltrados]);
+
+                $partes = [];
+                if (!empty($eliminados)) {
+                    $partes[] = 'Se eliminaron por no estar disponibles ese día: ' . implode(', ', $eliminados);
+                }
+                if (!empty($preciosActualizados)) {
+                    $partes[] = 'Se actualizaron precios de: ' . implode(', ', $preciosActualizados);
+                }
+                if (!empty($partes)) {
+                    $aviso = ' ' . implode('. ', $partes) . '.';
+                }
+            }
+        }
+
+        return "Reparto del {$f['texto']} seleccionado.{$aviso} Ahora agregá los productos al carrito.";
     }
 
     private function getLocalPrices($client): \Illuminate\Support\Collection
@@ -1982,20 +2082,13 @@ Herramientas disponibles:
             return '';
         }
 
-        Cache::put('fecha_reparto_elegida_' . $client->id, $fecha, now()->addHours(6));
-        Cache::put('proxima_fecha_entrega_' . $client->id, $fecha, now()->addMinutes(30));
         $client->update(['estado' => null]);
-
         $textoFecha = \Carbon\Carbon::parse($fecha)->locale('es')->isoFormat('dddd D [de] MMMM');
 
-        // Vaciar el carrito para que el cliente arme uno nuevo con los productos del día elegido
-        $carritoRegistro = $this->getCarrito($client);
-        if ($carritoRegistro) {
-            $carritoRegistro->delete();
-        }
+        $aviso = $this->confirmarFechaReparto($client, ['fecha' => $fecha, 'texto' => $textoFecha]);
 
         // Procesar con IA para que muestre los productos disponibles para ese día
-        return $this->process($client, "El cliente eligió el reparto del {$textoFecha}. Se vació el carrito para que arme uno nuevo con los productos disponibles para ese día. Mostrá los productos disponibles y preguntá qué quiere pedir.");
+        return $this->process($client, "El cliente eligió el reparto del {$textoFecha}. {$aviso} Mostrá los productos disponibles y preguntá qué quiere pedir.");
     }
 
     private function handleEntregaSeleccionada($client, string $id): string
