@@ -1709,7 +1709,36 @@ Herramientas disponibles:
             }
         }
 
-        return "Reparto del {$f['texto']} seleccionado.{$aviso} Ahora agregá los productos al carrito.";
+        // Construir lista de productos disponibles para este día (para que el bot tenga el catálogo correcto)
+        $diaNuevoNum  = (int) \Carbon\Carbon::parse($f['fecha'])->format('w');
+        $localPricesAll = $this->getLocalPrices($client);
+        $catalogo = '';
+        if ($client->localidad_id && $localPricesAll->isNotEmpty()) {
+            $todosProductos = Producto::paraBot()->get();
+            $diasLabelCorto = [0=>'Dom',1=>'Lun',2=>'Mar',3=>'Mié',4=>'Jue',5=>'Vie',6=>'Sáb'];
+            $disponiblesHoy = $todosProductos->filter(function ($p) use ($localPricesAll, $diaNuevoNum) {
+                if (!$localPricesAll->has($p->cod)) return false;
+                $diasCfg = $localPricesAll->get($p->cod)->dias_reparto;
+                if ($diasCfg === null) return true;
+                if (empty($diasCfg)) return false;
+                $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                return in_array($diaNuevoNum, $diasNum, true);
+            });
+            if ($disponiblesHoy->isNotEmpty()) {
+                $lineas = [];
+                foreach (['Unidad', 'Peso'] as $tipo) {
+                    $items = $disponiblesHoy->where('tipo', $tipo);
+                    foreach ($items as $p) {
+                        $precio = $this->precioFinal((float) $p->precio, $p->cod, $localPricesAll);
+                        $u = $tipo === 'Unidad' ? '/u' : '/kg';
+                        $lineas[] = "- {$p->des}" . ($precio !== null ? " \${$this->fmt($precio)}{$u}" : '');
+                    }
+                }
+                $catalogo = "\nProductos disponibles para el {$f['texto']}:\n" . implode("\n", $lineas);
+            }
+        }
+
+        return "Reparto del {$f['texto']} seleccionado.{$aviso}{$catalogo}\nAhorá podés agregar productos al carrito.";
     }
 
     private function getLocalPrices($client): \Illuminate\Support\Collection
