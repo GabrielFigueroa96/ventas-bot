@@ -27,7 +27,7 @@
     </div>
 </div>
 
-{{-- Buscador --}}
+{{-- Buscador + acción bulk --}}
 <form method="GET" data-no-loading class="mb-4 flex gap-2">
     <input type="text" name="search" value="{{ $search }}"
         placeholder="Buscar producto..."
@@ -44,11 +44,19 @@
     @endif
 </form>
 
-{{-- Leyenda --}}
-<p class="text-xs text-gray-400 mb-3">
-    Activá los productos disponibles para esta localidad. Precio vacío = usa el precio base del catálogo.
-    @if(!empty($diasLoc)) Los días controlan en qué reparto aparece cada producto. @endif
-</p>
+{{-- Leyenda + acción bulk --}}
+<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <p class="text-xs text-gray-400">
+        Activá los productos disponibles para esta localidad. Precio vacío = usa el precio base del catálogo.
+        @if(!empty($diasLoc)) Los días controlan en qué reparto aparece cada producto. @endif
+    </p>
+    @if(!empty($diasLoc))
+    <button id="btn-reset-dias" onclick="resetearDias()"
+        class="text-xs text-indigo-600 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-full transition-colors whitespace-nowrap">
+        Usar todos los días de la localidad
+    </button>
+    @endif
+</div>
 
 {{-- Tabla desktop --}}
 <div class="hidden sm:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
@@ -251,6 +259,29 @@ document.querySelectorAll('.precio-input').forEach(input => {
         if (okSpan) { okSpan.classList.remove('hidden'); setTimeout(() => okSpan.classList.add('hidden'), 2000); }
     });
 });
+
+// ── Resetear días de todos los productos a null (usar todos los días de la localidad) ──
+async function resetearDias() {
+    if (!confirm('¿Resetear los días de TODOS los productos a "todos los días de la localidad"?\n\nEsto borra las restricciones por día de cada producto.')) return;
+    const btn = document.getElementById('btn-reset-dias');
+    btn.disabled = true; btn.textContent = '...';
+    try {
+        const res = await fetch(`/admin/localidades/${locId}/precios`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+            body: JSON.stringify({}),
+        });
+        if (res.ok) {
+            window.location.reload();
+        } else {
+            alert('Error al resetear días');
+            btn.disabled = false; btn.textContent = 'Usar todos los días de la localidad';
+        }
+    } catch(e) {
+        alert('Error de conexión');
+        btn.disabled = false; btn.textContent = 'Usar todos los días de la localidad';
+    }
+}
 
 // ── Auto-save días al cambiar checkbox ──────────────────────────────────────
 document.addEventListener('change', async e => {

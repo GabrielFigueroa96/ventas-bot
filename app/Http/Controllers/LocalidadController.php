@@ -171,6 +171,15 @@ class LocalidadController extends Controller
         return view('admin.localidad-precios', compact('localidad', 'todas', 'productos', 'plConfigs', 'diasLocConfig', 'search'));
     }
 
+    public function preciosBulkDias(int $id)
+    {
+        // Resetea dias_reparto a NULL en todos los productos de la localidad
+        // → cada producto hereda todos los días de la localidad
+        ProductoLocalidad::where('localidad_id', $id)->update(['dias_reparto' => null]);
+        $this->limpiarCache();
+        return response()->json(['ok' => true]);
+    }
+
     public function precioUpsert(Request $request, int $id, $cod)
     {
         $data = $request->validate([
