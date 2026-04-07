@@ -1633,9 +1633,9 @@ Herramientas disponibles:
         Cache::put('fecha_reparto_elegida_' . $client->id, $f['fecha'], now()->addHours(6));
         Cache::put('proxima_fecha_entrega_' . $client->id, $f['fecha'], now()->addMinutes(30));
 
-        // Si había una fecha distinta y hay carrito, validar productos para el nuevo día
+        // Si hay carrito, validar productos para el nuevo día (siempre, aunque no hubiera fecha anterior)
         $aviso = '';
-        if ($fechaAnterior && $fechaAnterior !== $f['fecha']) {
+        if ($fechaAnterior !== $f['fecha']) {
             $carrito = $this->getCarrito($client);
             if ($carrito && !empty($carrito->items)) {
                 $diaNuevo    = (int) \Carbon\Carbon::parse($f['fecha'])->format('w');
