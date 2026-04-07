@@ -51,8 +51,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::post  ('/localidades',                    [LocalidadController::class, 'store'])->name('localidades.store');
     Route::put   ('/localidades/{localidad}',        [LocalidadController::class, 'update'])->name('localidades.update');
     Route::delete('/localidades/{localidad}',        [LocalidadController::class, 'destroy'])->name('localidades.destroy');
-    Route::patch ('/localidades/{localidad}/toggle', [LocalidadController::class, 'toggle'])->name('localidades.toggle');
-    Route::post  ('/localidades/{localidad}/probar', [LocalidadController::class, 'probar'])->name('localidades.probar');
+    Route::patch ('/localidades/{localidad}/toggle',         [LocalidadController::class, 'toggle'])->name('localidades.toggle');
+    Route::post  ('/localidades/{localidad}/probar',         [LocalidadController::class, 'probar'])->name('localidades.probar');
+    Route::get   ('/localidades/{localidad}/precios',        [LocalidadController::class, 'precios'])->name('localidades.precios');
+    Route::patch ('/localidades/{localidad}/precios/{cod}',  [LocalidadController::class, 'precioUpsert'])->name('localidades.precios.upsert');
+    Route::delete('/localidades/{localidad}/precios/{cod}',  [LocalidadController::class, 'precioRemove'])->name('localidades.precios.remove');
 
     // Recordatorios
     Route::get   ('/recordatorios',          [RecordatorioController::class, 'index'])->name('recordatorios');

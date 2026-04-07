@@ -45,6 +45,8 @@
                     <button onclick="abrirProbar({{ $loc->id }}, '{{ addslashes($loc->nombre) }}', {{ json_encode(collect($loc->diasConfig())->map(fn($d) => ['dia' => $d['dia'], 'label' => \App\Models\IaEmpresa::DIAS_LABEL[$d['dia']] ?? $d['dia']])->values()) }})"
                         class="text-xs text-indigo-600 hover:underline">Probar</button>
                     @endif
+                    <a href="{{ route('admin.localidades.precios', $loc->id) }}"
+                        class="text-xs text-green-600 hover:underline">Precios</a>
                     <button onclick="this.closest('.bg-white').querySelector('.edit-form').classList.toggle('hidden')"
                         class="text-xs text-blue-600 hover:underline">Editar</button>
                     <form method="POST" action="{{ route('admin.localidades.destroy', $loc) }}"

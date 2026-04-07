@@ -6,8 +6,10 @@ use App\Models\Localidad;
 use App\Models\Producto;
 use App\Models\ProductoLocalidad;
 use App\Services\BotService;
+use App\Services\TenantManager;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class LocalidadController extends Controller
 {
@@ -147,6 +149,63 @@ class LocalidadController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
         }
+    }
+
+    public function precios(Request $request, int $id)
+    {
+        $localidad     = Localidad::findOrFail($id);
+        $todas         = Localidad::orderBy('nombre')->get();
+        $search        = $request->input('search');
+        $diasLocConfig = $localidad->diasConfig();
+
+        $productos = Producto::paraBot()
+            ->when($search, fn($q) => $q->where('tablaplu.des', 'like', "%{$search}%"))
+            ->orderBy('tablaplu.desgrupo')
+            ->orderBy('tablaplu.des')
+            ->get();
+
+        $plConfigs = ProductoLocalidad::where('localidad_id', $localidad->id)
+            ->get()
+            ->keyBy('cod');
+
+        return view('admin.localidad-precios', compact('localidad', 'todas', 'productos', 'plConfigs', 'diasLocConfig', 'search'));
+    }
+
+    public function precioUpsert(Request $request, int $id, $cod)
+    {
+        $data = $request->validate([
+            'precio'       => 'nullable|numeric|min:0',
+            'dias_reparto' => 'nullable|array',
+        ]);
+
+        $update = [];
+        if (array_key_exists('precio', $data)) {
+            $update['precio'] = isset($data['precio']) && $data['precio'] !== '' ? (float) $data['precio'] : null;
+        }
+        if (array_key_exists('dias_reparto', $data)) {
+            $update['dias_reparto'] = !empty($data['dias_reparto']) ? $data['dias_reparto'] : null;
+        }
+
+        ProductoLocalidad::updateOrCreate(
+            ['cod' => $cod, 'localidad_id' => $id],
+            $update
+        );
+
+        $this->limpiarCache();
+        return response()->json(['ok' => true]);
+    }
+
+    public function precioRemove(int $id, $cod)
+    {
+        ProductoLocalidad::where('cod', $cod)->where('localidad_id', $id)->delete();
+        $this->limpiarCache();
+        return response()->json(['ok' => true]);
+    }
+
+    private function limpiarCache(): void
+    {
+        $tenantId = app(TenantManager::class)->get()?->id ?? 0;
+        Cache::forget('bot_mas_vendidos_' . $tenantId);
     }
 
     private function buildCatalogo(Localidad $loc, int $diaReparto): string
