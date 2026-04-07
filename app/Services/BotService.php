@@ -793,6 +793,7 @@ Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
 " . ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.), llamá elegir_reparto con esa fecha ANTES de agregar al carrito — aunque ya sepas el producto y la cantidad. Si no menciona día, llamá elegir_reparto para que elija." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : "")) . "
 1. En cuanto tenés producto + cantidad (y fecha ya elegida si hay múltiples repartos), llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada. Si el nombre del producto es reconocible (aunque no sea idéntico al de la lista), usá el más cercano sin preguntar. Para productos que se venden por peso, interpretá el número como kilos (ej: \'3 bondiolas\' = 3 kg) salvo que el cliente diga explícitamente \'unidades\' o \'u\'.
+1b. Si agregar_al_carrito devuelve un error con ACCIÓN REQUERIDA, seguí exactamente la instrucción del error: preguntale al cliente en un mensaje corto si quiere cambiar al día disponible. Si confirma, llamá elegir_reparto con ese día y luego agregar_al_carrito.
 2. Después de agregar, llamá DIRECTAMENTE crear_pedido. Esto le muestra al cliente el carrito con los botones de confirmar/cancelar. Si quiere agregar más, va a escribirte y volvés al paso 1.
 3. Si crear_pedido o ver_carrito muestran alertas de precio (⚠️), ofrecé actualizar; cuando confirme llamá actualizar_precios_carrito. Si hay ❌ producto no disponible, ofrecé eliminarlo con agregar_al_carrito cantidad 0.
 4. NUNCA preguntes forma de pago ni tipo de entrega antes de llamar crear_pedido — el sistema envía botones interactivos para eso. Solo pasá tipo_entrega o forma_pago si el cliente los mencionó explícitamente.
@@ -1322,11 +1323,29 @@ Herramientas disponibles:
                     }
                     if (!$disponible) {
                         $diasLabel   = IaEmpresa::DIAS_LABEL;
-                        $diasNombres = empty($diasCfg)
-                            ? 'ningún día de reparto'
-                            : implode(', ', array_map(fn($d) => $diasLabel[is_array($d) ? (int)$d['dia'] : (int)$d] ?? '?', $diasCfg));
                         $textoFecha  = \Carbon\Carbon::parse($fechaElegida)->locale('es')->isoFormat('dddd D [de] MMMM');
-                        $errores[]   = "'{$match->des}' no se reparte para el {$textoFecha}. Disponible los: {$diasNombres}. Informale al cliente que no puede agregar ese producto para ese reparto.";
+                        if (empty($diasCfg)) {
+                            $errores[] = "'{$match->des}' no está disponible para ningún día de reparto. No lo podés agregar.";
+                        } else {
+                            // Calcular próximas fechas disponibles para los días del producto
+                            $diasNumProd     = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                            $localidadObj    = $client->localidad_id ? Localidad::find($client->localidad_id) : null;
+                            $diasConfigLoc   = $localidadObj ? $localidadObj->diasConfig() : [];
+                            $empresa         = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
+                            $fechasCerradas  = $empresa?->bot_fechas_cerrado ?? [];
+                            $globalHoraCorte = $empresa?->bot_hora_corte ?? null;
+                            $todasFechas     = $this->getFechasReparto($diasConfigLoc, $fechasCerradas, $globalHoraCorte);
+                            $fechasDisponProd = collect($todasFechas)
+                                ->filter(fn($f) => in_array($f['dia'], $diasNumProd, true))
+                                ->values();
+                            if ($fechasDisponProd->isNotEmpty()) {
+                                $opcionesFechas = $fechasDisponProd->map(fn($f) => $f['texto'])->implode(' o ');
+                                $errores[] = "ACCIÓN REQUERIDA: '{$match->des}' no se reparte el {$textoFecha} — solo está disponible para: {$opcionesFechas}. Preguntale al cliente en UN mensaje corto si quiere cambiar el pedido a uno de esos días. Si confirma, llamá elegir_reparto con ese día y luego volvé a intentar agregar_al_carrito. NO expliques más de lo necesario.";
+                            } else {
+                                $diasNombres = implode(', ', array_map(fn($d) => $diasLabel[is_array($d) ? (int)$d['dia'] : (int)$d] ?? '?', $diasCfg));
+                                $errores[] = "'{$match->des}' no se reparte el {$textoFecha}. Disponible los {$diasNombres}, pero no hay fechas abiertas para esos días en este momento.";
+                            }
+                        }
                         continue;
                     }
                 }
@@ -2232,6 +2251,7 @@ Herramientas disponibles:
             return $result;
         }
 
+        Carrito::where('cliente_id', $client->id)->delete();
         $msg = '👌 Pedido cancelado. ¿En qué más puedo ayudarte?';
         $this->sendReply($client, $msg);
         return $msg;
