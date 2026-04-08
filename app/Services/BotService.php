@@ -402,16 +402,17 @@ class BotService
                 });
         } elseif ($cliente->localidad_id) {
             if ($prodLocConfigs->isNotEmpty()) {
-                // Solo productos configurados para esta localidad, y si hay día elegido también por ese día
-                $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diaElegido) {
-                    if (!$prodLocConfigs->has($p->cod)) return false; // no configurado para esta localidad
-                    if ($diaElegido === null) return true;            // sin fecha elegida: mostrar todos los de la localidad
-                    // Con fecha elegida: verificar restricción de días
+                // En modo auto-flash sin fecha elegida, usar el día de hoy para filtrar por día
+                $diaParaFiltrar = $diaElegido ?? ($flashSession ? (int) now()->format('w') : null);
+
+                $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diaParaFiltrar) {
+                    if (!$prodLocConfigs->has($p->cod)) return false;
+                    if ($diaParaFiltrar === null) return true;       // sin fecha: mostrar todos los de la localidad
                     $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
                     if ($diasCfg === null) return true;              // sin restricción → disponible todos los días
                     if (empty($diasCfg)) return false;               // array vacío → no disponible ningún día
                     $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
-                    return in_array($diaElegido, $diasNum, true);
+                    return in_array($diaParaFiltrar, $diasNum, true);
                 });
             } else {
                 // Cliente tiene localidad asignada pero no hay productos configurados para ella → sin productos
@@ -728,18 +729,21 @@ class BotService
             $configNegocio .= "\nFechas sin entregas: {$cerradasFmt}.";
         }
 
-        if ($corteAviso)     $configNegocio .= "\n\n{$corteAviso}";
-        if (!empty($fechasCortadasAviso)) {
-            $configNegocio .= "\n⚠️ PEDIDOS CERRADOS (ventan ya pasó): " . implode('; ', $fechasCortadasAviso) . ". Si el cliente pregunta por ese día, explicale que el pedido para ese reparto ya está cerrado, pero puede hacer su pedido para los repartos disponibles.";
-        }
-        if ($puedePedir && empty($fechasDisponibles) && !empty($diasReparto)) {
-            $configNegocio .= "\n\nIMPORTANTE: En este momento NO hay repartos disponibles para tomar pedidos. No podés reservar ni armar pedidos hasta que abra la próxima ventana de pedidos. Si el cliente pregunta cuándo puede pedir, indicale la información del aviso de cierre/apertura de arriba. NO ofrezcas avisar ni notificar al cliente cuando se abra la próxima ventana — esa funcionalidad no existe.";
+        if (!$flashSession) {
+            // Avisos de ventana cerrada — se omiten en modo express (el flash habilita pedidos fuera de ventana)
+            if ($corteAviso) $configNegocio .= "\n\n{$corteAviso}";
+            if (!empty($fechasCortadasAviso)) {
+                $configNegocio .= "\n⚠️ PEDIDOS CERRADOS (ventana ya pasó): " . implode('; ', $fechasCortadasAviso) . ". Si el cliente pregunta por ese día, explicale que el pedido para ese reparto ya está cerrado, pero puede hacer su pedido para los repartos disponibles.";
+            }
+            if ($puedePedir && empty($fechasDisponibles) && !empty($diasReparto)) {
+                $configNegocio .= "\n\nIMPORTANTE: En este momento NO hay repartos disponibles para tomar pedidos. No podés reservar ni armar pedidos hasta que abra la próxima ventana de pedidos. Si el cliente pregunta cuándo puede pedir, indicale la información del aviso de cierre/apertura de arriba. NO ofrezcas avisar ni notificar al cliente cuando se abra la próxima ventana — esa funcionalidad no existe.";
+            }
         }
         if (!$puedePedir)    $configNegocio .= "\n\nIMPORTANTE: No podés tomar pedidos. Solo informás precios y describís productos. Si el cliente quiere pedir, indicale que contacte al negocio directamente.";
         if (!$puedeSupgerir) $configNegocio .= "\nNo sugieras productos de forma proactiva. Solo respondé lo que el cliente consulte.";
         if ($flashSession) {
             $nombreFlash = $flashSession['nombre'] ?? 'Pedido Express';
-            $configNegocio .= "\n\n🚀 MODO PEDIDO EXPRESS ({$nombreFlash}): SOLO podés vender los productos que aparecen en la lista de abajo. NO ofrezcas ni aceptes productos fuera de esa lista. Si el cliente pide algo que no está, decile amablemente que hoy la selección es especial y ofrecele los disponibles. Ayudá al cliente a confirmar su pedido rápido.";
+            $configNegocio .= "\n\n🚀 MODO PEDIDO EXPRESS ({$nombreFlash}): Hay una venta especial activa — podés tomar pedidos AHORA aunque la ventana normal esté cerrada. Los productos disponibles son los que aparecen en la lista de abajo. NO llamés elegir_reparto — en este modo no hace falta elegir fecha. En cuanto el cliente diga qué quiere y la cantidad, llamá agregar_al_carrito directamente.";
         }
 
         if ($instrucciones)      $configNegocio .= "\n\n⚠️ REGLAS OBLIGATORIAS (máxima prioridad — siempre aplicar, sin excepciones):\n{$instrucciones}";
@@ -794,7 +798,7 @@ FLUJO 1 — SUGERIR
 ════════════════════════════════
 Activar cuando: el cliente saluda, no sabe qué quiere, pide recomendación o menciona una ocasión (asado, cumpleaños, etc.).
 Pasos:
-" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente quiere saber qué puede pedir, usá elegir_reparto para que elija fecha primero — los productos varían según el día. NO listés productos de un día específico sin que haya elegido." : "") . "
+" . (!$flashSession && $hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente quiere saber qué puede pedir, usá elegir_reparto para que elija fecha primero — los productos varían según el día. NO listés productos de un día específico sin que haya elegido." : "") . "
 1. Si menciona una ocasión, calculá cantidades según las porciones estándar y mostrá solo productos de la lista disponible.
 2. Si no menciona ocasión, sugerí sus favoritos que estén en la lista disponible (ignorá los que no estén en la lista)" . ($puedeMasVendidos ? " o los más populares" : "") . ".
 3. Ofrecé achuras cuando sea pertinente (una sola vez, sin insistir).
@@ -817,8 +821,8 @@ FLUJO 2 — TOMAR PEDIDO
 ════════════════════════════════
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
-" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.), llamá elegir_reparto con esa fecha ANTES de agregar al carrito — aunque ya sepas el producto y la cantidad. Si no menciona día, llamá elegir_reparto para que elija." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : "")) . "
-1. En cuanto tenés producto + cantidad (y fecha ya elegida si hay múltiples repartos), llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada. Si el nombre del producto es reconocible (aunque no sea idéntico al de la lista), usá el más cercano sin preguntar. Para productos que se venden por peso, interpretá el número como kilos (ej: \'3 bondiolas\' = 3 kg) salvo que el cliente diga explícitamente \'unidades\' o \'u\'.
+" . ($flashSession ? "" : ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.), llamá elegir_reparto con esa fecha ANTES de agregar al carrito — aunque ya sepas el producto y la cantidad. Si no menciona día, llamá elegir_reparto para que elija." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : ""))) . "
+1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada. Si el nombre del producto es reconocible (aunque no sea idéntico al de la lista), usá el más cercano sin preguntar. Para productos que se venden por peso, interpretá el número como kilos (ej: \'3 bondiolas\' = 3 kg) salvo que el cliente diga explícitamente \'unidades\' o \'u\'.
 1b. Si agregar_al_carrito devuelve un error con ACCIÓN REQUERIDA, seguí exactamente la instrucción del error: preguntale al cliente en un mensaje corto si quiere cambiar al día disponible. Si confirma, llamá elegir_reparto con ese día y luego agregar_al_carrito.
 2. Después de agregar, llamá DIRECTAMENTE crear_pedido. Esto le muestra al cliente el carrito con los botones de confirmar/cancelar. Si quiere agregar más, va a escribirte y volvés al paso 1.
 3. Si crear_pedido o ver_carrito muestran alertas de precio (⚠️), ofrecé actualizar; cuando confirme llamá actualizar_precios_carrito. Si hay ❌ producto no disponible, ofrecé eliminarlo con agregar_al_carrito cantidad 0.
