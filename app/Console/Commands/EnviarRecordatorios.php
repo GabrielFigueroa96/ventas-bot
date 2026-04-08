@@ -155,52 +155,55 @@ class EnviarRecordatorios extends Command
         $localidades = Localidad::where('activo', true)->get();
 
         foreach ($localidades as $loc) {
-            $session = Cache::get("flash_order_{$tenant->id}_{$loc->id}");
-            if (!$session) continue;
+            $sessions = Cache::get("flash_orders_{$tenant->id}_{$loc->id}", []);
+            if (!is_array($sessions)) continue;
 
-            $avisarHoras = $session['seguimiento_horas_antes'] ?? null;
-            $mensaje     = $session['seguimiento_mensaje'] ?? null;
-            if (!$avisarHoras || !$mensaje) continue;
+            foreach ($sessions as $session) {
+                $avisarHoras = $session['seguimiento_horas_antes'] ?? null;
+                $mensaje     = $session['seguimiento_mensaje'] ?? null;
+                if (!$avisarHoras || !$mensaje) continue;
 
-            $expira    = isset($session['expira_en']) ? \Carbon\Carbon::parse($session['expira_en']) : null;
-            $triggerAt = $expira?->copy()->subHours((int) $avisarHoras);
-            if (!$triggerAt) continue;
+                $expira    = isset($session['expira_en']) ? \Carbon\Carbon::parse($session['expira_en']) : null;
+                $triggerAt = $expira?->copy()->subHours((int) $avisarHoras);
+                if (!$triggerAt) continue;
 
-            $diff = now()->diffInMinutes($triggerAt, false);
-            if ($diff > 0 || $diff < -10) continue;
+                $diff = now()->diffInMinutes($triggerAt, false);
+                if ($diff > 0 || $diff < -10) continue;
 
-            $cacheKey = "flash_seg_manual_{$tenant->id}_{$loc->id}_" . now()->format('Y-m-d_H');
-            if (Cache::has($cacheKey)) continue;
+                $sid      = $session['id'] ?? md5(json_encode($session));
+                $cacheKey = "flash_seg_{$tenant->id}_{$loc->id}_{$sid}";
+                if (Cache::has($cacheKey)) continue;
 
-            $activadoEn  = isset($session['activado_en']) ? \Carbon\Carbon::parse($session['activado_en']) : now()->subDay();
-            $yaOrdenaron = Pedidosia::where('pedido_at', '>=', $activadoEn)
-                ->where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
-                ->whereHas('cliente', fn($q) => $q->where('localidad_id', $loc->id))
-                ->pluck('idcliente')->unique();
+                $activadoEn  = isset($session['activado_en']) ? \Carbon\Carbon::parse($session['activado_en']) : now()->subDay();
+                $yaOrdenaron = Pedidosia::where('pedido_at', '>=', $activadoEn)
+                    ->where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
+                    ->whereHas('cliente', fn($q) => $q->where('localidad_id', $loc->id))
+                    ->pluck('idcliente')->unique();
 
-            $clientes = Cliente::whereNotNull('phone')->where('phone', '!=', '')
-                ->where('localidad_id', $loc->id)
-                ->whereNotIn('id', $yaOrdenaron)
-                ->get();
+                $clientes = Cliente::whereNotNull('phone')->where('phone', '!=', '')
+                    ->where('localidad_id', $loc->id)
+                    ->whereNotIn('id', $yaOrdenaron)
+                    ->get();
 
-            $enviados = 0;
-            foreach ($clientes as $cliente) {
-                try {
-                    $txt = str_replace('{nombre}', $cliente->name ?? 'cliente', $mensaje);
-                    $bot->sendWhatsapp($cliente->phone, $txt);
-                    Message::create([
-                        'cliente_id' => $cliente->id,
-                        'message'    => "[Seguimiento express: {$loc->nombre}]\n{$txt}",
-                        'direction'  => 'outgoing',
-                    ]);
-                    $enviados++;
-                } catch (\Throwable $e) {
-                    Log::error("Seguimiento manual {$loc->nombre} cliente #{$cliente->id}: {$e->getMessage()}");
+                $enviados = 0;
+                foreach ($clientes as $cliente) {
+                    try {
+                        $txt = str_replace('{nombre}', $cliente->name ?? 'cliente', $mensaje);
+                        $bot->sendWhatsapp($cliente->phone, $txt);
+                        Message::create([
+                            'cliente_id' => $cliente->id,
+                            'message'    => "[Seguimiento express: {$loc->nombre}]\n{$txt}",
+                            'direction'  => 'outgoing',
+                        ]);
+                        $enviados++;
+                    } catch (\Throwable $e) {
+                        Log::error("Seguimiento {$loc->nombre} sesión {$sid} cliente #{$cliente->id}: {$e->getMessage()}");
+                    }
                 }
-            }
 
-            Cache::put($cacheKey, true, now()->addHours(2));
-            $this->line("✓ Seguimiento express {$loc->nombre}: {$enviados} mensajes enviados.");
+                Cache::put($cacheKey, true, now()->addHours(2));
+                $this->line("✓ Seguimiento '{$session['nombre']}' {$loc->nombre}: {$enviados} mensajes enviados.");
+            }
         }
     }
 
@@ -244,17 +247,35 @@ class EnviarRecordatorios extends Command
         $tenant = app(TenantManager::class)->get();
         if (!$tenant) return;
 
-        $horas   = (int) ($recordatorio->flash_horas ?? 24);
-        $expira  = now()->addHours($horas);
-        // productos null = modo auto (catálogo del día); array = modo manual con precios de override
-        $payload = ['productos' => $recordatorio->productos_flash ?? null, 'nombre' => $recordatorio->nombre];
+        $horas     = (int) ($recordatorio->flash_horas ?? 24);
+        $expiraEn  = now()->addHours($horas);
+        $sessionId = 'rec_' . $recordatorio->id . '_' . now()->format('YmdHi');
+
+        $nueva = [
+            'id'                      => $sessionId,
+            'nombre'                  => $recordatorio->nombre,
+            'productos'               => $recordatorio->productos_flash ?? null,
+            'activado_en'             => now()->toISOString(),
+            'expira_en'               => $expiraEn->toISOString(),
+            'seguimiento_horas_antes' => $recordatorio->seguimiento_horas_antes ?? null,
+            'seguimiento_mensaje'     => $recordatorio->seguimiento_mensaje ?? null,
+        ];
 
         foreach ($nombres as $nombre) {
             $loc = Localidad::where('nombre', $nombre)->where('activo', true)->first();
-            if ($loc) {
-                Cache::put("flash_order_{$tenant->id}_{$loc->id}", $payload, $expira);
-                $this->line("  → Flash order activado para {$nombre} ({$horas}hs).");
-            }
+            if (!$loc) continue;
+
+            $key      = "flash_orders_{$tenant->id}_{$loc->id}";
+            $existing = Cache::get($key, []);
+            $existing = array_values(array_filter(
+                is_array($existing) ? $existing : [],
+                fn($s) => isset($s['expira_en']) && \Carbon\Carbon::parse($s['expira_en'])->isFuture()
+            ));
+            $existing[] = $nueva;
+
+            $maxExpira = collect($existing)->max(fn($s) => $s['expira_en']);
+            Cache::put($key, $existing, \Carbon\Carbon::parse((string) $maxExpira));
+            $this->line("  → Flash order activado para {$nombre} ({$horas}hs).");
         }
     }
 

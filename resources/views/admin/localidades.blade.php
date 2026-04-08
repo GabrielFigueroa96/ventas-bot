@@ -89,17 +89,19 @@
             <button onclick="cerrarFlash()" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
         </div>
 
-        {{-- Estado activo --}}
-        <div id="flash-estado-activo" class="hidden bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-xs text-orange-700 space-y-1">
-            <div class="flex items-center justify-between">
-                <span class="font-semibold">🚀 Express activo</span>
-                <button onclick="desactivarFlash()" class="text-red-500 hover:underline font-medium">Desactivar</button>
+        {{-- Sesiones activas --}}
+        <div id="flash-sesiones-panel" class="hidden space-y-1">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-semibold text-orange-700">🚀 Sesiones activas</span>
+                <button onclick="desactivarFlash(null)" class="text-xs text-red-500 hover:underline">Desactivar todas</button>
             </div>
-            <div id="flash-estado-info"></div>
+            <div id="flash-sesiones-lista"></div>
+            <p id="flash-sesiones-pedidos" class="text-xs text-gray-400 mt-1"></p>
         </div>
 
-        {{-- Config --}}
+        {{-- Config nueva sesión --}}
         <div id="flash-config" class="space-y-4">
+            <p class="text-xs font-semibold text-gray-600">Nueva sesión express</p>
 
             <div class="grid grid-cols-2 gap-3">
                 <div>
@@ -251,8 +253,8 @@ let flashCatalogo = [];
 let flashSeleccion = {}; // { cod: { checked, precio } }
 
 async function abrirFlash(id, nombre) {
-    flashLocId    = id;
-    flashCatalogo = [];
+    flashLocId     = id;
+    flashCatalogo  = [];
     flashSeleccion = {};
     document.getElementById('flash-loc-nombre').textContent = nombre;
     document.getElementById('flash-horas').value = 12;
@@ -261,33 +263,36 @@ async function abrirFlash(id, nombre) {
     document.getElementById('flash-seg-msg-panel').classList.add('hidden');
     document.getElementById('flash-productos-lista').innerHTML =
         '<p class="text-xs text-gray-400 italic">Presioná "Cargar lista" para ver los productos de esta localidad.</p>';
-    document.getElementById('flash-estado-activo').classList.add('hidden');
-    document.getElementById('flash-config').classList.remove('hidden');
-    document.getElementById('flash-activar-btn').textContent = 'Activar ahora';
+    document.getElementById('flash-sesiones-panel').classList.add('hidden');
     document.getElementById('modal-flash').classList.remove('hidden');
 
-    // Verificar si ya hay flash activo
     try {
         const res  = await fetch(`/admin/localidades/${id}/flash/estado`, { headers: { Accept: 'application/json' } });
         const data = await res.json();
-        if (data.activo) mostrarEstadoFlash(data);
+        if (data.activo) renderSesionesActivas(data.sessions, data.pedidos);
     } catch {}
 }
 
-function mostrarEstadoFlash(data) {
-    const panel = document.getElementById('flash-estado-activo');
-    const info  = document.getElementById('flash-estado-info');
-    panel.classList.remove('hidden');
+function renderSesionesActivas(sessions, pedidos) {
+    if (!sessions || !sessions.length) {
+        document.getElementById('flash-sesiones-panel').classList.add('hidden');
+        return;
+    }
+    document.getElementById('flash-sesiones-panel').classList.remove('hidden');
+    document.getElementById('flash-sesiones-pedidos').textContent =
+        pedidos != null ? `${pedidos} pedido(s) recibido(s) desde la primera sesión` : '';
 
-    const expira  = data.expira_en ? new Date(data.expira_en) : null;
-    const expiraStr = expira
-        ? expira.toLocaleString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
-        : '—';
-    const pedidos = data.pedidos !== null ? `${data.pedidos} pedido(s) recibido(s)` : '';
-    const modo    = data.productos ? `${data.productos.length} producto(s) manual(es)` : 'catálogo del día (automático)';
-
-    info.innerHTML = `Expira: <strong>${expiraStr}</strong> · ${modo}${pedidos ? ' · ' + pedidos : ''}`;
-    document.getElementById('flash-activar-btn').textContent = 'Reactivar / actualizar';
+    document.getElementById('flash-sesiones-lista').innerHTML = sessions.map(s => {
+        const expira = s.expira_en ? new Date(s.expira_en).toLocaleString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+        const modo   = s.productos ? `${s.productos.length} producto(s)` : 'catálogo del día';
+        return `<div class="flex items-center justify-between bg-orange-50 border border-orange-100 rounded-lg px-3 py-1.5 text-xs">
+            <div>
+                <span class="font-medium text-orange-800">${s.nombre ?? '—'}</span>
+                <span class="text-gray-400 ml-1">· ${modo} · vence ${expira}</span>
+            </div>
+            <button onclick="desactivarFlash('${s.id}')" class="text-red-400 hover:text-red-600 ml-2 shrink-0">✕</button>
+        </div>`;
+    }).join('');
 }
 
 function cerrarFlash() {
@@ -304,7 +309,7 @@ async function cargarProductosFlash() {
             if (!flashSeleccion[p.cod]) flashSeleccion[p.cod] = { checked: false, precio: p.precio };
         });
         renderFlashProductos();
-    } catch (e) {
+    } catch {
         showToast('Error al cargar productos', 'error');
     }
 }
@@ -365,15 +370,18 @@ async function activarFlash() {
         });
         const data = await res.json();
         if (data.ok) {
-            // Actualizar botón de la localidad
-            const flashBtn = document.getElementById(`flash-btn-${flashLocId}`);
-            if (flashBtn) {
-                flashBtn.className = flashBtn.className
-                    .replace('bg-gray-100 text-gray-600', 'bg-orange-100 text-orange-700');
-                flashBtn.textContent = '🚀 Express activo';
-            }
-            showToast(`Express activo por ${horas}hs`, 'success');
-            cerrarFlash();
+            renderSesionesActivas(data.sessions, null);
+            actualizarBtnLocalidad(flashLocId, data.sessions.length > 0);
+            showToast(`Sesión express activada por ${horas}hs`, 'success');
+            // Limpiar form
+            document.getElementById('flash-horas').value = 12;
+            document.getElementById('flash-seg-horas').value = '';
+            document.getElementById('flash-seg-msg').value = '';
+            document.getElementById('flash-seg-msg-panel').classList.add('hidden');
+            flashCatalogo  = [];
+            flashSeleccion = {};
+            document.getElementById('flash-productos-lista').innerHTML =
+                '<p class="text-xs text-gray-400 italic">Presioná "Cargar lista" para ver los productos de esta localidad.</p>';
         } else {
             showToast(data.error ?? 'Error al activar', 'error');
         }
@@ -384,23 +392,32 @@ async function activarFlash() {
     }
 }
 
-async function desactivarFlash() {
+async function desactivarFlash(sessionId) {
     if (!flashLocId) return;
     try {
-        await fetch(`/admin/localidades/${flashLocId}/flash`, {
+        const res  = await fetch(`/admin/localidades/${flashLocId}/flash`, {
             method : 'DELETE',
-            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'Content-Type': 'application/json' },
+            body   : JSON.stringify({ session_id: sessionId }),
         });
-        const flashBtn = document.getElementById(`flash-btn-${flashLocId}`);
-        if (flashBtn) {
-            flashBtn.className = flashBtn.className
-                .replace('bg-orange-100 text-orange-700', 'bg-gray-100 text-gray-600');
-            flashBtn.textContent = '🚀 Express';
-        }
-        showToast('Express desactivado', 'success');
-        cerrarFlash();
+        const data = await res.json();
+        renderSesionesActivas(data.sessions ?? [], null);
+        actualizarBtnLocalidad(flashLocId, (data.sessions ?? []).length > 0);
+        showToast(sessionId ? 'Sesión desactivada' : 'Todas las sesiones desactivadas', 'success');
     } catch {
         showToast('Error al desactivar', 'error');
+    }
+}
+
+function actualizarBtnLocalidad(id, activo) {
+    const btn = document.getElementById(`flash-btn-${id}`);
+    if (!btn) return;
+    if (activo) {
+        btn.className = btn.className.replace('bg-gray-100 text-gray-600', 'bg-orange-100 text-orange-700');
+        btn.textContent = '🚀 Express activo';
+    } else {
+        btn.className = btn.className.replace('bg-orange-100 text-orange-700', 'bg-gray-100 text-gray-600');
+        btn.textContent = '🚀 Express';
     }
 }
 

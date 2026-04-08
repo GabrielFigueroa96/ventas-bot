@@ -354,7 +354,8 @@ class BotService
         // ── MODO PEDIDO EXPRESS ──
         $flashSession = null;
         if ($localidadObj) {
-            $flashSession = Cache::get("flash_order_{$tenantId}_{$localidadObj->id}");
+            $sessions     = $this->getFlashSessions($tenantId, $localidadObj->id);
+            $flashSession = $this->mergeFlashSessions($sessions);
         }
 
         $diasConfig      = $localidadObj ? $localidadObj->diasConfig() : [];
@@ -1275,7 +1276,8 @@ Herramientas disponibles:
         $flashSession = null;
         if ($client->localidad_id) {
             $tenantId     = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
-            $flashSession = Cache::get("flash_order_{$tenantId}_{$client->localidad_id}");
+            $sessions     = $this->getFlashSessions($tenantId, $client->localidad_id);
+            $flashSession = $this->mergeFlashSessions($sessions);
         }
         $normalize  = fn(string $s) => trim(strtolower(\Illuminate\Support\Str::ascii($s)));
         $errores    = [];
@@ -1785,6 +1787,41 @@ Herramientas disponibles:
         }
 
         return "Reparto del {$f['texto']} seleccionado.{$aviso}{$catalogo}\nAhorá podés agregar productos al carrito.";
+    }
+
+    private function getFlashSessions(int $tenantId, int $localidadId): array
+    {
+        $all = Cache::get("flash_orders_{$tenantId}_{$localidadId}", []);
+        return array_values(array_filter(
+            is_array($all) ? $all : [],
+            fn($s) => isset($s['expira_en']) && \Carbon\Carbon::parse($s['expira_en'])->isFuture()
+        ));
+    }
+
+    /**
+     * Combina múltiples sesiones flash en una sola vista para el bot.
+     * - Si alguna es auto (productos=null) → modo auto general
+     * - Si todas son manuales → unión de productos (última sesión gana en duplicados)
+     */
+    private function mergeFlashSessions(array $sessions): ?array
+    {
+        if (empty($sessions)) return null;
+
+        $nombres = implode(' + ', array_filter(array_column($sessions, 'nombre')));
+        $anyAuto = collect($sessions)->contains(fn($s) => empty($s['productos']));
+
+        if ($anyAuto) {
+            return ['productos' => null, 'nombre' => $nombres];
+        }
+
+        $merged = [];
+        foreach ($sessions as $s) {
+            foreach (($s['productos'] ?? []) as $p) {
+                $merged[$p['cod']] = $p;
+            }
+        }
+
+        return ['productos' => array_values($merged), 'nombre' => $nombres];
     }
 
     private function getLocalPrices($client): \Illuminate\Support\Collection

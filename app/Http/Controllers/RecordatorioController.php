@@ -229,16 +229,34 @@ class RecordatorioController extends Controller
         $tenant = app(TenantManager::class)->get();
         if (!$tenant) return;
 
-        $horas   = (int) ($recordatorio->flash_horas ?? 24);
-        $expira  = now()->addHours($horas);
-        // productos null = modo auto (catálogo del día); array = modo manual con precios de override
-        $payload = ['productos' => $recordatorio->productos_flash ?? null, 'nombre' => $recordatorio->nombre];
+        $horas     = (int) ($recordatorio->flash_horas ?? 24);
+        $expiraEn  = now()->addHours($horas);
+        $sessionId = 'rec_' . $recordatorio->id . '_' . now()->format('YmdHi');
+
+        $nueva = [
+            'id'                      => $sessionId,
+            'nombre'                  => $recordatorio->nombre,
+            'productos'               => $recordatorio->productos_flash ?? null,
+            'activado_en'             => now()->toISOString(),
+            'expira_en'               => $expiraEn->toISOString(),
+            'seguimiento_horas_antes' => $recordatorio->seguimiento_horas_antes ?? null,
+            'seguimiento_mensaje'     => $recordatorio->seguimiento_mensaje ?? null,
+        ];
 
         foreach ($nombres as $nombre) {
             $localidad = Localidad::where('nombre', $nombre)->where('activo', true)->first();
-            if ($localidad) {
-                Cache::put("flash_order_{$tenant->id}_{$localidad->id}", $payload, $expira);
-            }
+            if (!$localidad) continue;
+
+            $key      = "flash_orders_{$tenant->id}_{$localidad->id}";
+            $existing = Cache::get($key, []);
+            $existing = array_values(array_filter(
+                is_array($existing) ? $existing : [],
+                fn($s) => isset($s['expira_en']) && \Carbon\Carbon::parse($s['expira_en'])->isFuture()
+            ));
+            $existing[] = $nueva;
+
+            $maxExpira = collect($existing)->max(fn($s) => $s['expira_en']);
+            Cache::put($key, $existing, \Carbon\Carbon::parse((string) $maxExpira));
         }
     }
 

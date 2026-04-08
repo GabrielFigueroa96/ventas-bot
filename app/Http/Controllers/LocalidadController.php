@@ -236,6 +236,7 @@ class LocalidadController extends Controller
     public function flashActivar(Request $request, int $id)
     {
         $request->validate([
+            'nombre'                 => 'nullable|string|max:100',
             'horas'                  => 'required|integer|min:1|max:168',
             'productos'              => 'nullable|array',
             'seguimiento_horas_antes'=> 'nullable|integer|min:1|max:100',
@@ -246,64 +247,97 @@ class LocalidadController extends Controller
         $tenant    = app(TenantManager::class)->get();
         if (!$tenant) return response()->json(['ok' => false, 'error' => 'Sin tenant'], 500);
 
-        $productos = $request->input('productos'); // null = modo auto
-        $horas     = (int) $request->input('horas');
+        $horas    = (int) $request->input('horas');
+        $expiraEn = now()->addHours($horas);
+        $sessionId = uniqid('flash_', true);
 
-        $payload = [
-            'productos'               => (!empty($productos)) ? $productos : null,
-            'nombre'                  => "Express manual — {$localidad->nombre}",
+        $nueva = [
+            'id'                      => $sessionId,
+            'nombre'                  => $request->filled('nombre') ? $request->input('nombre') : "Express — {$localidad->nombre}",
+            'productos'               => !empty($request->input('productos')) ? $request->input('productos') : null,
             'activado_en'             => now()->toISOString(),
-            'expira_en'               => now()->addHours($horas)->toISOString(),
+            'expira_en'               => $expiraEn->toISOString(),
             'seguimiento_horas_antes' => $request->filled('seguimiento_horas_antes') ? (int) $request->input('seguimiento_horas_antes') : null,
-            'seguimiento_mensaje'     => $request->input('seguimiento_mensaje'),
+            'seguimiento_mensaje'     => $request->input('seguimiento_mensaje') ?: null,
         ];
 
-        Cache::put("flash_order_{$tenant->id}_{$localidad->id}", $payload, now()->addHours($horas));
+        $key      = "flash_orders_{$tenant->id}_{$localidad->id}";
+        $existing = Cache::get($key, []);
+        // Filtrar expiradas
+        $existing = array_values(array_filter(
+            is_array($existing) ? $existing : [],
+            fn($s) => isset($s['expira_en']) && \Carbon\Carbon::parse($s['expira_en'])->isFuture()
+        ));
+        $existing[] = $nueva;
+
+        $maxExpira = collect($existing)->max(fn($s) => $s['expira_en']);
+        Cache::put($key, $existing, Carbon::parse((string) $maxExpira));
 
         return response()->json([
-            'ok'       => true,
-            'expira_en'=> $payload['expira_en'],
-            'horas'    => $horas,
+            'ok'        => true,
+            'session_id'=> $sessionId,
+            'expira_en' => $nueva['expira_en'],
+            'sessions'  => $existing,
         ]);
     }
 
-    public function flashDesactivar(int $id)
+    public function flashDesactivar(Request $request, int $id)
     {
         $localidad = Localidad::findOrFail($id);
         $tenant    = app(TenantManager::class)->get();
         if (!$tenant) return response()->json(['ok' => false, 'error' => 'Sin tenant'], 500);
 
-        Cache::forget("flash_order_{$tenant->id}_{$localidad->id}");
+        $key      = "flash_orders_{$tenant->id}_{$localidad->id}";
+        $sessions = Cache::get($key, []);
+        $sessionId = $request->input('session_id');
 
-        return response()->json(['ok' => true]);
+        if ($sessionId) {
+            // Eliminar solo la sesión indicada
+            $sessions = array_values(array_filter(
+                is_array($sessions) ? $sessions : [],
+                fn($s) => ($s['id'] ?? null) !== $sessionId
+            ));
+            if (empty($sessions)) {
+                Cache::forget($key);
+            } else {
+                $maxExpira = collect($sessions)->max(fn($s) => $s['expira_en']);
+                Cache::put($key, $sessions, Carbon::parse((string) $maxExpira));
+            }
+        } else {
+            // Sin ID: limpiar todo
+            Cache::forget($key);
+            $sessions = [];
+        }
+
+        return response()->json(['ok' => true, 'sessions' => $sessions]);
     }
 
     public function flashEstado(int $id)
     {
         $localidad = Localidad::findOrFail($id);
         $tenant    = app(TenantManager::class)->get();
-        if (!$tenant) return response()->json(['activo' => false]);
+        if (!$tenant) return response()->json(['activo' => false, 'sessions' => []]);
 
-        $session = Cache::get("flash_order_{$tenant->id}_{$localidad->id}");
-        if (!$session) return response()->json(['activo' => false]);
+        $key      = "flash_orders_{$tenant->id}_{$localidad->id}";
+        $all      = Cache::get($key, []);
+        $sessions = array_values(array_filter(
+            is_array($all) ? $all : [],
+            fn($s) => isset($s['expira_en']) && \Carbon\Carbon::parse($s['expira_en'])->isFuture()
+        ));
 
-        // Cuántos pedidos se hicieron desde la activación
-        $activadoEn = isset($session['activado_en'])
-            ? \Carbon\Carbon::parse($session['activado_en'])
-            : null;
+        if (empty($sessions)) return response()->json(['activo' => false, 'sessions' => []]);
 
-        $pedidos = $activadoEn
-            ? Pedidosia::where('pedido_at', '>=', $activadoEn)
-                ->whereHas('cliente', fn($q) => $q->where('localidad_id', $localidad->id))
-                ->where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
-                ->count()
-            : null;
+        // Contar pedidos desde la sesión más antigua activa
+        $masAntigua = collect($sessions)->min(fn($s) => $s['activado_en'] ?? now()->toISOString());
+        $pedidos = Pedidosia::where('pedido_at', '>=', \Carbon\Carbon::parse($masAntigua))
+            ->where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
+            ->whereHas('cliente', fn($q) => $q->where('localidad_id', $localidad->id))
+            ->count();
 
         return response()->json([
-            'activo'     => true,
-            'expira_en'  => $session['expira_en'] ?? null,
-            'productos'  => $session['productos'] ?? null,
-            'pedidos'    => $pedidos,
+            'activo'   => true,
+            'sessions' => $sessions,
+            'pedidos'  => $pedidos,
         ]);
     }
 
