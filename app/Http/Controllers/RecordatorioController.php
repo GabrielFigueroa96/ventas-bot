@@ -9,7 +9,9 @@ use App\Models\Producto;
 use App\Models\ProductoLocalidad;
 use App\Models\Recordatorio;
 use App\Services\BotService;
+use App\Services\TenantManager;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class RecordatorioController extends Controller
 {
@@ -38,8 +40,9 @@ class RecordatorioController extends Controller
             'activo'            => 'boolean',
         ]);
 
-        $data['activo'] = $request->boolean('activo', true);
-        $data['dias']   = !empty($data['dias']) ? $data['dias'] : null;
+        $data['activo']          = $request->boolean('activo', true);
+        $data['dias']            = !empty($data['dias']) ? $data['dias'] : null;
+        $data['productos_flash'] = $this->parseProductosFlash($request);
 
         Recordatorio::create($data);
 
@@ -73,12 +76,41 @@ class RecordatorioController extends Controller
             'activo'            => 'boolean',
         ]);
 
-        $data['activo'] = $request->boolean('activo', true);
-        $data['dias']   = !empty($data['dias']) ? $data['dias'] : null;
+        $data['activo']          = $request->boolean('activo', true);
+        $data['dias']            = !empty($data['dias']) ? $data['dias'] : null;
+        $data['productos_flash'] = $this->parseProductosFlash($request);
 
         $rec->update($data);
 
         return redirect()->route('admin.recordatorios')->with('ok', 'Recordatorio actualizado.');
+    }
+
+    public function productosLocalidad(Request $request)
+    {
+        $request->validate(['localidad_nombre' => 'required|string']);
+
+        $localidad = Localidad::where('nombre', $request->input('localidad_nombre'))
+            ->where('activo', true)
+            ->firstOrFail();
+
+        $prodLocConfigs = ProductoLocalidad::where('localidad_id', $localidad->id)
+            ->get()->keyBy('cod');
+
+        $productos = Producto::paraBot()
+            ->orderBy('tablaplu.des')
+            ->get()
+            ->filter(fn($p) => $prodLocConfigs->has($p->cod))
+            ->map(function ($p) use ($prodLocConfigs) {
+                $override = $prodLocConfigs->get($p->cod);
+                return [
+                    'cod'    => $p->cod,
+                    'des'    => $p->des,
+                    'precio' => $override?->precio !== null ? (float) $override->precio : (float) $p->precio,
+                    'tipo'   => $p->tipo,
+                ];
+            })->values();
+
+        return response()->json($productos);
     }
 
     public function destroy(int $id)
@@ -138,6 +170,8 @@ class RecordatorioController extends Controller
                 ]);
             }
 
+            $this->activarFlashSiCorresponde($recordatorio);
+
             return response()->json(['ok' => true, 'mensaje' => $catalogo !== null ? $mensaje . "\n\n" . $catalogo : $mensaje]);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
@@ -155,6 +189,32 @@ class RecordatorioController extends Controller
         }
 
         return $mensaje;
+    }
+
+    private function parseProductosFlash(Request $request): ?array
+    {
+        $raw = $request->input('productos_flash');
+        if (!$raw) return null;
+        $decoded = json_decode($raw, true);
+        return (is_array($decoded) && count($decoded) > 0) ? $decoded : null;
+    }
+
+    private function activarFlashSiCorresponde(Recordatorio $recordatorio): void
+    {
+        if (empty($recordatorio->productos_flash) || !$recordatorio->filtro_localidad) return;
+
+        $localidad = Localidad::where('nombre', $recordatorio->filtro_localidad)
+            ->where('activo', true)->first();
+        if (!$localidad) return;
+
+        $tenant = app(TenantManager::class)->get();
+        if (!$tenant) return;
+
+        Cache::put(
+            "flash_order_{$tenant->id}_{$localidad->id}",
+            ['productos' => $recordatorio->productos_flash, 'nombre' => $recordatorio->nombre],
+            now()->addHours(24)
+        );
     }
 
     private function buildCatalogo(Recordatorio $rec): string

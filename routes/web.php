@@ -59,8 +59,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::delete('/localidades/{localidad}/precios/{cod}',  [LocalidadController::class, 'precioRemove'])->name('localidades.precios.remove');
 
     // Recordatorios
-    Route::get   ('/recordatorios',          [RecordatorioController::class, 'index'])->name('recordatorios');
-    Route::post  ('/recordatorios',          [RecordatorioController::class, 'store'])->name('recordatorios.store');
+    Route::get   ('/recordatorios',                       [RecordatorioController::class, 'index'])->name('recordatorios');
+    Route::get   ('/recordatorios/productos-localidad',   [RecordatorioController::class, 'productosLocalidad'])->name('recordatorios.productos_localidad');
+    Route::post  ('/recordatorios',                       [RecordatorioController::class, 'store'])->name('recordatorios.store');
     Route::get   ('/recordatorios/{rec}/edit',[RecordatorioController::class, 'edit'])->name('recordatorios.edit');
     Route::put   ('/recordatorios/{rec}',    [RecordatorioController::class, 'update'])->name('recordatorios.update');
     Route::delete('/recordatorios/{rec}',    [RecordatorioController::class, 'destroy'])->name('recordatorios.destroy');

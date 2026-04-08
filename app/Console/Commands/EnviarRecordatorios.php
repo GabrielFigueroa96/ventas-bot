@@ -11,6 +11,7 @@ use App\Models\Recordatorio;
 use App\Services\BotService;
 use App\Services\TenantManager;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -87,8 +88,29 @@ class EnviarRecordatorios extends Command
             }
 
             $recordatorio->update(['ultimo_envio_at' => now()]);
+            $this->activarFlashSiCorresponde($recordatorio);
             $this->line("✓ Recordatorio '{$recordatorio->nombre}': {$enviados} mensajes enviados.");
         }
+    }
+
+    private function activarFlashSiCorresponde(Recordatorio $recordatorio): void
+    {
+        if (empty($recordatorio->productos_flash) || !$recordatorio->filtro_localidad) return;
+
+        $localidad = Localidad::where('nombre', $recordatorio->filtro_localidad)
+            ->where('activo', true)->first();
+        if (!$localidad) return;
+
+        $tenant = app(TenantManager::class)->get();
+        if (!$tenant) return;
+
+        Cache::put(
+            "flash_order_{$tenant->id}_{$localidad->id}",
+            ['productos' => $recordatorio->productos_flash, 'nombre' => $recordatorio->nombre],
+            now()->addHours(24)
+        );
+
+        $this->line("  → Flash order activado para {$recordatorio->filtro_localidad} (24hs).");
     }
 
     private function obtenerClientes(Recordatorio $rec)

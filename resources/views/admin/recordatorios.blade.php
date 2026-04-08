@@ -126,6 +126,29 @@
                 </div>
             </div>
 
+            {{-- Pedido Express --}}
+            <div class="border border-orange-200 bg-orange-50 rounded-lg p-4 space-y-3">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="toggle-express"
+                        {{ !empty($editando?->productos_flash) ? 'checked' : '' }}
+                        onchange="toggleExpressPanel(this.checked)"
+                        class="accent-orange-500 w-4 h-4">
+                    <span class="text-sm font-semibold text-orange-700">Pedido Express — restringir bot a lista de productos</span>
+                </label>
+                <div id="express-panel" class="{{ empty($editando?->productos_flash) ? 'hidden' : '' }} space-y-3">
+                    <p class="text-xs text-gray-500">Cuando se envíe este recordatorio, el bot <strong>solo aceptará pedidos de los productos seleccionados</strong> (con los precios que configures acá). Válido 24hs.</p>
+                    <button type="button" onclick="cargarProductosExpress()"
+                        class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 font-medium px-3 py-1.5 rounded-lg border border-orange-200 transition">
+                        Cargar productos de la localidad
+                    </button>
+                    <div id="lista-express" class="space-y-1">
+                        {{-- se llena vía JS --}}
+                    </div>
+                    <input type="hidden" name="productos_flash" id="input-productos-flash"
+                        value="{{ $editando?->productos_flash ? json_encode($editando->productos_flash) : '' }}">
+                </div>
+            </div>
+
             <div class="flex items-center gap-3 pt-2">
                 <button type="submit"
                     class="bg-red-700 hover:bg-red-800 text-white text-sm font-semibold px-6 py-2 rounded-lg">
@@ -225,6 +248,107 @@
 <script>
 const CSRF = document.querySelector('meta[name=csrf-token]').content;
 let probarRecId = null;
+
+// ── Pedido Express ──────────────────────────────────────────────────────────
+let expressCatalogo = []; // [{cod,des,precio,tipo}] cargados de la localidad
+let expressSeleccion = {}; // { cod: precio } seleccionados
+
+function toggleExpressPanel(visible) {
+    document.getElementById('express-panel').classList.toggle('hidden', !visible);
+    if (!visible) {
+        document.getElementById('input-productos-flash').value = '';
+    }
+}
+
+async function cargarProductosExpress() {
+    const localidad = document.querySelector('select[name=filtro_localidad]').value;
+    if (!localidad) { showToast('Seleccioná una localidad primero.', 'warning'); return; }
+
+    try {
+        const res  = await fetch(`/admin/recordatorios/productos-localidad?localidad_nombre=${encodeURIComponent(localidad)}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error('Error al cargar productos');
+        expressCatalogo = await res.json();
+
+        // Mantener precios editados si ya había selección
+        expressCatalogo.forEach(p => {
+            if (expressSeleccion[p.cod] === undefined) {
+                expressSeleccion[p.cod] = { checked: false, precio: p.precio };
+            }
+        });
+
+        renderExpressLista();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+function renderExpressLista() {
+    const cont = document.getElementById('lista-express');
+    if (!expressCatalogo.length) {
+        cont.innerHTML = '<p class="text-xs text-gray-400">No hay productos para esta localidad.</p>';
+        return;
+    }
+
+    cont.innerHTML = expressCatalogo.map(p => {
+        const sel   = expressSeleccion[p.cod] ?? { checked: false, precio: p.precio };
+        const check = sel.checked ? 'checked' : '';
+        return `<div class="flex items-center gap-2 py-1 border-b border-orange-100 last:border-0">
+            <input type="checkbox" ${check} onchange="toggleExpressProd('${p.cod}', this.checked)"
+                class="accent-orange-500 w-4 h-4 shrink-0">
+            <span class="text-sm text-gray-700 flex-1 min-w-0 truncate" title="${p.des}">${p.des}</span>
+            <span class="text-xs text-gray-400">${p.tipo === 'Peso' ? '/kg' : '/u'}</span>
+            <input type="number" value="${sel.precio}" min="0" step="0.01"
+                oninput="updateExpressPrecio('${p.cod}', this.value)"
+                class="w-24 border border-gray-300 rounded px-2 py-0.5 text-sm text-right focus:outline-none focus:ring-1 focus:ring-orange-400">
+        </div>`;
+    }).join('');
+}
+
+function toggleExpressProd(cod, checked) {
+    if (!expressSeleccion[cod]) {
+        const p = expressCatalogo.find(x => x.cod == cod);
+        expressSeleccion[cod] = { checked, precio: p?.precio ?? 0 };
+    } else {
+        expressSeleccion[cod].checked = checked;
+    }
+    sincronizarFlashInput();
+}
+
+function updateExpressPrecio(cod, valor) {
+    if (!expressSeleccion[cod]) expressSeleccion[cod] = { checked: false, precio: 0 };
+    expressSeleccion[cod].precio = parseFloat(valor) || 0;
+    sincronizarFlashInput();
+}
+
+function sincronizarFlashInput() {
+    const seleccionados = expressCatalogo
+        .filter(p => expressSeleccion[p.cod]?.checked)
+        .map(p => ({
+            cod:    p.cod,
+            des:    p.des,
+            precio: expressSeleccion[p.cod]?.precio ?? p.precio,
+            tipo:   p.tipo,
+        }));
+    document.getElementById('input-productos-flash').value =
+        seleccionados.length ? JSON.stringify(seleccionados) : '';
+}
+
+// Al cargar la página: si hay productos_flash guardados, poblar expressSeleccion y renderizar
+(function initExpressFromSaved() {
+    const input = document.getElementById('input-productos-flash');
+    if (!input || !input.value) return;
+    try {
+        const guardados = JSON.parse(input.value);
+        if (!Array.isArray(guardados) || !guardados.length) return;
+        expressCatalogo = guardados;
+        guardados.forEach(p => {
+            expressSeleccion[p.cod] = { checked: true, precio: p.precio };
+        });
+        renderExpressLista();
+    } catch {}
+})();
 
 function abrirProbar(id, nombre) {
     probarRecId = id;
