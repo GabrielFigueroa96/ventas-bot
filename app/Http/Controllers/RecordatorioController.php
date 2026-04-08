@@ -40,9 +40,11 @@ class RecordatorioController extends Controller
             'activo'            => 'boolean',
         ]);
 
-        $data['activo']          = $request->boolean('activo', true);
-        $data['dias']            = !empty($data['dias']) ? $data['dias'] : null;
-        $data['productos_flash'] = $this->parseProductosFlash($request);
+        $data['activo']             = $request->boolean('activo', true);
+        $data['dias']               = !empty($data['dias']) ? $data['dias'] : null;
+        $data['productos_flash']    = $this->parseProductosFlash($request);
+        $data['flash_localidades']  = $this->parseFlashLocalidades($request);
+        $data['flash_horas']        = $request->filled('flash_horas') ? (int) $request->input('flash_horas') : 24;
 
         Recordatorio::create($data);
 
@@ -76,9 +78,11 @@ class RecordatorioController extends Controller
             'activo'            => 'boolean',
         ]);
 
-        $data['activo']          = $request->boolean('activo', true);
-        $data['dias']            = !empty($data['dias']) ? $data['dias'] : null;
-        $data['productos_flash'] = $this->parseProductosFlash($request);
+        $data['activo']             = $request->boolean('activo', true);
+        $data['dias']               = !empty($data['dias']) ? $data['dias'] : null;
+        $data['productos_flash']    = $this->parseProductosFlash($request);
+        $data['flash_localidades']  = $this->parseFlashLocalidades($request);
+        $data['flash_horas']        = $request->filled('flash_horas') ? (int) $request->input('flash_horas') : 24;
 
         $rec->update($data);
 
@@ -199,22 +203,35 @@ class RecordatorioController extends Controller
         return (is_array($decoded) && count($decoded) > 0) ? $decoded : null;
     }
 
+    private function parseFlashLocalidades(Request $request): ?array
+    {
+        $raw = $request->input('flash_localidades');
+        if (!$raw) return null;
+        $decoded = json_decode($raw, true);
+        return (is_array($decoded) && count($decoded) > 0) ? $decoded : null;
+    }
+
     private function activarFlashSiCorresponde(Recordatorio $recordatorio): void
     {
-        if (empty($recordatorio->productos_flash) || !$recordatorio->filtro_localidad) return;
-
-        $localidad = Localidad::where('nombre', $recordatorio->filtro_localidad)
-            ->where('activo', true)->first();
-        if (!$localidad) return;
+        if (empty($recordatorio->productos_flash)) return;
 
         $tenant = app(TenantManager::class)->get();
         if (!$tenant) return;
 
-        Cache::put(
-            "flash_order_{$tenant->id}_{$localidad->id}",
-            ['productos' => $recordatorio->productos_flash, 'nombre' => $recordatorio->nombre],
-            now()->addHours(24)
-        );
+        $horas    = (int) ($recordatorio->flash_horas ?? 24);
+        $expira   = now()->addHours($horas);
+        $payload  = ['productos' => $recordatorio->productos_flash, 'nombre' => $recordatorio->nombre];
+
+        $nombres = !empty($recordatorio->flash_localidades)
+            ? $recordatorio->flash_localidades
+            : ($recordatorio->filtro_localidad ? [$recordatorio->filtro_localidad] : []);
+
+        foreach ($nombres as $nombre) {
+            $localidad = Localidad::where('nombre', $nombre)->where('activo', true)->first();
+            if ($localidad) {
+                Cache::put("flash_order_{$tenant->id}_{$localidad->id}", $payload, $expira);
+            }
+        }
     }
 
     private function buildCatalogo(Recordatorio $rec): string

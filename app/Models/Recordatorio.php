@@ -9,16 +9,18 @@ class Recordatorio extends Model
     protected $table = 'ia_recordatorios';
 
     protected $fillable = [
-        'nombre', 'mensaje', 'imagen_url', 'template_nombre', 'productos_flash', 'tipo',
+        'nombre', 'mensaje', 'imagen_url', 'template_nombre', 'productos_flash',
+        'flash_localidades', 'flash_horas', 'tipo',
         'filtro_localidad', 'filtro_provincia',
         'dias', 'hora', 'activo', 'ultimo_envio_at',
     ];
 
     protected $casts = [
-        'dias'             => 'array',
-        'productos_flash'  => 'array',
-        'activo'           => 'boolean',
-        'ultimo_envio_at'  => 'datetime',
+        'dias'              => 'array',
+        'productos_flash'   => 'array',
+        'flash_localidades' => 'array',
+        'activo'            => 'boolean',
+        'ultimo_envio_at'   => 'datetime',
     ];
 
     public static array $DIAS_LABEL = [

@@ -95,36 +95,47 @@ class EnviarRecordatorios extends Command
 
     private function activarFlashSiCorresponde(Recordatorio $recordatorio): void
     {
-        if (empty($recordatorio->productos_flash) || !$recordatorio->filtro_localidad) return;
-
-        $localidad = Localidad::where('nombre', $recordatorio->filtro_localidad)
-            ->where('activo', true)->first();
-        if (!$localidad) return;
+        if (empty($recordatorio->productos_flash)) return;
 
         $tenant = app(TenantManager::class)->get();
         if (!$tenant) return;
 
-        Cache::put(
-            "flash_order_{$tenant->id}_{$localidad->id}",
-            ['productos' => $recordatorio->productos_flash, 'nombre' => $recordatorio->nombre],
-            now()->addHours(24)
-        );
+        $horas   = (int) ($recordatorio->flash_horas ?? 24);
+        $expira  = now()->addHours($horas);
+        $payload = ['productos' => $recordatorio->productos_flash, 'nombre' => $recordatorio->nombre];
 
-        $this->line("  → Flash order activado para {$recordatorio->filtro_localidad} (24hs).");
+        $nombres = !empty($recordatorio->flash_localidades)
+            ? $recordatorio->flash_localidades
+            : ($recordatorio->filtro_localidad ? [$recordatorio->filtro_localidad] : []);
+
+        foreach ($nombres as $nombre) {
+            $loc = Localidad::where('nombre', $nombre)->where('activo', true)->first();
+            if ($loc) {
+                Cache::put("flash_order_{$tenant->id}_{$loc->id}", $payload, $expira);
+                $this->line("  → Flash order activado para {$nombre} ({$horas}hs).");
+            }
+        }
     }
 
     private function obtenerClientes(Recordatorio $rec)
     {
         $query = Cliente::whereNotNull('phone')->where('phone', '!=', '');
 
-        if ($rec->filtro_localidad || $rec->filtro_provincia) {
+        // Modo express con múltiples localidades: usa flash_localidades como filtro
+        if (!empty($rec->flash_localidades) && !empty($rec->productos_flash)) {
+            $nombres = $rec->flash_localidades;
+            $query->where(function ($q) use ($nombres) {
+                $q->whereHas('localidadObj', fn($q2) => $q2->whereIn('nombre', $nombres));
+                foreach ($nombres as $nombre) {
+                    $q->orWhereHas('cuenta', fn($q2) => $q2->where('loca', 'like', "%{$nombre}%"));
+                }
+            });
+        } elseif ($rec->filtro_localidad || $rec->filtro_provincia) {
             $query->where(function ($q) use ($rec) {
-                // Clientes con localidad_id vinculada a la tabla localidades
                 $q->whereHas('localidadObj', function ($q2) use ($rec) {
                     if ($rec->filtro_localidad) $q2->where('nombre', $rec->filtro_localidad);
                     if ($rec->filtro_provincia) $q2->where('provincia', $rec->filtro_provincia);
                 });
-                // O coincide por cuenta vinculada
                 $q->orWhereHas('cuenta', function ($q2) use ($rec) {
                     if ($rec->filtro_localidad) $q2->where('loca', 'like', "%{$rec->filtro_localidad}%");
                     if ($rec->filtro_provincia) $q2->where('prov', 'like', "%{$rec->filtro_provincia}%");

@@ -135,17 +135,53 @@
                         class="accent-orange-500 w-4 h-4">
                     <span class="text-sm font-semibold text-orange-700">Pedido Express — restringir bot a lista de productos</span>
                 </label>
-                <div id="express-panel" class="{{ empty($editando?->productos_flash) ? 'hidden' : '' }} space-y-3">
-                    <p class="text-xs text-gray-500">Cuando se envíe este recordatorio, el bot <strong>solo aceptará pedidos de los productos seleccionados</strong> (con los precios que configures acá). Válido 24hs.</p>
-                    <button type="button" onclick="cargarProductosExpress()"
-                        class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 font-medium px-3 py-1.5 rounded-lg border border-orange-200 transition">
-                        Cargar productos de la localidad
-                    </button>
-                    <div id="lista-express" class="space-y-1">
-                        {{-- se llena vía JS --}}
+                <div id="express-panel" class="{{ empty($editando?->productos_flash) ? 'hidden' : '' }} space-y-4">
+                    <p class="text-xs text-gray-500">Cuando se envíe este recordatorio, el bot <strong>solo aceptará pedidos de los productos seleccionados</strong> con los precios que configures acá.</p>
+
+                    {{-- Localidades destino --}}
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">
+                            Localidades destino
+                            <span class="text-gray-400 font-normal">(las que reciben el mensaje y entran en modo express)</span>
+                        </label>
+                        <div class="flex flex-wrap gap-2" id="express-localidades-checks">
+                            @foreach($localidades as $loc)
+                            <label class="flex items-center gap-1 text-sm cursor-pointer">
+                                <input type="checkbox" name="express_loc[]" value="{{ $loc->nombre }}"
+                                    {{ in_array($loc->nombre, $editando?->flash_localidades ?? []) ? 'checked' : '' }}
+                                    onchange="sincronizarFlashLocalidades()"
+                                    class="accent-orange-500">
+                                {{ $loc->nombre }}
+                            </label>
+                            @endforeach
+                        </div>
+                        <input type="hidden" name="flash_localidades" id="input-flash-localidades"
+                            value="{{ $editando?->flash_localidades ? json_encode($editando->flash_localidades) : '' }}">
                     </div>
-                    <input type="hidden" name="productos_flash" id="input-productos-flash"
-                        value="{{ $editando?->productos_flash ? json_encode($editando->productos_flash) : '' }}">
+
+                    {{-- Duración --}}
+                    <div class="flex items-center gap-3">
+                        <label class="text-xs font-semibold text-gray-600 whitespace-nowrap">Válido por</label>
+                        <input type="number" name="flash_horas" min="1" max="72"
+                            value="{{ old('flash_horas', $editando?->flash_horas ?? 24) }}"
+                            class="w-20 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-orange-300 focus:outline-none">
+                        <span class="text-xs text-gray-500">horas desde el envío</span>
+                    </div>
+
+                    {{-- Productos --}}
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-xs font-semibold text-gray-600">Productos</span>
+                            <button type="button" onclick="cargarProductosExpress()"
+                                class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 font-medium px-3 py-1 rounded-lg border border-orange-200 transition">
+                                Cargar desde localidad fuente
+                            </button>
+                            <span class="text-xs text-gray-400">(usa "Filtrar por localidad" como fuente de precios)</span>
+                        </div>
+                        <div id="lista-express" class="space-y-1">{{-- se llena vía JS --}}</div>
+                        <input type="hidden" name="productos_flash" id="input-productos-flash"
+                            value="{{ $editando?->productos_flash ? json_encode($editando->productos_flash) : '' }}">
+                    </div>
                 </div>
             </div>
 
@@ -172,7 +208,9 @@
                         {{ ['libre'=>'Libre','catalogo'=>'Lista de precios'][$rec->tipo] ?? $rec->tipo }}
                     </span>
                     <span class="text-xs text-gray-400">🕐 {{ substr($rec->hora,0,5) }} · {{ $rec->diasTexto() }}</span>
-                    @if($rec->filtro_localidad)
+                    @if(!empty($rec->flash_localidades))
+                        <span class="text-xs text-orange-600">🚀 {{ implode(', ', $rec->flash_localidades) }}</span>
+                    @elseif($rec->filtro_localidad)
                         <span class="text-xs text-purple-600">📍 {{ $rec->filtro_localidad }}</span>
                     @endif
                     @if($rec->filtro_provincia)
@@ -320,6 +358,13 @@ function updateExpressPrecio(cod, valor) {
     if (!expressSeleccion[cod]) expressSeleccion[cod] = { checked: false, precio: 0 };
     expressSeleccion[cod].precio = parseFloat(valor) || 0;
     sincronizarFlashInput();
+}
+
+function sincronizarFlashLocalidades() {
+    const checks = document.querySelectorAll('input[name="express_loc[]"]:checked');
+    const nombres = Array.from(checks).map(c => c.value);
+    document.getElementById('input-flash-localidades').value =
+        nombres.length ? JSON.stringify(nombres) : '';
 }
 
 function sincronizarFlashInput() {
