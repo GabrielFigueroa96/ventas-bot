@@ -385,10 +385,10 @@ class BotService
             ? ProductoLocalidad::where('localidad_id', $cliente->localidad_id)->get()->keyBy('cod')
             : collect();
 
-        if ($flashSession) {
-            // MODO EXPRESS: solo los productos de la lista flash, con precios flash
-            $flashCods = array_column($flashSession['productos'] ?? [], 'cod');
-            $flashMap  = collect($flashSession['productos'] ?? [])->keyBy('cod');
+        if ($flashSession && !empty($flashSession['productos'])) {
+            // MODO EXPRESS MANUAL: lista curada por el admin con precios de override
+            $flashCods = array_column($flashSession['productos'], 'cod');
+            $flashMap  = collect($flashSession['productos'])->keyBy('cod');
             $productos = $todosProductos
                 ->filter(fn($p) => in_array($p->cod, $flashCods))
                 ->map(function ($p) use ($flashMap) {
@@ -1332,10 +1332,10 @@ Herramientas disponibles:
                 'precio'=> $match->precio,
             ]);
 
-            // Verificar modo express
+            // Verificar modo express (solo restringe productos si hay lista manual)
             $flashItem = null;
-            if ($flashSession !== null) {
-                $flashColl = collect($flashSession['productos'] ?? []);
+            if ($flashSession !== null && !empty($flashSession['productos'])) {
+                $flashColl = collect($flashSession['productos']);
                 $flashItem = $flashColl->first(fn($fp) => $fp['cod'] === $match->cod);
                 if (!$flashItem) {
                     $flashNombres = $flashColl->pluck('des')->implode(', ');

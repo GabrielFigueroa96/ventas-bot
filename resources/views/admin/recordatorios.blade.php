@@ -136,7 +136,13 @@
                     <span class="text-sm font-semibold text-orange-700">Pedido Express — restringir bot a lista de productos</span>
                 </label>
                 <div id="express-panel" class="{{ empty($editando?->productos_flash) ? 'hidden' : '' }} space-y-4">
-                    <p class="text-xs text-gray-500">Cuando se envíe este recordatorio, el bot <strong>solo aceptará pedidos de los productos seleccionados</strong> con los precios que configures acá.</p>
+                    <p class="text-xs text-gray-500">
+                        Cuando se envíe este recordatorio, el bot entra en <strong>Modo Express</strong> para las localidades seleccionadas.<br>
+                        <span class="text-orange-600 font-medium">Productos:</span>
+                        si cargás una lista de productos, el bot se restringe a esa lista con los precios que configures.
+                        Si lo dejás vacío, el bot usa automáticamente los productos del día según la configuración de la localidad
+                        <span class="text-gray-400">(útil cuando la localidad reparte varios días con productos distintos)</span>.
+                    </p>
 
                     {{-- Localidades destino --}}
                     <div>
@@ -159,13 +165,40 @@
                             value="{{ $editando?->flash_localidades ? json_encode($editando->flash_localidades) : '' }}">
                     </div>
 
-                    {{-- Duración --}}
-                    <div class="flex items-center gap-3">
-                        <label class="text-xs font-semibold text-gray-600 whitespace-nowrap">Válido por</label>
-                        <input type="number" name="flash_horas" min="1" max="72"
-                            value="{{ old('flash_horas', $editando?->flash_horas ?? 24) }}"
-                            class="w-20 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-orange-300 focus:outline-none">
-                        <span class="text-xs text-gray-500">horas desde el envío</span>
+                    {{-- Duración + Seguimiento --}}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">Válido por</label>
+                            <div class="flex items-center gap-2">
+                                <input type="number" name="flash_horas" min="1" max="72"
+                                    value="{{ old('flash_horas', $editando?->flash_horas ?? 24) }}"
+                                    class="w-20 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-orange-300 focus:outline-none">
+                                <span class="text-xs text-gray-500">horas desde el envío</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">
+                                Recordatorio de cierre
+                                <span class="text-gray-400 font-normal">(solo a quienes no pidieron)</span>
+                            </label>
+                            <div class="flex items-center gap-2">
+                                <input type="number" name="seguimiento_horas_antes" min="1" max="23"
+                                    value="{{ old('seguimiento_horas_antes', $editando?->seguimiento_horas_antes) }}"
+                                    placeholder="—"
+                                    class="w-20 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-orange-300 focus:outline-none">
+                                <span class="text-xs text-gray-500">horas antes del cierre</span>
+                            </div>
+                        </div>
+                    </div>
+                    {{-- Mensaje del seguimiento --}}
+                    <div id="seguimiento-msg-panel" class="{{ empty($editando?->seguimiento_horas_antes) ? 'hidden' : '' }}">
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">
+                            Mensaje del recordatorio de cierre
+                        </label>
+                        <textarea name="seguimiento_mensaje" rows="2"
+                            placeholder="Ej: ¡Hola {nombre}! ⏰ Quedan pocas horas para cerrar el pedido express. ¿Querés pedir algo?"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-300 focus:outline-none">{{ old('seguimiento_mensaje', $editando?->seguimiento_mensaje) }}</textarea>
+                        <p class="text-xs text-gray-400 mt-0.5">Variable disponible: <code>{nombre}</code></p>
                     </div>
 
                     {{-- Productos --}}
@@ -297,6 +330,17 @@ function toggleExpressPanel(visible) {
         document.getElementById('input-productos-flash').value = '';
     }
 }
+
+// Mostrar/ocultar textarea de mensaje de seguimiento
+document.addEventListener('DOMContentLoaded', function() {
+    const horasInput = document.querySelector('input[name="seguimiento_horas_antes"]');
+    if (horasInput) {
+        horasInput.addEventListener('input', function() {
+            document.getElementById('seguimiento-msg-panel')
+                .classList.toggle('hidden', !this.value.trim());
+        });
+    }
+});
 
 async function cargarProductosExpress() {
     const localidad = document.querySelector('select[name=filtro_localidad]').value;

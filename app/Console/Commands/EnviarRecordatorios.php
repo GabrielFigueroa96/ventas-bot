@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Cliente;
 use App\Models\Localidad;
 use App\Models\Message;
+use App\Models\Pedidosia;
 use App\Models\Producto;
 use App\Models\ProductoLocalidad;
 use App\Models\Recordatorio;
@@ -91,22 +92,104 @@ class EnviarRecordatorios extends Command
             $this->activarFlashSiCorresponde($recordatorio);
             $this->line("✓ Recordatorio '{$recordatorio->nombre}': {$enviados} mensajes enviados.");
         }
+
+        // Seguimientos de pedidos pendientes
+        $this->procesarSeguimientos($bot);
+    }
+
+    private function procesarSeguimientos(BotService $bot): void
+    {
+        $tenantId = app(TenantManager::class)->get()?->id ?? 0;
+
+        $candidatos = Recordatorio::where('activo', true)
+            ->whereNotNull('ultimo_envio_at')
+            ->whereNotNull('seguimiento_horas_antes')
+            ->whereNotNull('seguimiento_mensaje')
+            ->get()
+            ->filter(fn($r) => $r->ultimo_envio_at->isToday());
+
+        foreach ($candidatos as $rec) {
+            $sentAt      = $rec->ultimo_envio_at;
+            $flashHoras  = (int) ($rec->flash_horas ?? 24);
+            $avisarHoras = (int) $rec->seguimiento_horas_antes;
+            $flashExpiry = $sentAt->copy()->addHours($flashHoras);
+            $triggerAt   = $flashExpiry->copy()->subHours($avisarHoras);
+
+            // Solo dentro de la ventana de 10 minutos
+            $diff = now()->diffInMinutes($triggerAt, false);
+            if ($diff > 0 || $diff < -10) continue;
+
+            // Evitar doble envío
+            $cacheKey = "flash_seguimiento_{$tenantId}_{$rec->id}_" . now()->format('Y-m-d');
+            if (Cache::has($cacheKey)) continue;
+
+            $clientes = $this->obtenerClientesSinPedido($rec, $sentAt);
+            $enviados  = 0;
+
+            foreach ($clientes as $cliente) {
+                try {
+                    $mensaje = str_replace('{nombre}', $cliente->name ?? 'cliente', $rec->seguimiento_mensaje);
+                    $bot->sendWhatsapp($cliente->phone, $mensaje);
+                    Message::create([
+                        'cliente_id' => $cliente->id,
+                        'message'    => "[Seguimiento express: {$rec->nombre}]\n{$mensaje}",
+                        'direction'  => 'outgoing',
+                    ]);
+                    $enviados++;
+                } catch (\Throwable $e) {
+                    Log::error("Seguimiento #{$rec->id} cliente #{$cliente->id}: {$e->getMessage()}");
+                }
+            }
+
+            Cache::put($cacheKey, true, now()->endOfDay());
+            $this->line("✓ Seguimiento '{$rec->nombre}': {$enviados} recordatorios enviados ({$avisarHoras}hs antes del cierre).");
+        }
+    }
+
+    private function obtenerClientesSinPedido(Recordatorio $rec, \Carbon\Carbon $desde)
+    {
+        $nombres = !empty($rec->flash_localidades)
+            ? $rec->flash_localidades
+            : ($rec->filtro_localidad ? [$rec->filtro_localidad] : []);
+
+        if (empty($nombres)) return collect();
+
+        // IDs de clientes que YA pidieron desde el envío del flash
+        $yaOrdenaron = Pedidosia::where('pedido_at', '>=', $desde)
+            ->where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
+            ->pluck('idcliente')
+            ->unique();
+
+        $query = Cliente::whereNotNull('phone')
+            ->where('phone', '!=', '')
+            ->whereNotIn('id', $yaOrdenaron)
+            ->where(function ($q) use ($nombres) {
+                $q->whereHas('localidadObj', fn($q2) => $q2->whereIn('nombre', $nombres));
+                foreach ($nombres as $nombre) {
+                    $q->orWhereHas('cuenta', fn($q2) => $q2->where('loca', 'like', "%{$nombre}%"));
+                }
+            });
+
+        return $query->get();
     }
 
     private function activarFlashSiCorresponde(Recordatorio $recordatorio): void
     {
-        if (empty($recordatorio->productos_flash)) return;
+        $nombres = !empty($recordatorio->flash_localidades)
+            ? $recordatorio->flash_localidades
+            : ((!empty($recordatorio->productos_flash) && $recordatorio->filtro_localidad)
+                ? [$recordatorio->filtro_localidad]
+                : []);
+
+        if (empty($nombres)) return;
 
         $tenant = app(TenantManager::class)->get();
         if (!$tenant) return;
 
         $horas   = (int) ($recordatorio->flash_horas ?? 24);
         $expira  = now()->addHours($horas);
-        $payload = ['productos' => $recordatorio->productos_flash, 'nombre' => $recordatorio->nombre];
-
-        $nombres = !empty($recordatorio->flash_localidades)
-            ? $recordatorio->flash_localidades
-            : ($recordatorio->filtro_localidad ? [$recordatorio->filtro_localidad] : []);
+        // productos null = modo auto (catálogo del día); array = modo manual con precios de override
+        $payload = ['productos' => $recordatorio->productos_flash ?? null, 'nombre' => $recordatorio->nombre];
 
         foreach ($nombres as $nombre) {
             $loc = Localidad::where('nombre', $nombre)->where('activo', true)->first();
