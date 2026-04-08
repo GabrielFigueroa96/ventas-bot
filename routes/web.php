@@ -57,6 +57,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::patch ('/localidades/{localidad}/precios',        [LocalidadController::class, 'preciosBulkDias'])->name('localidades.precios.bulk');
     Route::patch ('/localidades/{localidad}/precios/{cod}',  [LocalidadController::class, 'precioUpsert'])->name('localidades.precios.upsert');
     Route::delete('/localidades/{localidad}/precios/{cod}',  [LocalidadController::class, 'precioRemove'])->name('localidades.precios.remove');
+    Route::get   ('/localidades/{localidad}/flash/productos',[LocalidadController::class, 'flashProductos'])->name('localidades.flash.productos');
+    Route::get   ('/localidades/{localidad}/flash/estado',   [LocalidadController::class, 'flashEstado'])->name('localidades.flash.estado');
+    Route::post  ('/localidades/{localidad}/flash',          [LocalidadController::class, 'flashActivar'])->name('localidades.flash.activar');
+    Route::delete('/localidades/{localidad}/flash',          [LocalidadController::class, 'flashDesactivar'])->name('localidades.flash.desactivar');
 
     // Recordatorios
     Route::get   ('/recordatorios',                       [RecordatorioController::class, 'index'])->name('recordatorios');

@@ -95,6 +95,7 @@ class EnviarRecordatorios extends Command
 
         // Seguimientos de pedidos pendientes
         $this->procesarSeguimientos($bot);
+        $this->procesarSeguimientosManuales($bot);
     }
 
     private function procesarSeguimientos(BotService $bot): void
@@ -143,6 +144,63 @@ class EnviarRecordatorios extends Command
 
             Cache::put($cacheKey, true, now()->endOfDay());
             $this->line("✓ Seguimiento '{$rec->nombre}': {$enviados} recordatorios enviados ({$avisarHoras}hs antes del cierre).");
+        }
+    }
+
+    private function procesarSeguimientosManuales(BotService $bot): void
+    {
+        $tenant = app(TenantManager::class)->get();
+        if (!$tenant) return;
+
+        $localidades = Localidad::where('activo', true)->get();
+
+        foreach ($localidades as $loc) {
+            $session = Cache::get("flash_order_{$tenant->id}_{$loc->id}");
+            if (!$session) continue;
+
+            $avisarHoras = $session['seguimiento_horas_antes'] ?? null;
+            $mensaje     = $session['seguimiento_mensaje'] ?? null;
+            if (!$avisarHoras || !$mensaje) continue;
+
+            $expira    = isset($session['expira_en']) ? \Carbon\Carbon::parse($session['expira_en']) : null;
+            $triggerAt = $expira?->copy()->subHours((int) $avisarHoras);
+            if (!$triggerAt) continue;
+
+            $diff = now()->diffInMinutes($triggerAt, false);
+            if ($diff > 0 || $diff < -10) continue;
+
+            $cacheKey = "flash_seg_manual_{$tenant->id}_{$loc->id}_" . now()->format('Y-m-d_H');
+            if (Cache::has($cacheKey)) continue;
+
+            $activadoEn  = isset($session['activado_en']) ? \Carbon\Carbon::parse($session['activado_en']) : now()->subDay();
+            $yaOrdenaron = Pedidosia::where('pedido_at', '>=', $activadoEn)
+                ->where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
+                ->whereHas('cliente', fn($q) => $q->where('localidad_id', $loc->id))
+                ->pluck('idcliente')->unique();
+
+            $clientes = Cliente::whereNotNull('phone')->where('phone', '!=', '')
+                ->where('localidad_id', $loc->id)
+                ->whereNotIn('id', $yaOrdenaron)
+                ->get();
+
+            $enviados = 0;
+            foreach ($clientes as $cliente) {
+                try {
+                    $txt = str_replace('{nombre}', $cliente->name ?? 'cliente', $mensaje);
+                    $bot->sendWhatsapp($cliente->phone, $txt);
+                    Message::create([
+                        'cliente_id' => $cliente->id,
+                        'message'    => "[Seguimiento express: {$loc->nombre}]\n{$txt}",
+                        'direction'  => 'outgoing',
+                    ]);
+                    $enviados++;
+                } catch (\Throwable $e) {
+                    Log::error("Seguimiento manual {$loc->nombre} cliente #{$cliente->id}: {$e->getMessage()}");
+                }
+            }
+
+            Cache::put($cacheKey, true, now()->addHours(2));
+            $this->line("✓ Seguimiento express {$loc->nombre}: {$enviados} mensajes enviados.");
         }
     }
 

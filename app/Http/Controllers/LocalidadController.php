@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Localidad;
+use App\Models\Pedidosia;
 use App\Models\Producto;
 use App\Models\ProductoLocalidad;
 use App\Services\BotService;
@@ -209,6 +210,101 @@ class LocalidadController extends Controller
         ProductoLocalidad::where('cod', $cod)->where('localidad_id', $id)->delete();
         $this->limpiarCache();
         return response()->json(['ok' => true]);
+    }
+
+    public function flashProductos(int $id)
+    {
+        $localidad = Localidad::findOrFail($id);
+        $configs   = ProductoLocalidad::where('localidad_id', $localidad->id)->get()->keyBy('cod');
+
+        $productos = Producto::paraBot()
+            ->orderBy('tablaplu.des')
+            ->get()
+            ->filter(fn($p) => $configs->has($p->cod))
+            ->map(fn($p) => [
+                'cod'    => $p->cod,
+                'des'    => $p->des,
+                'precio' => $configs->get($p->cod)?->precio !== null
+                    ? (float) $configs->get($p->cod)->precio
+                    : (float) $p->precio,
+                'tipo'   => $p->tipo,
+            ])->values();
+
+        return response()->json($productos);
+    }
+
+    public function flashActivar(Request $request, int $id)
+    {
+        $request->validate([
+            'horas'                  => 'required|integer|min:1|max:168',
+            'productos'              => 'nullable|array',
+            'seguimiento_horas_antes'=> 'nullable|integer|min:1|max:100',
+            'seguimiento_mensaje'    => 'nullable|string|max:500',
+        ]);
+
+        $localidad = Localidad::findOrFail($id);
+        $tenant    = app(TenantManager::class)->get();
+        if (!$tenant) return response()->json(['ok' => false, 'error' => 'Sin tenant'], 500);
+
+        $productos = $request->input('productos'); // null = modo auto
+        $horas     = (int) $request->input('horas');
+
+        $payload = [
+            'productos'               => (!empty($productos)) ? $productos : null,
+            'nombre'                  => "Express manual — {$localidad->nombre}",
+            'activado_en'             => now()->toISOString(),
+            'expira_en'               => now()->addHours($horas)->toISOString(),
+            'seguimiento_horas_antes' => $request->filled('seguimiento_horas_antes') ? (int) $request->input('seguimiento_horas_antes') : null,
+            'seguimiento_mensaje'     => $request->input('seguimiento_mensaje'),
+        ];
+
+        Cache::put("flash_order_{$tenant->id}_{$localidad->id}", $payload, now()->addHours($horas));
+
+        return response()->json([
+            'ok'       => true,
+            'expira_en'=> $payload['expira_en'],
+            'horas'    => $horas,
+        ]);
+    }
+
+    public function flashDesactivar(int $id)
+    {
+        $localidad = Localidad::findOrFail($id);
+        $tenant    = app(TenantManager::class)->get();
+        if (!$tenant) return response()->json(['ok' => false, 'error' => 'Sin tenant'], 500);
+
+        Cache::forget("flash_order_{$tenant->id}_{$localidad->id}");
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function flashEstado(int $id)
+    {
+        $localidad = Localidad::findOrFail($id);
+        $tenant    = app(TenantManager::class)->get();
+        if (!$tenant) return response()->json(['activo' => false]);
+
+        $session = Cache::get("flash_order_{$tenant->id}_{$localidad->id}");
+        if (!$session) return response()->json(['activo' => false]);
+
+        // Cuántos pedidos se hicieron desde la activación
+        $activadoEn = isset($session['activado_en'])
+            ? \Carbon\Carbon::parse($session['activado_en'])
+            : null;
+
+        $pedidos = $activadoEn
+            ? Pedidosia::where('pedido_at', '>=', $activadoEn)
+                ->whereHas('cliente', fn($q) => $q->where('localidad_id', $localidad->id))
+                ->where('estado', '!=', Pedidosia::ESTADO_CANCELADO)
+                ->count()
+            : null;
+
+        return response()->json([
+            'activo'     => true,
+            'expira_en'  => $session['expira_en'] ?? null,
+            'productos'  => $session['productos'] ?? null,
+            'pedidos'    => $pedidos,
+        ]);
     }
 
     private function limpiarCache(): void
