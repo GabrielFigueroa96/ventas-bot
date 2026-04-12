@@ -711,6 +711,29 @@ class BotService
             ? \Carbon\Carbon::parse($fechaElegida)->locale('es')->isoFormat('dddd D [de] MMMM')
             : null;
 
+        // Catálogo agrupado por día cuando hay múltiples fechas y no se eligió una todavía
+        $listaPorDia = '';
+        if ($hayMultiplesFechas && !$diaElegido && !$flashSession && $prodLocConfigs->isNotEmpty()) {
+            $partesDia = [];
+            foreach ($fechasDisponibles as $f) {
+                $diaNum   = $f['dia'];
+                $prodsDia = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diaNum) {
+                    if (!$prodLocConfigs->has($p->cod)) return false;
+                    $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
+                    if ($diasCfg === null) return true;
+                    if (empty($diasCfg)) return false;
+                    $dNums = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                    return in_array($diaNum, $dNums, true);
+                });
+                if ($prodsDia->isNotEmpty()) {
+                    $partesDia[] = "{$f['texto']}: " . $prodsDia->pluck('des')->implode(', ');
+                }
+            }
+            if (!empty($partesDia)) {
+                $listaPorDia = implode("\n", $partesDia);
+            }
+        }
+
         $puedePedir       = $empresa?->bot_puede_pedir        ?? true;
         $puedeSupgerir    = $empresa?->bot_puede_sugerir       ?? true;
         $puedeMasVendidos = $empresa?->bot_puede_mas_vendidos  ?? false;
@@ -793,12 +816,12 @@ Nombre del cliente: {$nombre}. SIEMPRE usá este nombre para dirigirte al client
       . ($hayMultiplesFechas ? " También hay repartos disponibles para: " . implode(', ', array_filter(array_map(fn($f) => $f['fecha'] !== $fechaElegida ? $f['texto'] : null, $fechasDisponibles))) . ". Si el cliente quiere cambiar de fecha, usá elegir_reparto." : "")
     : ($fechasTexto ? "Repartos disponibles: {$fechasTexto}." : '')) . "
 
-" . ($needsProductList ? ($flashSession ? "Productos del PEDIDO EXPRESS de hoy (ÚNICOS DISPONIBLES)" : "Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : ($hayMultiplesFechas ? " (hay múltiples fechas de reparto — los productos con [solo X] solo están disponibles ese día; NO atribuyas un producto a un día específico sin que el cliente haya elegido fecha con elegir_reparto)" : " (disponibilidad puede variar según el día de reparto elegido)"))) . ":\n{$lista}\n\n" : "Catálogo no incluido en este contexto. Si el cliente consulta por un producto específico, usá ver_producto.\n\n") . ($puedeSupgerir ? "════════════════════════════════
+" . ($needsProductList ? ($flashSession ? "Productos del PEDIDO EXPRESS de hoy (ÚNICOS DISPONIBLES)" : "Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : ($hayMultiplesFechas ? " (múltiples fechas disponibles — usá la lista por día de abajo para responder correctamente)" : " (disponibilidad puede variar según el día de reparto elegido)"))) . ":\n{$lista}" . ($listaPorDia ? "\n\nPRODUCTOS POR DÍA DE REPARTO (usá esto para responder cuando el cliente pregunte por un día específico):\n{$listaPorDia}" : "") . "\n\n" : "Catálogo no incluido en este contexto. Si el cliente consulta por un producto específico, usá ver_producto.\n\n") . ($puedeSupgerir ? "════════════════════════════════
 FLUJO 1 — SUGERIR
 ════════════════════════════════
 Activar cuando: el cliente saluda, no sabe qué quiere, pide recomendación o menciona una ocasión (asado, cumpleaños, etc.).
 Pasos:
-" . (!$flashSession && $hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente quiere saber qué puede pedir, usá elegir_reparto para que elija fecha primero — los productos varían según el día. NO listés productos de un día específico sin que haya elegido." : "") . "
+" . (!$flashSession && $hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.) y pregunta qué puede pedir, respondé SOLO con los productos de ese día según la lista 'PRODUCTOS POR DÍA DE REPARTO'. Si el cliente NO menciona un día y quiere pedir o no sabe qué quiere, usá elegir_reparto para que elija fecha primero." : "") . "
 1. Si menciona una ocasión, calculá cantidades según las porciones estándar y mostrá solo productos de la lista disponible.
 2. Si no menciona ocasión, sugerí sus favoritos que estén en la lista disponible (ignorá los que no estén en la lista)" . ($puedeMasVendidos ? " o los más populares" : "") . ".
 3. Ofrecé achuras cuando sea pertinente (una sola vez, sin insistir).

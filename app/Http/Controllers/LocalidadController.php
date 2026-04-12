@@ -6,7 +6,6 @@ use App\Models\Localidad;
 use App\Models\Pedidosia;
 use App\Models\Producto;
 use App\Models\ProductoLocalidad;
-use App\Services\BotService;
 use App\Services\TenantManager;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -18,13 +17,14 @@ class LocalidadController extends Controller
     {
         $localidades = Localidad::orderBy('nombre')->get();
 
-        // Agrupar recordatorios por localidad (filtro_localidad o flash_localidades)
+        // Solo recordatorios express (con flash_localidades o productos_flash)
         $todosRecs   = \App\Models\Recordatorio::orderBy('hora')->get();
         $recsPorLoc  = [];
         foreach ($localidades as $loc) {
             $recsPorLoc[$loc->id] = $todosRecs->filter(function ($r) use ($loc) {
-                if ($r->filtro_localidad === $loc->nombre) return true;
-                return !empty($r->flash_localidades) && in_array($loc->nombre, $r->flash_localidades);
+                if (empty($r->productos_flash) && empty($r->flash_localidades)) return false;
+                if (!empty($r->flash_localidades) && in_array($loc->nombre, $r->flash_localidades)) return true;
+                return $r->filtro_localidad === $loc->nombre && !empty($r->productos_flash);
             })->values();
         }
 
@@ -40,7 +40,6 @@ class LocalidadController extends Controller
         ]);
         $data['activo']       = $request->boolean('activo', true);
         $data['dias_reparto'] = $this->buildDiasReparto($request);
-        $this->fillRecordatorios($request, $data);
 
         Localidad::create($data);
         return redirect()->route('admin.localidades')->with('ok', 'Localidad creada.');
@@ -56,21 +55,9 @@ class LocalidadController extends Controller
         ]);
         $data['activo']       = $request->boolean('activo', true);
         $data['dias_reparto'] = $this->buildDiasReparto($request);
-        $this->fillRecordatorios($request, $data);
 
         $localidad->update($data);
         return redirect()->route('admin.localidades')->with('ok', 'Localidad actualizada.');
-    }
-
-    private function fillRecordatorios(Request $request, array &$data): void
-    {
-        $data['rec_apertura']          = $request->boolean('rec_apertura');
-        $data['rec_apertura_mensaje']  = $request->input('rec_apertura_mensaje') ?: null;
-        $data['rec_apertura_template'] = $request->input('rec_apertura_template') ?: null;
-        $data['rec_cierre']            = $request->boolean('rec_cierre');
-        $data['rec_cierre_horas']      = $request->filled('rec_cierre_horas') ? (int) $request->input('rec_cierre_horas') : null;
-        $data['rec_cierre_mensaje']    = $request->input('rec_cierre_mensaje') ?: null;
-        $data['rec_cierre_template']   = $request->input('rec_cierre_template') ?: null;
     }
 
     private function buildDiasReparto(Request $request): ?array
@@ -113,53 +100,6 @@ class LocalidadController extends Controller
         $localidad = Localidad::findOrFail($id);
         $localidad->update(['activo' => !$localidad->activo]);
         return response()->json(['activo' => $localidad->activo]);
-    }
-
-    public function probar(Request $request, int $id)
-    {
-        $request->validate([
-            'phone' => 'required|string|max:20',
-            'tipo'  => 'required|in:apertura,cierre',
-            'dia'   => 'required|integer|between:0,6',
-        ]);
-
-        $localidad = Localidad::findOrFail($id);
-        $phone     = preg_replace('/\D/', '', $request->input('phone'));
-        $tipo      = $request->input('tipo');
-        $dia       = (int) $request->input('dia');
-
-        $diasLabel = \App\Models\IaEmpresa::DIAS_LABEL;
-        // Fecha de reparto de prueba: próxima ocurrencia de ese día
-        $hoy = now();
-        $diff = ($dia - (int)$hoy->dayOfWeek + 7) % 7 ?: 7;
-        $fechaReparto = $hoy->copy()->addDays($diff)->startOfDay();
-        $diaTexto     = $fechaReparto->locale('es')->isoFormat('dddd D [de] MMMM');
-
-        $mensaje  = $tipo === 'apertura' ? ($localidad->rec_apertura_mensaje ?? '') : ($localidad->rec_cierre_mensaje ?? '');
-        $template = $tipo === 'apertura' ? ($localidad->rec_apertura_template ?? '') : ($localidad->rec_cierre_template ?? '');
-        $horas    = $localidad->rec_cierre_horas ?? 0;
-
-        $texto   = str_replace(['{nombre}', '{dia_reparto}', '{horas}'], ['Cliente', $diaTexto, $horas], $mensaje);
-        $catalogo = $this->buildCatalogo($localidad, $dia);
-
-        $bot = app(BotService::class);
-        try {
-            if ($template && $catalogo) {
-                $bot->sendRecordatorioTemplate($phone, $template, 'Cliente', $texto);
-                sleep(1);
-                $bot->sendWhatsapp($phone, $catalogo);
-            } elseif ($template) {
-                $bot->sendRecordatorioTemplate($phone, $template, 'Cliente', $texto);
-            } else {
-                $mensajeCompleto = $catalogo ? $texto . "\n\n" . $catalogo : $texto;
-                $bot->sendWhatsapp($phone, $mensajeCompleto);
-            }
-
-            $preview = $texto . ($catalogo ? "\n\n" . $catalogo : '');
-            return response()->json(['ok' => true, 'mensaje' => $preview]);
-        } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
-        }
     }
 
     public function precios(Request $request, int $id)
@@ -357,44 +297,4 @@ class LocalidadController extends Controller
         Cache::forget('bot_mas_vendidos_' . $tenantId);
     }
 
-    private function buildCatalogo(Localidad $loc, int $diaReparto): string
-    {
-        $prodLocConfigs = ProductoLocalidad::where('localidad_id', $loc->id)->get()->keyBy('cod');
-        if ($prodLocConfigs->isEmpty()) return '';
-
-        $todos = Producto::paraBot()->orderBy('tablaplu.desgrupo')->orderBy('tablaplu.des')->get();
-
-        $productos = $todos->filter(function ($p) use ($prodLocConfigs, $diaReparto) {
-            if (!$prodLocConfigs->has($p->cod)) return false;
-            $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
-            if ($diasCfg === null) return true;
-            if (empty($diasCfg)) return false;
-            $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
-            return in_array($diaReparto, $diasNum, true);
-        })->map(function ($p) use ($prodLocConfigs) {
-            $override = $prodLocConfigs->get($p->cod);
-            if ($override && $override->precio !== null) $p->precio = $override->precio;
-            return $p;
-        });
-
-        if ($productos->isEmpty()) return '';
-
-        $formatPrecio = fn($p) => ($p->precio == floor($p->precio))
-            ? '$' . number_format($p->precio, 0, ',', '')
-            : '$' . number_format($p->precio, 2, ',', '');
-
-        $lineas = [];
-        foreach (['Peso', 'Unidad'] as $tipo) {
-            $grupo = $productos->where('tipo', $tipo)->groupBy(fn($p) => $p->desgrupo ?: 'Varios');
-            if ($grupo->isEmpty()) continue;
-            foreach ($grupo as $nombreGrupo => $items) {
-                $lineas[] = "*{$nombreGrupo}*";
-                foreach ($items as $p) {
-                    $lineas[] = "• {$p->des} — {$formatPrecio($p)}" . ($tipo === 'Peso' ? '/kg' : '/u');
-                }
-                $lineas[] = '';
-            }
-        }
-        return trim(implode("\n", $lineas));
-    }
 }

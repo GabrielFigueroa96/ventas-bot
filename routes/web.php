@@ -52,7 +52,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::put   ('/localidades/{localidad}',        [LocalidadController::class, 'update'])->name('localidades.update');
     Route::delete('/localidades/{localidad}',        [LocalidadController::class, 'destroy'])->name('localidades.destroy');
     Route::patch ('/localidades/{localidad}/toggle',         [LocalidadController::class, 'toggle'])->name('localidades.toggle');
-    Route::post  ('/localidades/{localidad}/probar',         [LocalidadController::class, 'probar'])->name('localidades.probar');
     Route::get   ('/localidades/{localidad}/precios',        [LocalidadController::class, 'precios'])->name('localidades.precios');
     Route::patch ('/localidades/{localidad}/precios',        [LocalidadController::class, 'preciosBulkDias'])->name('localidades.precios.bulk');
     Route::patch ('/localidades/{localidad}/precios/{cod}',  [LocalidadController::class, 'precioUpsert'])->name('localidades.precios.upsert');

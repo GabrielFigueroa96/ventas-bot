@@ -47,10 +47,6 @@
                         class="text-xs px-3 py-1 rounded-full font-medium bg-gray-100 text-gray-600 hover:bg-orange-100 hover:text-orange-700 transition">
                         🚀 Express
                     </button>
-                    @if($loc->rec_apertura || $loc->rec_cierre)
-                    <button onclick="abrirProbar({{ $loc->id }}, '{{ addslashes($loc->nombre) }}', {{ json_encode(collect($loc->diasConfig())->map(fn($d) => ['dia' => $d['dia'], 'label' => \App\Models\IaEmpresa::DIAS_LABEL[$d['dia']] ?? $d['dia']])->values()) }})"
-                        class="text-xs text-indigo-600 hover:underline">Probar</button>
-                    @endif
                     <button onclick="this.closest('.bg-white').querySelector('.recs-panel').classList.toggle('hidden')"
                         class="text-xs text-purple-600 hover:underline flex items-center gap-1">
                         📋 Recordatorios
@@ -71,11 +67,11 @@
             {{-- Panel Recordatorios --}}
             <div class="recs-panel hidden border-t px-5 py-3 bg-purple-50/40">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-semibold text-purple-700">Recordatorios vinculados</span>
+                    <span class="text-xs font-semibold text-purple-700">Recordatorios Express</span>
                     <a href="{{ route('admin.recordatorios') }}" class="text-xs text-purple-500 hover:underline">+ Nuevo</a>
                 </div>
                 @if($recs->isEmpty())
-                    <p class="text-xs text-gray-400 italic">No hay recordatorios para esta localidad.</p>
+                    <p class="text-xs text-gray-400 italic">No hay recordatorios express para esta localidad.</p>
                 @else
                 <div class="space-y-2">
                     @foreach($recs as $rec)
@@ -233,94 +229,10 @@
     </div>
 </div>
 
-{{-- Modal probar --}}
-<div id="modal-probar-loc" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 space-y-3">
-        <div>
-            <h3 class="text-sm font-semibold text-gray-800">Probar recordatorio</h3>
-            <p id="modal-loc-nombre" class="text-xs text-gray-400 mt-0.5"></p>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Tipo</label>
-                <select id="probar-loc-tipo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="apertura">Apertura</option>
-                    <option value="cierre">Cierre</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Día de reparto</label>
-                <select id="probar-loc-dia" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select>
-            </div>
-        </div>
-        <div>
-            <label class="block text-xs text-gray-500 mb-1">Teléfono</label>
-            <input type="tel" id="probar-loc-phone" placeholder="5491123456789"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-        </div>
-        <div id="probar-loc-preview" class="hidden bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap border border-gray-200 max-h-40 overflow-y-auto"></div>
-        <div class="flex gap-2 justify-end">
-            <button onclick="cerrarProbarLoc()" class="text-sm text-gray-500 hover:underline px-3 py-1.5">Cancelar</button>
-            <button id="probar-loc-btn" onclick="enviarPruebaLoc()"
-                class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-1.5 rounded-lg">
-                Enviar prueba
-            </button>
-        </div>
-    </div>
-</div>
-
 @endsection
 
 @section('scripts')
 <script>
-let probarLocId = null;
-
-function abrirProbar(id, nombre, dias) {
-    probarLocId = id;
-    document.getElementById('modal-loc-nombre').textContent = nombre;
-    document.getElementById('probar-loc-phone').value = '';
-    document.getElementById('probar-loc-preview').classList.add('hidden');
-    const sel = document.getElementById('probar-loc-dia');
-    sel.innerHTML = dias.map(d => `<option value="${d.dia}">${d.label}</option>`).join('');
-    document.getElementById('modal-probar-loc').classList.remove('hidden');
-    setTimeout(() => document.getElementById('probar-loc-phone').focus(), 50);
-}
-
-function cerrarProbarLoc() {
-    document.getElementById('modal-probar-loc').classList.add('hidden');
-}
-
-function enviarPruebaLoc() {
-    const phone = document.getElementById('probar-loc-phone').value.trim();
-    if (!phone) return;
-    const tipo = document.getElementById('probar-loc-tipo').value;
-    const dia  = document.getElementById('probar-loc-dia').value;
-    const btn  = document.getElementById('probar-loc-btn');
-    btn.disabled = true; btn.textContent = 'Enviando...';
-
-    fetch(`/admin/localidades/${probarLocId}/probar`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
-        },
-        body: JSON.stringify({ phone, tipo, dia }),
-    })
-    .then(r => r.json())
-    .then(data => {
-        const prev = document.getElementById('probar-loc-preview');
-        prev.classList.remove('hidden');
-        if (data.ok) {
-            prev.textContent = data.mensaje;
-            prev.className = prev.className.replace('text-red-600','') + ' text-gray-600';
-        } else {
-            prev.textContent = 'Error: ' + data.error;
-            prev.className = prev.className.replace('text-gray-600','') + ' text-red-600';
-        }
-    })
-    .finally(() => { btn.disabled = false; btn.textContent = 'Enviar prueba'; });
-}
-
 // ── Pedido Express ──────────────────────────────────────────────────────────
 let flashLocId   = null;
 let flashCatalogo = [];
