@@ -16,9 +16,19 @@ class LocalidadController extends Controller
 {
     public function index()
     {
-        return view('admin.localidades', [
-            'localidades' => Localidad::orderBy('nombre')->get(),
-        ]);
+        $localidades = Localidad::orderBy('nombre')->get();
+
+        // Agrupar recordatorios por localidad (filtro_localidad o flash_localidades)
+        $todosRecs   = \App\Models\Recordatorio::orderBy('hora')->get();
+        $recsPorLoc  = [];
+        foreach ($localidades as $loc) {
+            $recsPorLoc[$loc->id] = $todosRecs->filter(function ($r) use ($loc) {
+                if ($r->filtro_localidad === $loc->nombre) return true;
+                return !empty($r->flash_localidades) && in_array($loc->nombre, $r->flash_localidades);
+            })->values();
+        }
+
+        return view('admin.localidades', compact('localidades', 'recsPorLoc'));
     }
 
     public function store(Request $request)

@@ -26,6 +26,7 @@
     {{-- Lista --}}
     <div class="space-y-3">
         @forelse($localidades as $loc)
+        @php $recs = $recsPorLoc[$loc->id] ?? collect(); @endphp
         <div class="bg-white rounded-xl shadow" x-data="{ editando: false }">
             <div class="flex items-center justify-between px-5 py-4 gap-3">
                 <div class="flex-1 min-w-0">
@@ -50,6 +51,11 @@
                     <button onclick="abrirProbar({{ $loc->id }}, '{{ addslashes($loc->nombre) }}', {{ json_encode(collect($loc->diasConfig())->map(fn($d) => ['dia' => $d['dia'], 'label' => \App\Models\IaEmpresa::DIAS_LABEL[$d['dia']] ?? $d['dia']])->values()) }})"
                         class="text-xs text-indigo-600 hover:underline">Probar</button>
                     @endif
+                    <button onclick="this.closest('.bg-white').querySelector('.recs-panel').classList.toggle('hidden')"
+                        class="text-xs text-purple-600 hover:underline flex items-center gap-1">
+                        📋 Recordatorios
+                        @if($recs->count()) <span class="bg-purple-100 text-purple-700 rounded-full px-1.5">{{ $recs->count() }}</span> @endif
+                    </button>
                     <a href="{{ route('admin.localidades.precios', $loc->id) }}"
                         class="text-xs text-green-600 hover:underline">Precios</a>
                     <button onclick="this.closest('.bg-white').querySelector('.edit-form').classList.toggle('hidden')"
@@ -61,6 +67,48 @@
                     </form>
                 </div>
             </div>
+
+            {{-- Panel Recordatorios --}}
+            <div class="recs-panel hidden border-t px-5 py-3 bg-purple-50/40">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold text-purple-700">Recordatorios vinculados</span>
+                    <a href="{{ route('admin.recordatorios') }}" class="text-xs text-purple-500 hover:underline">+ Nuevo</a>
+                </div>
+                @if($recs->isEmpty())
+                    <p class="text-xs text-gray-400 italic">No hay recordatorios para esta localidad.</p>
+                @else
+                <div class="space-y-2">
+                    @foreach($recs as $rec)
+                    <div class="flex items-center gap-2 flex-wrap bg-white rounded-lg px-3 py-2 border border-purple-100">
+                        {{-- Activo --}}
+                        <button onclick="toggleRecActivo({{ $rec->id }}, this)"
+                            data-activo="{{ $rec->activo ? '1' : '0' }}"
+                            class="text-xs px-2 py-0.5 rounded-full font-medium shrink-0 {{ $rec->activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400' }}">
+                            {{ $rec->activo ? 'Activo' : 'Pausado' }}
+                        </button>
+
+                        {{-- Nombre + horario --}}
+                        <span class="text-sm text-gray-700 font-medium flex-1 min-w-0 truncate">{{ $rec->nombre }}</span>
+                        <span class="text-xs text-gray-400 shrink-0">🕐 {{ substr($rec->hora, 0, 5) }} · {{ $rec->diasTexto() }}</span>
+
+                        {{-- Express badge --}}
+                        @if(!empty($rec->productos_flash) || !empty($rec->flash_localidades))
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 shrink-0">🚀 Express</span>
+                        @endif
+
+                        {{-- Acciones --}}
+                        <div class="flex items-center gap-2 shrink-0 ml-auto">
+                            <button onclick="abrirProbarRec({{ $rec->id }}, '{{ addslashes($rec->nombre) }}')"
+                                class="text-xs text-indigo-500 hover:underline">Probar</button>
+                            <a href="{{ route('admin.recordatorios.edit', $rec) }}"
+                                class="text-xs text-blue-500 hover:underline">Editar</a>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+                @endif
+            </div>
+
             <div class="edit-form hidden border-t px-5 py-4">
                 @include('admin.partials.localidad-form', [
                     'action' => route('admin.localidades.update', $loc),
@@ -74,6 +122,32 @@
             No hay localidades. Creá la primera con "+ Nueva".
         </div>
         @endforelse
+    </div>
+</div>
+
+{{-- Modal Probar Recordatorio (desde localidades) --}}
+<div id="modal-probar-rec" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-4">
+        <div>
+            <h3 class="text-sm font-semibold text-gray-800">Probar recordatorio</h3>
+            <p id="modal-rec-nombre" class="text-xs text-gray-400 mt-0.5"></p>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Número de WhatsApp</label>
+            <input type="tel" id="probar-rec-phone" placeholder="5491123456789"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div id="probar-rec-preview" class="hidden bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-600 whitespace-pre-wrap border border-gray-200 max-h-36 overflow-y-auto"></div>
+        <div class="flex gap-2">
+            <button id="probar-rec-btn" onclick="enviarPruebaRec()"
+                class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 rounded-lg">
+                Enviar prueba
+            </button>
+            <button onclick="document.getElementById('modal-probar-rec').classList.add('hidden')"
+                class="px-4 text-sm text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+                Cancelar
+            </button>
+        </div>
     </div>
 </div>
 
@@ -439,6 +513,60 @@ document.addEventListener('DOMContentLoaded', function () {
 // Cerrar modal al click fuera
 document.getElementById('modal-flash').addEventListener('click', function(e) {
     if (e.target === this) cerrarFlash();
+});
+
+// ── Recordatorios desde localidades ─────────────────────────────────────────
+function toggleRecActivo(id, btn) {
+    fetch(`/admin/recordatorios/${id}/toggle`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
+    }).then(r => r.json()).then(data => {
+        btn.dataset.activo = data.activo ? '1' : '0';
+        btn.textContent    = data.activo ? 'Activo' : 'Pausado';
+        btn.className = btn.className
+            .replace(/bg-\w+-100 text-\w+-\d+/, '')
+            .trim() + ' ' + (data.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400');
+    });
+}
+
+
+let probarRecLocId = null;
+function abrirProbarRec(id, nombre) {
+    probarRecLocId = id;
+    document.getElementById('modal-rec-nombre').textContent = nombre;
+    document.getElementById('probar-rec-phone').value = '';
+    document.getElementById('probar-rec-preview').classList.add('hidden');
+    document.getElementById('modal-probar-rec').classList.remove('hidden');
+    setTimeout(() => document.getElementById('probar-rec-phone').focus(), 50);
+}
+
+async function enviarPruebaRec() {
+    const phone = document.getElementById('probar-rec-phone').value.trim().replace(/\D/g, '');
+    if (!phone) { showToast('Ingresá un número.', 'warning'); return; }
+    const btn = document.getElementById('probar-rec-btn');
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    try {
+        const res  = await fetch(`/admin/recordatorios/${probarRecLocId}/probar`, {
+            method : 'POST',
+            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'Content-Type': 'application/json', Accept: 'application/json' },
+            body   : JSON.stringify({ phone }),
+        });
+        const data = await res.json();
+        const prev = document.getElementById('probar-rec-preview');
+        prev.classList.remove('hidden');
+        if (data.ok) {
+            prev.textContent = data.mensaje;
+            showToast('Enviado', 'success');
+        } else {
+            prev.textContent = data.error ?? 'Error';
+            showToast(data.error ?? 'Error', 'error');
+        }
+    } catch { showToast('Error de red', 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Enviar prueba'; }
+}
+
+document.getElementById('modal-probar-rec')?.addEventListener('click', function(e) {
+    if (e.target === this) this.classList.add('hidden');
 });
 
 function toggleLoc(id, btn) {

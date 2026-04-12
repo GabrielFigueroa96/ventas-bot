@@ -26,27 +26,15 @@
             @csrf
             @if($editando) @method('PUT') @endif
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-1">Nombre interno</label>
-                    <input type="text" name="nombre" value="{{ old('nombre', $editando?->nombre) }}" required
-                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-1">Tipo</label>
-                    <select name="tipo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none">
-                        <option value="libre"    {{ old('tipo', $editando?->tipo) === 'libre'    ? 'selected' : '' }}>Libre</option>
-                        <option value="catalogo" {{ old('tipo', $editando?->tipo) === 'catalogo' ? 'selected' : '' }}>Lista de precios</option>
-                    </select>
-                </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Nombre interno</label>
+                <input type="text" name="nombre" value="{{ old('nombre', $editando?->nombre) }}" required
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none">
             </div>
 
             <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Mensaje</label>
-                <p class="text-xs text-gray-400 mb-1">
-                    Variables: <code>{nombre}</code>
-                    — tipo lista de precios: <code>{catalogo}</code>
-                </p>
+                <p class="text-xs text-gray-400 mb-1">Variables: <code>{nombre}</code></p>
                 <textarea name="mensaje" rows="4" required
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-300 focus:outline-none"
                     placeholder="Ej: ¡Hola {nombre}! 🥩 Esta semana tenemos pollo con 10% de descuento. ¿Hacemos un pedido?">{{ old('mensaje', $editando?->mensaje) }}</textarea>
@@ -236,10 +224,6 @@
             <div class="flex-1 min-w-0 space-y-1">
                 <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-semibold text-gray-800">{{ $rec->nombre }}</span>
-                    <span class="text-xs px-2 py-0.5 rounded-full
-                        {{ $rec->tipo === 'catalogo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' }}">
-                        {{ ['libre'=>'Libre','catalogo'=>'Lista de precios'][$rec->tipo] ?? $rec->tipo }}
-                    </span>
                     <span class="text-xs text-gray-400">🕐 {{ substr($rec->hora,0,5) }} · {{ $rec->diasTexto() }}</span>
                     @if(!empty($rec->flash_localidades))
                         <span class="text-xs text-orange-600">🚀 {{ implode(', ', $rec->flash_localidades) }}</span>

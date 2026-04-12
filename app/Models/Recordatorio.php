@@ -11,7 +11,7 @@ class Recordatorio extends Model
     protected $fillable = [
         'nombre', 'mensaje', 'imagen_url', 'template_nombre', 'productos_flash',
         'flash_localidades', 'flash_horas', 'seguimiento_horas_antes', 'seguimiento_mensaje',
-        'tipo', 'filtro_localidad', 'filtro_provincia',
+        'filtro_localidad', 'filtro_provincia',
         'dias', 'hora', 'activo', 'ultimo_envio_at',
     ];
 
