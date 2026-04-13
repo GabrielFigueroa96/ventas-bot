@@ -351,13 +351,6 @@ class BotService
             $cliente->update(['localidad_id' => $localidadObj->id]);
         }
 
-        // ── MODO PEDIDO EXPRESS ──
-        $flashSession = null;
-        if ($localidadObj) {
-            $sessions     = $this->getFlashSessions($tenantId, $localidadObj->id);
-            $flashSession = $this->mergeFlashSessions($sessions);
-        }
-
         $diasConfig      = $localidadObj ? $localidadObj->diasConfig() : [];
         $fechasCerradas  = $empresa?->bot_fechas_cerrado ?? [];
         $globalHoraCorte = $empresa?->bot_hora_corte ?? null;
@@ -386,24 +379,9 @@ class BotService
             ? ProductoLocalidad::where('localidad_id', $cliente->localidad_id)->get()->keyBy('cod')
             : collect();
 
-        if ($flashSession && !empty($flashSession['productos'])) {
-            // MODO EXPRESS MANUAL: lista curada por el admin con precios de override
-            $flashCods = array_column($flashSession['productos'], 'cod');
-            $flashMap  = collect($flashSession['productos'])->keyBy('cod');
-            $productos = $todosProductos
-                ->filter(fn($p) => in_array($p->cod, $flashCods))
-                ->map(function ($p) use ($flashMap) {
-                    $fp = $flashMap->get($p->cod);
-                    if ($fp) {
-                        $p         = clone $p;
-                        $p->precio = (float) $fp['precio'];
-                    }
-                    return $p;
-                });
-        } elseif ($cliente->localidad_id) {
+        if ($cliente->localidad_id) {
             if ($prodLocConfigs->isNotEmpty()) {
-                // En modo auto-flash sin fecha elegida, usar el día de hoy para filtrar por día
-                $diaParaFiltrar = $diaElegido ?? ($flashSession ? (int) now()->format('w') : null);
+                $diaParaFiltrar = $diaElegido;
 
                 $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diaParaFiltrar) {
                     if (!$prodLocConfigs->has($p->cod)) return false;
@@ -713,7 +691,7 @@ class BotService
 
         // Catálogo agrupado por día cuando hay múltiples fechas y no se eligió una todavía
         $listaPorDia = '';
-        if ($hayMultiplesFechas && !$diaElegido && !$flashSession && $prodLocConfigs->isNotEmpty()) {
+        if ($hayMultiplesFechas && !$diaElegido && $prodLocConfigs->isNotEmpty()) {
             $partesDia = [];
             foreach ($fechasDisponibles as $f) {
                 $diaNum   = $f['dia'];
@@ -752,22 +730,15 @@ class BotService
             $configNegocio .= "\nFechas sin entregas: {$cerradasFmt}.";
         }
 
-        if (!$flashSession) {
-            // Avisos de ventana cerrada — se omiten en modo express (el flash habilita pedidos fuera de ventana)
-            if ($corteAviso) $configNegocio .= "\n\n{$corteAviso}";
-            if (!empty($fechasCortadasAviso)) {
-                $configNegocio .= "\n⚠️ PEDIDOS CERRADOS (ventana ya pasó): " . implode('; ', $fechasCortadasAviso) . ". Si el cliente pregunta por ese día, explicale que el pedido para ese reparto ya está cerrado, pero puede hacer su pedido para los repartos disponibles.";
-            }
-            if ($puedePedir && empty($fechasDisponibles) && !empty($diasReparto)) {
-                $configNegocio .= "\n\nIMPORTANTE: En este momento NO hay repartos disponibles para tomar pedidos. No podés reservar ni armar pedidos hasta que abra la próxima ventana de pedidos. Si el cliente pregunta cuándo puede pedir, indicale la información del aviso de cierre/apertura de arriba. NO ofrezcas avisar ni notificar al cliente cuando se abra la próxima ventana — esa funcionalidad no existe.";
-            }
+        if ($corteAviso) $configNegocio .= "\n\n{$corteAviso}";
+        if (!empty($fechasCortadasAviso)) {
+            $configNegocio .= "\n⚠️ PEDIDOS CERRADOS (ventana ya pasó): " . implode('; ', $fechasCortadasAviso) . ". Si el cliente pregunta por ese día, explicale que el pedido para ese reparto ya está cerrado, pero puede hacer su pedido para los repartos disponibles.";
+        }
+        if ($puedePedir && empty($fechasDisponibles) && !empty($diasReparto)) {
+            $configNegocio .= "\n\nIMPORTANTE: En este momento NO hay repartos disponibles para tomar pedidos. No podés reservar ni armar pedidos hasta que abra la próxima ventana de pedidos. Si el cliente pregunta cuándo puede pedir, indicale la información del aviso de cierre/apertura de arriba. NO ofrezcas avisar ni notificar al cliente cuando se abra la próxima ventana — esa funcionalidad no existe.";
         }
         if (!$puedePedir)    $configNegocio .= "\n\nIMPORTANTE: No podés tomar pedidos. Solo informás precios y describís productos. Si el cliente quiere pedir, indicale que contacte al negocio directamente.";
         if (!$puedeSupgerir) $configNegocio .= "\nNo sugieras productos de forma proactiva. Solo respondé lo que el cliente consulte.";
-        if ($flashSession) {
-            $nombreFlash = $flashSession['nombre'] ?? 'Pedido Express';
-            $configNegocio .= "\n\n🚀 MODO PEDIDO EXPRESS ({$nombreFlash}): Hay una venta especial activa — podés tomar pedidos AHORA aunque la ventana normal esté cerrada. Los productos disponibles son los que aparecen en la lista de abajo. NO llamés elegir_reparto — en este modo no hace falta elegir fecha. En cuanto el cliente diga qué quiere y la cantidad, llamá agregar_al_carrito directamente.";
-        }
 
         if ($instrucciones)      $configNegocio .= "\n\n⚠️ REGLAS OBLIGATORIAS (máxima prioridad — siempre aplicar, sin excepciones):\n{$instrucciones}";
         if ($infoNegocio)        $configNegocio .= "\n\nInformación del negocio:\n{$infoNegocio}";
@@ -816,12 +787,12 @@ Nombre del cliente: {$nombre}. SIEMPRE usá este nombre para dirigirte al client
       . ($hayMultiplesFechas ? " También hay repartos disponibles para: " . implode(', ', array_filter(array_map(fn($f) => $f['fecha'] !== $fechaElegida ? $f['texto'] : null, $fechasDisponibles))) . ". Si el cliente quiere cambiar de fecha, usá elegir_reparto." : "")
     : ($fechasTexto ? "Repartos disponibles: {$fechasTexto}." : '')) . "
 
-" . ($needsProductList ? ($flashSession ? "Productos del PEDIDO EXPRESS de hoy (ÚNICOS DISPONIBLES)" : "Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : ($hayMultiplesFechas ? " (múltiples fechas disponibles — usá la lista por día de abajo para responder correctamente)" : " (disponibilidad puede variar según el día de reparto elegido)"))) . ":\n{$lista}" . ($listaPorDia ? "\n\nPRODUCTOS POR DÍA DE REPARTO (usá esto para responder cuando el cliente pregunte por un día específico):\n{$listaPorDia}" : "") . "\n\n" : "Catálogo no incluido en este contexto. Si el cliente consulta por un producto específico, usá ver_producto.\n\n") . ($puedeSupgerir ? "════════════════════════════════
+" . ($needsProductList ? "Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : ($hayMultiplesFechas ? " (múltiples fechas disponibles — usá la lista por día de abajo para responder correctamente)" : " (disponibilidad puede variar según el día de reparto elegido)")) . ":\n{$lista}" . ($listaPorDia ? "\n\nPRODUCTOS POR DÍA DE REPARTO (usá esto para responder cuando el cliente pregunte por un día específico):\n{$listaPorDia}" : "") . "\n\n" : "Catálogo no incluido en este contexto. Si el cliente consulta por un producto específico, usá ver_producto.\n\n") . ($puedeSupgerir ? "════════════════════════════════
 FLUJO 1 — SUGERIR
 ════════════════════════════════
 Activar cuando: el cliente saluda, no sabe qué quiere, pide recomendación o menciona una ocasión (asado, cumpleaños, etc.).
 Pasos:
-" . (!$flashSession && $hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.) y pregunta qué puede pedir, respondé SOLO con los productos de ese día según la lista 'PRODUCTOS POR DÍA DE REPARTO'. Si el cliente NO menciona un día y quiere pedir o no sabe qué quiere, usá elegir_reparto para que elija fecha primero." : "") . "
+" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.) y pregunta qué puede pedir, respondé SOLO con los productos de ese día según la lista 'PRODUCTOS POR DÍA DE REPARTO'. Si el cliente NO menciona un día y quiere pedir o no sabe qué quiere, usá elegir_reparto para que elija fecha primero." : "") . "
 1. Si menciona una ocasión, calculá cantidades según las porciones estándar y mostrá solo productos de la lista disponible.
 2. Si no menciona ocasión, sugerí sus favoritos que estén en la lista disponible (ignorá los que no estén en la lista)" . ($puedeMasVendidos ? " o los más populares" : "") . ".
 3. Ofrecé achuras cuando sea pertinente (una sola vez, sin insistir).
@@ -844,7 +815,7 @@ FLUJO 2 — TOMAR PEDIDO
 ════════════════════════════════
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
-" . ($flashSession ? "" : ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.), llamá elegir_reparto con esa fecha ANTES de agregar al carrito — aunque ya sepas el producto y la cantidad. Si no menciona día, llamá elegir_reparto para que elija." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : ""))) . "
+" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.), llamá elegir_reparto con esa fecha ANTES de agregar al carrito — aunque ya sepas el producto y la cantidad. Si no menciona día, llamá elegir_reparto para que elija." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : "")) . "
 1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada. Si el nombre del producto es reconocible (aunque no sea idéntico al de la lista), usá el más cercano sin preguntar. Para productos que se venden por peso, interpretá el número como kilos (ej: \'3 bondiolas\' = 3 kg) salvo que el cliente diga explícitamente \'unidades\' o \'u\'.
 1b. Si agregar_al_carrito devuelve un error con ACCIÓN REQUERIDA, seguí exactamente la instrucción del error: preguntale al cliente en un mensaje corto si quiere cambiar al día disponible. Si confirma, llamá elegir_reparto con ese día y luego agregar_al_carrito.
 2. Después de agregar, llamá DIRECTAMENTE crear_pedido. Esto le muestra al cliente el carrito con los botones de confirmar/cancelar. Si quiere agregar más, va a escribirte y volvés al paso 1.
@@ -1299,13 +1270,6 @@ Herramientas disponibles:
         $productos   = Producto::paraBot()->get();
         $localPrices = $this->getLocalPrices($client);
 
-        // Sesión flash express
-        $flashSession = null;
-        if ($client->localidad_id) {
-            $tenantId     = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
-            $sessions     = $this->getFlashSessions($tenantId, $client->localidad_id);
-            $flashSession = $this->mergeFlashSessions($sessions);
-        }
         $normalize  = fn(string $s) => trim(strtolower(\Illuminate\Support\Str::ascii($s)));
         $errores    = [];
 
@@ -1361,20 +1325,8 @@ Herramientas disponibles:
                 'precio'=> $match->precio,
             ]);
 
-            // Verificar modo express (solo restringe productos si hay lista manual)
-            $flashItem = null;
-            if ($flashSession !== null && !empty($flashSession['productos'])) {
-                $flashColl = collect($flashSession['productos']);
-                $flashItem = $flashColl->first(fn($fp) => $fp['cod'] === $match->cod);
-                if (!$flashItem) {
-                    $flashNombres = $flashColl->pluck('des')->implode(', ');
-                    $errores[] = "MODO EXPRESS: '{$match->des}' no está en el pedido express de hoy. Solo podés pedir: {$flashNombres}.";
-                    continue;
-                }
-            }
-
-            // Verificar disponibilidad para la localidad y día de reparto elegido (solo fuera de modo express)
-            if ($flashItem === null && $cantidad > 0 && $client->localidad_id && $localPrices->isNotEmpty()) {
+            // Verificar disponibilidad para la localidad y día de reparto elegido
+            if ($cantidad > 0 && $client->localidad_id && $localPrices->isNotEmpty()) {
                 // Producto no configurado para esta localidad → no disponible
                 if (!$localPrices->has($match->cod)) {
                     $errores[] = "'{$match->des}' no está disponible para tu localidad. Solo podés pedir los productos del listado. Informale al cliente.";
@@ -1427,9 +1379,7 @@ Herramientas disponibles:
             // notas_ia con "precio fijo" → se cobra por unidad aunque tipo sea Peso
             $precioFijo = !empty($match->notas_ia) && stripos($match->notas_ia, 'precio fijo') !== false;
             $esPeso     = $match->tipo !== 'Unidad' && !$precioFijo;
-            $precio     = $flashItem !== null
-                ? (float) $flashItem['precio']
-                : $this->precioFinal((float) $match->precio, $match->cod, $localPrices);
+            $precio     = $this->precioFinal((float) $match->precio, $match->cod, $localPrices);
             if ($precio === null) {
                 $errores[] = "'{$match->des}' no tiene precio configurado para tu zona. Avisale al cliente que ese producto no está disponible para su localidad.";
                 continue;
@@ -1814,41 +1764,6 @@ Herramientas disponibles:
         }
 
         return "Reparto del {$f['texto']} seleccionado.{$aviso}{$catalogo}\nAhorá podés agregar productos al carrito.";
-    }
-
-    private function getFlashSessions(int $tenantId, int $localidadId): array
-    {
-        $all = Cache::get("flash_orders_{$tenantId}_{$localidadId}", []);
-        return array_values(array_filter(
-            is_array($all) ? $all : [],
-            fn($s) => isset($s['expira_en']) && \Carbon\Carbon::parse($s['expira_en'])->isFuture()
-        ));
-    }
-
-    /**
-     * Combina múltiples sesiones flash en una sola vista para el bot.
-     * - Si alguna es auto (productos=null) → modo auto general
-     * - Si todas son manuales → unión de productos (última sesión gana en duplicados)
-     */
-    private function mergeFlashSessions(array $sessions): ?array
-    {
-        if (empty($sessions)) return null;
-
-        $nombres = implode(' + ', array_filter(array_column($sessions, 'nombre')));
-        $anyAuto = collect($sessions)->contains(fn($s) => empty($s['productos']));
-
-        if ($anyAuto) {
-            return ['productos' => null, 'nombre' => $nombres];
-        }
-
-        $merged = [];
-        foreach ($sessions as $s) {
-            foreach (($s['productos'] ?? []) as $p) {
-                $merged[$p['cod']] = $p;
-            }
-        }
-
-        return ['productos' => array_values($merged), 'nombre' => $nombres];
     }
 
     private function getLocalPrices($client): \Illuminate\Support\Collection

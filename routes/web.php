@@ -52,18 +52,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::put   ('/localidades/{localidad}',        [LocalidadController::class, 'update'])->name('localidades.update');
     Route::delete('/localidades/{localidad}',        [LocalidadController::class, 'destroy'])->name('localidades.destroy');
     Route::patch ('/localidades/{localidad}/toggle',         [LocalidadController::class, 'toggle'])->name('localidades.toggle');
+    Route::post  ('/localidades/{localidad}/probar',         [LocalidadController::class, 'probar'])->name('localidades.probar');
     Route::get   ('/localidades/{localidad}/precios',        [LocalidadController::class, 'precios'])->name('localidades.precios');
     Route::patch ('/localidades/{localidad}/precios',        [LocalidadController::class, 'preciosBulkDias'])->name('localidades.precios.bulk');
     Route::patch ('/localidades/{localidad}/precios/{cod}',  [LocalidadController::class, 'precioUpsert'])->name('localidades.precios.upsert');
     Route::delete('/localidades/{localidad}/precios/{cod}',  [LocalidadController::class, 'precioRemove'])->name('localidades.precios.remove');
-    Route::get   ('/localidades/{localidad}/flash/productos',[LocalidadController::class, 'flashProductos'])->name('localidades.flash.productos');
-    Route::get   ('/localidades/{localidad}/flash/estado',   [LocalidadController::class, 'flashEstado'])->name('localidades.flash.estado');
-    Route::post  ('/localidades/{localidad}/flash',          [LocalidadController::class, 'flashActivar'])->name('localidades.flash.activar');
-    Route::delete('/localidades/{localidad}/flash',          [LocalidadController::class, 'flashDesactivar'])->name('localidades.flash.desactivar');
 
     // Recordatorios
     Route::get   ('/recordatorios',                       [RecordatorioController::class, 'index'])->name('recordatorios');
-    Route::get   ('/recordatorios/productos-localidad',   [RecordatorioController::class, 'productosLocalidad'])->name('recordatorios.productos_localidad');
     Route::post  ('/recordatorios',                       [RecordatorioController::class, 'store'])->name('recordatorios.store');
     Route::get   ('/recordatorios/{rec}/edit',[RecordatorioController::class, 'edit'])->name('recordatorios.edit');
     Route::put   ('/recordatorios/{rec}',    [RecordatorioController::class, 'update'])->name('recordatorios.update');
