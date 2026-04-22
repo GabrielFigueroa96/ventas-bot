@@ -914,7 +914,7 @@ Nombre del cliente: {$nombre}. SIEMPRE usá este nombre para dirigirte al client
 
 " . ($needsProductList ? (
     (!$fechaYaElegida && $hayMultiplesFechas)
-        ? "⚠️ El cliente NO eligió fecha de reparto todavía. ANTES de hablar de productos o tomar cualquier pedido, llamá elegir_reparto para que elija el día.\n"
+        ? "⚠️ FECHA NO CONFIRMADA EN EL SISTEMA: El cliente NO eligió fecha de reparto todavía. Aunque en el historial se haya mencionado un día, la fecha NO está registrada hasta que se llame elegir_reparto. NUNCA respondas sobre disponibilidad, productos o precios sin haber llamado elegir_reparto primero. Si en el historial hay un día mencionado (hoy, mañana, miércoles, etc.), pasalo en fecha_sugerida para confirmarlo sin mostrar la lista.\n"
           . ($listaPorDia ? "Referencia por fecha (para ayudar al cliente a elegir, no para armar pedido):\n{$listaPorDia}\n\n" : "\n")
         : "Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : "") . ":\n{$lista}\n\n"
 ) : "Catálogo no incluido en este contexto. Si el cliente consulta por un producto específico, usá ver_producto.\n\n") . ($puedeSupgerir ? "════════════════════════════════
@@ -1112,7 +1112,7 @@ IMPORTANTE — herramientas en paralelo: Podés llamar MÚLTIPLES herramientas e
                 'type'     => 'function',
                 'function' => [
                     'name'        => 'elegir_reparto',
-                    'description' => 'Selecciona la fecha de reparto. Si el cliente mencionó un día ("para el viernes", "el miércoles"), pasalo en fecha_sugerida y el sistema lo resuelve automáticamente sin mostrar botones. Si no mencionó día, omitir fecha_sugerida y se muestran los botones para que elija.',
+                    'description' => 'Confirma la fecha de reparto en el sistema. SIEMPRE llamar antes de agregar productos cuando hay múltiples fechas. Usá fecha_sugerida si en el historial o en el mensaje actual hay algún día mencionado (hoy, mañana, miércoles, viernes, etc.) — el sistema lo resuelve automáticamente sin mostrar la lista. Si no hay ningún día mencionado, omitir fecha_sugerida.',
                     'parameters'  => [
                         'type'       => 'object',
                         'properties' => [
