@@ -1783,10 +1783,11 @@ Herramientas disponibles:
      */
     private function precioFinal(float $precioBase, $cod, \Illuminate\Support\Collection $localPrices): ?float
     {
-        if ($localPrices->has($cod) && $localPrices->get($cod)->precio !== null) {
-            return (float) $localPrices->get($cod)->precio;
+        if (!$localPrices->has($cod)) {
+            return null; // producto no configurado para esta localidad
         }
-        return null; // sin precio configurado para esta localidad
+        $override = $localPrices->get($cod)->precio;
+        return $override !== null ? (float) $override : $precioBase;
     }
 
     private function formatCarrito(array $carrito): string

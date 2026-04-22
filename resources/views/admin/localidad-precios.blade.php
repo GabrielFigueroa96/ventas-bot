@@ -288,14 +288,29 @@ document.addEventListener('change', async e => {
     const cb = e.target.closest('.dia-check');
     if (!cb || cb.disabled) return;
     const cod       = cb.dataset.cod;
-    const container = document.querySelector(`.dias-container[data-cod="${cod}"]`);
+    // Usar el contenedor padre directo para leer el estado correcto (evita
+    // leer el contenedor del layout opuesto — desktop vs mobile).
+    const container = cb.closest('.dias-container');
     if (!container) return;
     const checked = [...container.querySelectorAll('.dia-check:checked')].map(c => ({ dia: parseInt(c.value) }));
-    await fetch(baseUrl + cod, {
+
+    // Sincronizar el contenedor del layout opuesto
+    document.querySelectorAll(`.dias-container[data-cod="${cod}"]`).forEach(cont => {
+        if (cont === container) return;
+        cont.querySelectorAll('.dia-check').forEach(sibling => {
+            const mirror = container.querySelector(`.dia-check[value="${sibling.value}"]`);
+            if (mirror) sibling.checked = mirror.checked;
+        });
+    });
+
+    const res = await fetch(baseUrl + cod, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
         body: JSON.stringify({ dias_reparto: checked.length > 0 ? checked : null }),
     });
+    if (!res.ok) {
+        console.error('Error al guardar días para cod', cod, await res.text());
+    }
 });
 </script>
 @endsection
