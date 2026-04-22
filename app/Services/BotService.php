@@ -115,9 +115,11 @@ class BotService
                 if (preg_match('/^(no|cancelar?|cancela)$/i', $input)) {
                     return $this->handleConfirmacionFinal($client, 'confirmar_no');
                 }
-                $msg = "Respondé *sí* para confirmar el pedido o *no* para cancelar.";
-                $this->sendReply($client, $msg);
-                return $msg;
+                // Cualquier otra cosa (consulta, agregar producto, etc.) → salir del flujo y pasarle el mensaje a GPT
+                Cache::forget('pedido_conf_' . $client->id);
+                $client->update(['estado' => 'activo']);
+                $client->refresh();
+                // fall through al GPT normal
             }
 
             // Otro sub-estado confirmando no previsto: resetear
