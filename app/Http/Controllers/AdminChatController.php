@@ -320,6 +320,35 @@ class AdminChatController extends Controller
         ]);
     }
 
+    public function testBotEstado(Request $request)
+    {
+        $cliente = $this->getTestCliente($request->input('localidad_id'));
+        $carrito = \App\Models\Carrito::where('cliente_id', $cliente->id)->latest()->first();
+
+        $items = [];
+        $total = 0;
+        if ($carrito && !empty($carrito->items)) {
+            foreach ($carrito->items as $item) {
+                $cant = ($item['tipo'] !== 'Unidad' && ($item['kilos'] ?? 0) > 0)
+                    ? number_format($item['kilos'], 3, ',', '.') . ' kg'
+                    : ($item['cant'] ?? 0) . ' u';
+                $items[] = ['des' => $item['des'], 'cant' => $cant, 'neto' => $item['neto']];
+                $total  += $item['neto'];
+            }
+        }
+
+        $fechaElegida = Cache::get('fecha_reparto_elegida_' . $cliente->id);
+
+        return response()->json([
+            'estado'       => $cliente->fresh()->estado ?? 'activo',
+            'fecha_elegida'=> $fechaElegida
+                ? \Carbon\Carbon::parse($fechaElegida)->locale('es')->isoFormat('dddd D [de] MMMM')
+                : null,
+            'items'        => $items,
+            'total'        => $total,
+        ]);
+    }
+
     public function testBotReset(Request $request)
     {
         $localidadId = $request->input('localidad_id');
