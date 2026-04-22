@@ -126,8 +126,14 @@ class BotService
             $client->refresh();
         }
 
-        // Si estaba eligiendo reparto pero escribió texto, volver a normal
+        // Si estaba eligiendo reparto: intentar parsear el texto como selección de fecha
         if ($client->estado === 'eligiendo_reparto') {
+            $resp = $this->manejarRepartoTexto($client, trim($message));
+            if ($resp !== null) {
+                $this->sendReply($client, $resp);
+                return $resp;
+            }
+            // No se pudo parsear: resetear y dejar pasar a GPT
             $client->update(['estado' => null]);
             $client->refresh();
         }
@@ -1784,21 +1790,20 @@ IMPORTANTE — herramientas en paralelo: Podés llamar MÚLTIPLES herramientas e
             return $this->confirmarFechaReparto($client, $fechasDisponibles[0]);
         }
 
-        // Múltiples fechas: enviar botones (máximo 3 por limitación de WhatsApp)
-        $botones = array_map(fn($f) => [
-            'id'    => 'reparto_' . $f['fecha'],
-            'title' => ucfirst($f['texto']),
-        ], array_slice($fechasDisponibles, 0, 3));
+        // Múltiples fechas: mostrar lista numerada por texto
+        $opciones = array_slice($fechasDisponibles, 0, 5);
+        Cache::put('reparto_opciones_' . $client->id, $opciones, now()->addMinutes(30));
+
+        $lista = implode("\n", array_map(
+            fn($f, $i) => ($i + 1) . ". " . ucfirst($f['texto']),
+            $opciones,
+            array_keys($opciones)
+        ));
 
         $client->update(['estado' => 'eligiendo_reparto']);
-        $this->sendInteractiveButtons(
-            $client->phone,
-            '¿Para qué fecha querés hacer el pedido?',
-            'Elegí el reparto:',
-            $botones
-        );
+        $this->sendReply($client, "¿Para qué fecha querés hacer el pedido?\n{$lista}");
 
-        return 'Botones enviados';
+        return 'Opciones enviadas';
     }
 
     private function confirmarFechaReparto($client, array $f): string
@@ -2427,6 +2432,54 @@ IMPORTANTE — herramientas en paralelo: Podés llamar MÚLTIPLES herramientas e
         $msg = '👌 Pedido cancelado. ¿En qué más puedo ayudarte?';
         $this->sendReply($client, $msg);
         return $msg;
+    }
+
+    private function manejarRepartoTexto($client, string $input): ?string
+    {
+        $opciones = Cache::get('reparto_opciones_' . $client->id, []);
+        if (empty($opciones)) return null;
+
+        $normalInput = mb_strtolower(trim($input));
+        $match       = null;
+
+        // Match por número (ej: "1", "2")
+        if (is_numeric($input) && (int) $input >= 1 && (int) $input <= count($opciones)) {
+            $match = array_values($opciones)[(int) $input - 1];
+        }
+
+        // Match por nombre de día o texto parcial (ej: "miércoles", "viernes 25")
+        if (!$match) {
+            $diasNombres = ['lunes'=>1,'martes'=>2,'miércoles'=>3,'miercoles'=>3,'jueves'=>4,'viernes'=>5,'sábado'=>6,'sabado'=>6,'domingo'=>0];
+            foreach ($opciones as $f) {
+                $textoNorm = mb_strtolower($f['texto']);
+                if (str_contains($textoNorm, $normalInput) || str_contains($normalInput, $textoNorm)) {
+                    $match = $f;
+                    break;
+                }
+                foreach ($diasNombres as $nombre => $num) {
+                    if (str_contains($normalInput, $nombre) && (int)\Carbon\Carbon::parse($f['fecha'])->format('w') === $num) {
+                        $match = $f;
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        if ($match) {
+            $client->update(['estado' => null]);
+            Cache::forget('reparto_opciones_' . $client->id);
+            $aviso = $this->confirmarFechaReparto($client, $match);
+            // Procesar con IA para que muestre el catálogo del día
+            return $this->process($client, "El cliente eligió el reparto del " . ucfirst($match['texto']) . ". {$aviso} Mostrá los productos disponibles y preguntá qué quiere pedir.");
+        }
+
+        // No coincidió: repetir las opciones
+        $lista = implode("\n", array_map(
+            fn($f, $i) => ($i + 1) . ". " . ucfirst($f['texto']),
+            $opciones,
+            array_keys($opciones)
+        ));
+        return "No entendí. Elegí una opción:\n{$lista}";
     }
 
     private function manejarPagoTexto($client, string $input): string
