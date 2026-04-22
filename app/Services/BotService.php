@@ -97,9 +97,30 @@ class BotService
             return '';
         }
 
-        // Cliente en flujo de confirmación interactiva (esperando botones)
-        // Si escribe texto, cancelamos silenciosamente y procesamos el mensaje con IA normalmente
+        // Flujo de confirmación por texto (reemplaza los botones interactivos)
         if (str_starts_with($client->estado ?? '', 'confirmando_')) {
+            $estado = $client->estado;
+            $input  = trim($message);
+
+            if ($estado === 'confirmando_pago') {
+                $resp = $this->manejarPagoTexto($client, $input);
+                $this->sendReply($client, $resp);
+                return $resp;
+            }
+
+            if ($estado === 'confirmando_final') {
+                if (preg_match('/^(s[ií]|si|yes|ok|dale|confirmá?|confirmar|listo)$/i', $input)) {
+                    return $this->handleConfirmacionFinal($client, 'confirmar_si');
+                }
+                if (preg_match('/^(no|cancelar?|cancela)$/i', $input)) {
+                    return $this->handleConfirmacionFinal($client, 'confirmar_no');
+                }
+                $msg = "Respondé *sí* para confirmar el pedido o *no* para cancelar.";
+                $this->sendReply($client, $msg);
+                return $msg;
+            }
+
+            // Otro sub-estado confirmando no previsto: resetear
             Cache::forget('pedido_conf_' . $client->id);
             $client->update(['estado' => 'activo']);
             $client->refresh();
@@ -2316,33 +2337,27 @@ IMPORTANTE — herramientas en paralelo: Podés llamar MÚLTIPLES herramientas e
         $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
         $allMedios         = IaEmpresa::MEDIOS_PAGO;
 
-        $rows = [];
-        foreach ($mediosHabilitados as $key) {
-            if (isset($allMedios[$key])) {
-                $rows[] = ['id' => 'pago_' . $key, 'title' => $allMedios[$key]];
-            }
-        }
-
-        // Solo un medio de pago: lo seleccionamos automáticamente, saltamos la lista
-        if (count($rows) === 1) {
-            $medioPago = str_replace('pago_', '', $rows[0]['id']);
-            $cacheKey  = 'pedido_conf_' . $client->id;
-            $data      = Cache::get($cacheKey, []);
-            $data['medio_pago'] = $medioPago;
+        // Solo un medio de pago: seleccionarlo automáticamente y pasar al resumen final
+        if (count($mediosHabilitados) === 1) {
+            $cacheKey = 'pedido_conf_' . $client->id;
+            $data     = Cache::get($cacheKey, []);
+            $data['medio_pago'] = $mediosHabilitados[0];
             Cache::put($cacheKey, $data, now()->addMinutes(30));
             $client->update(['estado' => 'confirmando_final']);
             $this->mostrarResumenFinal($client, $data, $itemsText, $total);
             return;
         }
 
-        $body = "{$itemsText}\n\n*Total: $" . $this->fmt($total) . "*\n{$entregaLabel}";
+        $lista = implode("\n", array_map(
+            fn($key, $i) => ($i + 1) . ". " . ($allMedios[$key] ?? $key),
+            $mediosHabilitados,
+            array_keys($mediosHabilitados)
+        ));
 
-        $this->sendInteractiveList(
-            $client->phone,
-            $body,
-            'Ver opciones',
-            [['title' => 'Medios de pago', 'rows' => $rows]]
-        );
+        $body = "{$itemsText}\n\n*Total: $" . $this->fmt($total) . "*\n{$entregaLabel}\n\n"
+            . "¿Con qué medio de pago?\n{$lista}";
+
+        $this->sendReply($client, $body);
     }
 
     private function handlePagoSeleccionado($client, string $id): string
@@ -2373,22 +2388,15 @@ IMPORTANTE — herramientas en paralelo: Podés llamar MÚLTIPLES herramientas e
         $fechaLabel = isset($data['fecha_entrega'])
             ? ' — ' . \Carbon\Carbon::parse($data['fecha_entrega'])->locale('es')->isoFormat('dddd D [de] MMMM')
             : '';
-        $tipoLabel  = 'Envío' . $fechaLabel;
+        $tipoLabel = 'Envío' . $fechaLabel;
 
         $body = "{$itemsText}\n\n"
             . "📦 {$tipoLabel}\n"
             . "💳 {$medioLabel}\n"
-            . "*Total: $" . $this->fmt($total) . '*';
+            . "*Total: $" . $this->fmt($total) . "*\n\n"
+            . "¿Confirmás el pedido? Respondé *sí* para confirmar o *no* para cancelar.";
 
-        $this->sendInteractiveButtons(
-            $client->phone,
-            $body,
-            'Confirmá tu pedido',
-            [
-                ['id' => 'confirmar_si', 'title' => 'Confirmar pedido'],
-                ['id' => 'confirmar_no', 'title' => 'Cancelar'],
-            ]
-        );
+        $this->sendReply($client, $body);
     }
 
     private function handleConfirmacionFinal($client, string $id): string
@@ -2419,6 +2427,63 @@ IMPORTANTE — herramientas en paralelo: Podés llamar MÚLTIPLES herramientas e
         $msg = '👌 Pedido cancelado. ¿En qué más puedo ayudarte?';
         $this->sendReply($client, $msg);
         return $msg;
+    }
+
+    private function manejarPagoTexto($client, string $input): string
+    {
+        $empresa           = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
+        $mediosHabilitados = $empresa?->bot_medios_pago ?? array_keys(IaEmpresa::MEDIOS_PAGO);
+        $allMedios         = IaEmpresa::MEDIOS_PAGO;
+        $normalInput       = mb_strtolower(trim($input));
+        $matched           = null;
+
+        // Match por número (ej: "1", "2")
+        if (is_numeric($input) && (int) $input >= 1 && (int) $input <= count($mediosHabilitados)) {
+            $matched = array_values($mediosHabilitados)[(int) $input - 1];
+        }
+
+        // Match por nombre parcial (ej: "efec", "transferencia")
+        if (!$matched) {
+            foreach ($mediosHabilitados as $key) {
+                $label = mb_strtolower($allMedios[$key] ?? $key);
+                if (str_contains($label, $normalInput) || str_contains($normalInput, $key)) {
+                    $matched = $key;
+                    break;
+                }
+            }
+        }
+
+        if ($matched) {
+            $cacheKey = 'pedido_conf_' . $client->id;
+            $data     = Cache::get($cacheKey, []);
+            $data['medio_pago'] = $matched;
+            Cache::put($cacheKey, $data, now()->addMinutes(30));
+            $client->update(['estado' => 'confirmando_final']);
+
+            $carrito   = $this->getCarrito($client);
+            $items     = $carrito ? $carrito->items : [];
+            $itemsText = implode("\n", array_map(
+                fn($item) => '• ' . ($item['cant'] > 0 ? "{$item['cant']}u" : "{$item['kilos']}kg") . " {$item['des']} — $" . $this->fmt($item['neto']),
+                $items
+            ));
+            $total = array_sum(array_column($items, 'neto'));
+
+            $medioLabel = $allMedios[$matched] ?? $matched;
+            $fechaLabel = isset($data['fecha_entrega'])
+                ? ' — ' . \Carbon\Carbon::parse($data['fecha_entrega'])->locale('es')->isoFormat('dddd D [de] MMMM')
+                : '';
+            $tipoLabel = 'Envío' . $fechaLabel;
+
+            return "{$itemsText}\n\n📦 {$tipoLabel}\n💳 {$medioLabel}\n*Total: $" . $this->fmt($total) . "*\n\n¿Confirmás el pedido? Respondé *sí* para confirmar o *no* para cancelar.";
+        }
+
+        // No coincidió: repetir las opciones
+        $lista = implode("\n", array_map(
+            fn($key, $i) => ($i + 1) . ". " . ($allMedios[$key] ?? $key),
+            $mediosHabilitados,
+            array_keys($mediosHabilitados)
+        ));
+        return "No entendí. ¿Con qué medio de pago?\n{$lista}";
     }
 
     // -------------------------------------------------------------------------
