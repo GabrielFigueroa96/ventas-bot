@@ -2916,16 +2916,46 @@ IMPORTANTE — herramientas en paralelo: Podés llamar MÚLTIPLES herramientas e
     {
         // Sin cache: siempre precio e imagen actualizados desde la BD
         $todosProductos = Producto::paraBot()->get();
-        // Solo productos disponibles para la localidad del cliente
+
+        // Filtrar por localidad y por día de reparto elegido
         if ($client->localidad_id) {
-            $locCods = ProductoLocalidad::where('localidad_id', $client->localidad_id)->pluck('cod')->toArray();
-            $productos = $locCods ? $todosProductos->filter(fn($p) => in_array($p->cod, $locCods)) : $todosProductos;
+            $localPricesAll = ProductoLocalidad::where('localidad_id', $client->localidad_id)->get()->keyBy('cod');
+            $locCods        = $localPricesAll->keys()->toArray();
+            $productosLoc   = $locCods ? $todosProductos->filter(fn($p) => in_array($p->cod, $locCods)) : $todosProductos;
+
+            $fechaElegida = Cache::get('fecha_reparto_elegida_' . $client->id);
+            if ($fechaElegida) {
+                $diaElegido = (int) \Carbon\Carbon::parse($fechaElegida)->format('w');
+                $productos  = $productosLoc->filter(function ($p) use ($localPricesAll, $diaElegido) {
+                    $diasCfg = $localPricesAll->get($p->cod)?->dias_reparto;
+                    if ($diasCfg === null) return true;
+                    if (empty($diasCfg)) return false;
+                    $dNums = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                    return in_array($diaElegido, $dNums, true);
+                });
+            } else {
+                $productos = $productosLoc;
+            }
         } else {
-            $productos = $todosProductos;
+            $localPricesAll = collect();
+            $productosLoc   = $todosProductos;
+            $productos      = $todosProductos;
         }
-        $candidatos   = $this->buscarCandidatos($productos, $nombre);
+
+        $candidatos = $this->buscarCandidatos($productos, $nombre);
 
         if ($candidatos->isEmpty()) {
+            // Verificar si existe para otro día de reparto de la localidad
+            $candidatosLoc = $this->buscarCandidatos($productosLoc, $nombre);
+            if ($candidatosLoc->isNotEmpty() && isset($fechaElegida)) {
+                $prod    = $candidatosLoc->first();
+                $diasCfg = $localPricesAll->get($prod->cod)?->dias_reparto ?? null;
+                $diasLabel = IaEmpresa::DIAS_LABEL;
+                if (!empty($diasCfg)) {
+                    $diasNombres = implode(', ', array_map(fn($d) => $diasLabel[is_array($d) ? (int)$d['dia'] : (int)$d] ?? '?', $diasCfg));
+                    return "'{$prod->des}' no está disponible para el día de reparto elegido. Solo se reparte los: {$diasNombres}. Si el cliente quiere ese producto, ofrecele cambiar la fecha con elegir_reparto.";
+                }
+            }
             return "Producto '{$nombre}' no encontrado. Los productos disponibles son: " . $productos->pluck('des')->join(', ') . '.';
         }
 
