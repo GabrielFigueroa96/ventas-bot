@@ -65,14 +65,17 @@ class ActualizarMemoriaCliente implements ShouldQueue
             }
         }
 
-        $systemPrompt = 'Sos un asistente que analiza conversaciones de clientes de una carnicería/distribuidora y extrae información útil para personalizar futuras interacciones. '
-            . 'Devolvé ÚNICAMENTE una lista de puntos concisos (máx. 10), cada uno comenzando con "- ". '
-            . 'Incluí datos concretos y útiles sobre EL CLIENTE: productos favoritos, cantidades habituales, frecuencia de pedido, forma de pago preferida, tipo de cliente (particular/revendedor), observaciones importantes. '
-            . 'MUY IMPORTANTE: si el cliente rechazó productos, expresó que algo es caro, no le gustó algo o pidió alternativas, incluílo — esa información es igual de útil para personalizar. '
-            . 'NO incluyas información del negocio (días de reparto, zonas de entrega, horarios, precios) — esos datos los maneja el sistema por separado. '
-            . 'No incluyas datos de dirección ni nombre (ya están en el perfil). '
-            . 'Si hay una memoria previa, actualizá o confirmá los puntos existentes con la nueva información. '
-            . 'Si no hay información útil nueva, devolvé la memoria previa sin cambios.';
+        $systemPrompt = 'Sos un asistente que analiza conversaciones y pedidos de un cliente de carnicería/distribuidora. '
+            . 'Devolvé ÚNICAMENTE el resumen en este formato estructurado (omitir secciones sin datos concretos):'
+            . "\n- Productos habituales: [nombre cantidad unidad, ...] (máx 5, con cantidades típicas si las hay)"
+            . "\n- Día preferido: [día de la semana o 'sin preferencia detectada']"
+            . "\n- Forma de pago habitual: [forma o 'no identificada']"
+            . "\n- Tipo de cliente: [particular / revendedor / sin datos]"
+            . "\n- Rechazos y preferencias negativas: [productos caros, rechazados, alternativas pedidas]"
+            . "\n- Observaciones: [máx 2 líneas — comportamiento, frecuencia, particularidades]"
+            . "\n\nReglas: NO incluyas días de reparto ni zonas (lo maneja el sistema). NO incluyas nombre ni dirección. "
+            . "Usá datos concretos y cuantificados cuando existan. Si hay memoria previa, actualizá o confirmá cada sección con la nueva información. "
+            . "Si no hay información nueva relevante, devolvé la memoria previa sin cambios.";
 
         $userPrompt = ($memoriaActual ? "Memoria actual del cliente:\n{$memoriaActual}\n\n" : '')
             . ($pedidoContexto ? "Contexto de pedidos:\n{$pedidoContexto}\n\n" : '')

@@ -438,11 +438,16 @@ class BotService
             ? "#{$ultimoPedido->nro} ({$ultimoPedido->fecha}): {$ultimoPedido->descrip} — {$ultimoPedido->estado_texto}"
             : 'ninguno';
 
-        // Top 3 productos más pedidos por este cliente (personalización)
-        $topProductos = Pedido::where('codcli', $codcli)
-            ->selectRaw('descrip, COUNT(*) as veces')
-            ->groupBy('descrip')
+        // Top productos pedidos, filtrados al catálogo disponible del día elegido
+        $topPedidos = Pedido::where('codcli', $codcli)
+            ->selectRaw('descrip, cod, COUNT(*) as veces')
+            ->groupBy('descrip', 'cod')
             ->orderByDesc('veces')
+            ->get();
+
+        $productosCods       = $productos->pluck('cod')->map(fn($c) => (float) $c)->flip();
+        $favoritosDisponibles = $topPedidos
+            ->filter(fn($p) => $productosCods->has((float) $p->cod))
             ->take(3)
             ->pluck('descrip')
             ->implode(', ');
@@ -486,8 +491,8 @@ class BotService
             ->get()
             ->reverse();
 
-        $favoritosTexto = $topProductos
-            ? "Lo que más pide: {$topProductos}."
+        $favoritosTexto = $favoritosDisponibles
+            ? "Productos que suele pedir disponibles para este reparto: {$favoritosDisponibles}."
             : '';
 
         $messages = [];
@@ -817,7 +822,7 @@ FLUJO 2 — TOMAR PEDIDO
 ════════════════════════════════
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
-" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. El cliente no eligió fecha. Llamá elegir_reparto PRIMERO, siempre — incluso si ya sabés el producto y la cantidad. Si el cliente mencionó un día ('el viernes', 'para el miércoles', etc.), pasalo en fecha_sugerida para que se confirme sin mostrar botones. Una vez confirmada la fecha, el sistema te mostrará los productos disponibles para ese día y podrás agregar al carrito." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si quiere cambiar de fecha, usá elegir_reparto." : "") : "")) . "
+" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. El cliente no eligió fecha. Llamá elegir_reparto PRIMERO, siempre — incluso si ya sabés el producto y la cantidad. Si el cliente mencionó un día ('el viernes', 'para el miércoles', etc.), pasalo en fecha_sugerida para que se confirme sin mostrar botones. elegir_reparto te devuelve el catálogo del día confirmado — si el mensaje original ya incluía producto y cantidad, llamá agregar_al_carrito de inmediato en la misma respuesta sin pedirle nada más al cliente." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si quiere cambiar de fecha, usá elegir_reparto." : "") : "")) . "
 1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada. Si el nombre del producto es reconocible (aunque no sea idéntico al de la lista), usá el más cercano sin preguntar. Para productos que se venden por peso, interpretá el número como kilos (ej: \'3 bondiolas\' = 3 kg) salvo que el cliente diga explícitamente \'unidades\' o \'u\'.
 1b. Si agregar_al_carrito devuelve un error con ACCIÓN REQUERIDA, seguí exactamente la instrucción del error: preguntale al cliente en un mensaje corto si quiere cambiar al día disponible. Si confirma, llamá elegir_reparto con ese día y luego agregar_al_carrito.
 2. Después de agregar, llamá DIRECTAMENTE crear_pedido. Esto le muestra al cliente el carrito con los botones de confirmar/cancelar. Si quiere agregar más, va a escribirte y volvés al paso 1.
@@ -3394,21 +3399,35 @@ Herramientas disponibles:
      */
     private function mensajeNecesitaProductos(string $message, $cliente): bool
     {
-        // Si hay carrito activo con ítems, siempre incluir (está en medio de un pedido)
         $carrito = $this->getCarrito($cliente);
-        if ($carrito && !empty($carrito->items)) {
-            return true;
-        }
+        if ($carrito && !empty($carrito->items)) return true;
+        if (in_array($cliente->estado ?? '', ['eligiendo_reparto'], true)) return true;
 
-        // Si el cliente está en un estado de flujo activo de pedido
-        $estadosConProductos = ['eligiendo_reparto'];
-        if (in_array($cliente->estado ?? '', $estadosConProductos, true)) {
-            return true;
-        }
+        try {
+            $apiKey   = config('api.openai.key');
+            $response = Http::withToken($apiKey)
+                ->timeout(5)
+                ->post(self::OPENAI_URL, [
+                    'model'       => 'gpt-4.1-mini',
+                    'messages'    => [
+                        ['role' => 'system', 'content' => 'Clasificá el mensaje de un cliente de carnicería argentina. Respondé SOLO una palabra: "catalogo" si el mensaje requiere ver productos, precios o hacer un pedido; "operativo" si es saludo, agradecimiento, consulta de estado de pedido, horario, dirección u otra consulta sin productos.'],
+                        ['role' => 'user',   'content' => $message],
+                    ],
+                    'max_tokens'  => 5,
+                    'temperature' => 0,
+                ])->json();
 
+            $clasificacion = mb_strtolower(trim($response['choices'][0]['message']['content'] ?? ''));
+            return str_contains($clasificacion, 'catalogo');
+        } catch (\Throwable) {
+            return $this->mensajeNecesitaProductosFallback($message);
+        }
+    }
+
+    private function mensajeNecesitaProductosFallback(string $message): bool
+    {
         $msg = mb_strtolower(trim($message));
 
-        // Palabras que claramente necesitan catálogo
         $keywordsProductos = [
             'quiero', 'pedido', 'pedir', 'comprar', 'precio', 'cuánto', 'cuanto',
             'kilo', 'kg', 'unidad', 'carne', 'pollo', 'cerdo', 'vacio', 'vacío',
@@ -3421,12 +3440,9 @@ Herramientas disponibles:
         ];
 
         foreach ($keywordsProductos as $kw) {
-            if (str_contains($msg, $kw)) {
-                return true;
-            }
+            if (str_contains($msg, $kw)) return true;
         }
 
-        // Mensajes cortos ambiguos (≤3 palabras y no son operativos) → incluir por seguridad
         $palabras = str_word_count($msg);
         if ($palabras <= 3) {
             $keywordsOperativas = ['gracias', 'ok', 'listo', 'perfecto', 'buenísimo', 'genial',
@@ -3434,7 +3450,7 @@ Herramientas disponibles:
             foreach ($keywordsOperativas as $kw) {
                 if (str_contains($msg, $kw)) return false;
             }
-            return true; // corto y no operativo → mejor incluir
+            return true;
         }
 
         return false;
