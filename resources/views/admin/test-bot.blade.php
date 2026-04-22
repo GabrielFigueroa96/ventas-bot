@@ -67,7 +67,7 @@
             <button class="esc-btn text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg hover:bg-indigo-100 font-medium"
                 data-escenario="consulta_estado">📦 Consultar estado pedido</button>
             <button class="esc-btn text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg hover:bg-indigo-100 font-medium"
-                data-escenario="cancelar_mitad">❌ Cambiar de opinión</button>
+                data-escenario="cambiar_de_opinion">❌ Cambiar de opinión</button>
         </div>
         <p id="esc-status" class="text-xs text-amber-600 hidden">⏳ Ejecutando escenario...</p>
     </div>
@@ -147,14 +147,20 @@ const msgInput     = document.getElementById('msg-input');
 // ── Escenarios predefinidos ──────────────────────────────
 const ESCENARIOS = {
     pedido_completo: [
-        'hola, quiero pedir para hoy',
+        'hola, quiero hacer un pedido',
+        // Si hay múltiples fechas, el bot muestra una lista numerada → elegimos la primera
         '1',
-        'quiero 2 kg de vacío',
+        // Pedimos productos sin asumir cuáles hay disponibles
+        '¿qué tenés disponible hoy?',
+        // El bot lista productos → pedimos el primero
+        'dame 2 de lo primero que mencionaste',
         'sí',
     ],
     elegir_fecha: [
         'quiero hacer un pedido para el viernes',
-        '1 kg de asado',
+        // Si hay viernes disponible, el bot lo confirma; si no, muestra lista
+        '¿qué productos hay para ese día?',
+        'quiero el primero de la lista, 1 unidad',
         'sí',
     ],
     lo_mismo: [
@@ -164,12 +170,13 @@ const ESCENARIOS = {
     consulta_estado: [
         '¿cómo está mi pedido?',
     ],
-    cancelar_mitad: [
-        'quiero pedir',
+    cambiar_de_opinion: [
+        'hola quiero pedir',
         '1',
-        '2 kg de asado',
-        'que detalle hay?',
-        'agregame también bondiola 1 kg',
+        '¿qué tenés disponible?',
+        'poneme 2 del primero',
+        '¿cuánto me sale todo?',
+        'agregá también 1 del segundo producto que mencionaste',
         'sí',
     ],
 };
