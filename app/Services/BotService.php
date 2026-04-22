@@ -332,7 +332,7 @@ class BotService
     {
         $nombre  = $cliente->name ?? 'cliente';
         $codcli  = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
-        $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
+        $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY') . ', ' . now()->format('H:i') . 'hs';
         $empresa = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
 
         $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
