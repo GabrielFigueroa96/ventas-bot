@@ -332,7 +332,7 @@ class BotService
     {
         $nombre  = $cliente->name ?? 'cliente';
         $codcli  = $cliente->cuenta ? $cliente->cuenta->cod : $cliente->id;
-        $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY');
+        $fecha   = now()->locale('es')->isoFormat('dddd D [de] MMMM YYYY') . ', ' . now()->format('H:i') . 'hs';
         $empresa = Cache::remember('bot_empresa_config_' . (app(\App\Services\TenantManager::class)->get()?->id ?? 0), 300, fn() => IaEmpresa::first());
 
         $tenantId = app(\App\Services\TenantManager::class)->get()?->id ?? 0;
@@ -374,24 +374,27 @@ class BotService
         $diaElegido = $fechaElegida ? (int) \Carbon\Carbon::parse($fechaElegida)->format('w') : null;
 
         // ── Filtrado de productos por localidad y día ──
-        $diasLabelCorto = [0=>'Dom',1=>'Lun',2=>'Mar',3=>'Mié',4=>'Jue',5=>'Vie',6=>'Sáb'];
         $prodLocConfigs = $cliente->localidad_id
             ? ProductoLocalidad::where('localidad_id', $cliente->localidad_id)->get()->keyBy('cod')
             : collect();
 
         if ($cliente->localidad_id) {
             if ($prodLocConfigs->isNotEmpty()) {
-                $diaParaFiltrar = $diaElegido;
-
-                $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diaParaFiltrar) {
-                    if (!$prodLocConfigs->has($p->cod)) return false;
-                    if ($diaParaFiltrar === null) return true;       // sin fecha: mostrar todos los de la localidad
-                    $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
-                    if ($diasCfg === null) return true;              // sin restricción → disponible todos los días
-                    if (empty($diasCfg)) return false;               // array vacío → no disponible ningún día
-                    $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
-                    return in_array($diaParaFiltrar, $diasNum, true);
-                });
+                if ($diaElegido !== null) {
+                    // Fecha elegida: filtrar solo los productos de ese día
+                    $productos = $todosProductos->filter(function ($p) use ($prodLocConfigs, $diaElegido) {
+                        if (!$prodLocConfigs->has($p->cod)) return false;
+                        $diasCfg = $prodLocConfigs->get($p->cod)->dias_reparto;
+                        if ($diasCfg === null) return true;              // sin restricción → disponible todos los días
+                        if (empty($diasCfg)) return false;               // array vacío → no disponible ningún día
+                        $diasNum = array_map(fn($d) => is_array($d) ? (int)$d['dia'] : (int)$d, $diasCfg);
+                        return in_array($diaElegido, $diasNum, true);
+                    });
+                } else {
+                    // Sin fecha elegida: catálogo vacío — el cliente debe elegir día primero
+                    // (se usa $listaPorDia como referencia para ayudar a elegir)
+                    $productos = collect();
+                }
             } else {
                 // Cliente tiene localidad asignada pero no hay productos configurados para ella → sin productos
                 $productos = collect();
@@ -401,26 +404,13 @@ class BotService
             $productos = $todosProductos;
         }
 
-        // Para anotar días restringidos en la lista cuando no hay fecha elegida ("solo Lun/Vie")
-        $prodLocDias = (!$diaElegido && $prodLocConfigs->isNotEmpty())
-            ? $prodLocConfigs->filter(fn($c) => !empty($c->dias_reparto))
-            : collect();
-
-        $formatear = function ($p) use ($diaElegido, $prodLocDias, $diasLabelCorto) {
+        $formatear = function ($p) {
             $linea = $p->des;
             if (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') {
                 $linea .= " ({$p->descripcion})";
             }
             if (!empty($p->notas_ia)) {
                 $linea .= " [IA: {$p->notas_ia}]";
-            }
-            // Si no hay fecha elegida y el producto tiene días restringidos para esta localidad, anotarlo
-            if (!$diaElegido && $prodLocDias->has($p->cod)) {
-                $dias = $prodLocDias->get($p->cod)->dias_reparto ?? [];
-                if (!empty($dias)) {
-                    $nombres = array_map(fn($d) => $diasLabelCorto[is_array($d) ? (int)$d['dia'] : (int)$d] ?? '?', $dias);
-                    $linea .= ' [solo ' . implode('/', $nombres) . ']';
-                }
             }
             return $linea;
         };
@@ -448,11 +438,16 @@ class BotService
             ? "#{$ultimoPedido->nro} ({$ultimoPedido->fecha}): {$ultimoPedido->descrip} — {$ultimoPedido->estado_texto}"
             : 'ninguno';
 
-        // Top 3 productos más pedidos por este cliente (personalización)
-        $topProductos = Pedido::where('codcli', $codcli)
-            ->selectRaw('descrip, COUNT(*) as veces')
-            ->groupBy('descrip')
+        // Top productos pedidos, filtrados al catálogo disponible del día elegido
+        $topPedidos = Pedido::where('codcli', $codcli)
+            ->selectRaw('descrip, cod, COUNT(*) as veces')
+            ->groupBy('descrip', 'cod')
             ->orderByDesc('veces')
+            ->get();
+
+        $productosCods       = $productos->pluck('cod')->map(fn($c) => (float) $c)->flip();
+        $favoritosDisponibles = $topPedidos
+            ->filter(fn($p) => $productosCods->has((float) $p->cod))
             ->take(3)
             ->pluck('descrip')
             ->implode(', ');
@@ -496,8 +491,8 @@ class BotService
             ->get()
             ->reverse();
 
-        $favoritosTexto = $topProductos
-            ? "Lo que más pide: {$topProductos}."
+        $favoritosTexto = $favoritosDisponibles
+            ? "Productos que suele pedir disponibles para este reparto: {$favoritosDisponibles}."
             : '';
 
         $messages = [];
@@ -586,7 +581,7 @@ class BotService
                     if ($tieneHasta) {
                         $hastaNum  = (int) $cfg['hasta_dia'];
                         $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
-                        $diff      = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
+                        $diff      = ($diaSemana - $hastaNum + 7) % 7;
                         $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
                         if (now()->gt($fechaCierre)) {
                             $fechasCortadasAviso[] = "el reparto del "
@@ -619,7 +614,7 @@ class BotService
                 if ($tieneHasta) {
                     $hastaNum  = (int) $cfg['hasta_dia'];
                     $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
-                    $diff      = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
+                    $diff      = ($diaSemana - $hastaNum + 7) % 7;
                     $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
                     if (now()->gt($fechaCierre)) {
                         $corteAviso = "⚠️ CIERRE DE PEDIDOS: Los pedidos para el reparto del "
@@ -633,7 +628,7 @@ class BotService
                 if ($tieneDesde) {
                     $desdeNum  = (int) $cfg['desde_dia'];
                     $desdeHora = !empty($cfg['desde_hora']) ? $cfg['desde_hora'] : '00:00';
-                    $diff      = ($diaSemana - $desdeNum + 7) % 7 ?: 7;
+                    $diff      = ($diaSemana - $desdeNum + 7) % 7;
                     $fechaApertura = $candidato->copy()->subDays($diff)->setTimeFromTimeString($desdeHora);
                     if (now()->lt($fechaApertura)) {
                         $corteAviso = "⚠️ PEDIDOS CERRADOS: Todavía no se pueden tomar pedidos para el reparto del "
@@ -665,14 +660,14 @@ class BotService
                 if ($tieneDesde) {
                     $desdeNum  = (int) $cfg2['desde_dia'];
                     $desdeHora = !empty($cfg2['desde_hora']) ? $cfg2['desde_hora'] : '00:00';
-                    $diff      = ($f['dia'] - $desdeNum + 7) % 7 ?: 7;
+                    $diff      = ($f['dia'] - $desdeNum + 7) % 7;
                     $fechaAp   = \Carbon\Carbon::parse($f['fecha'])->subDays($diff)->setTimeFromTimeString($desdeHora);
                     $partes[]  = "abre el {$diasLabel[$desdeNum]} {$fechaAp->locale('es')->isoFormat('D [de] MMMM')} a las {$fechaAp->format('H:i')}hs";
                 }
                 if ($tieneHasta) {
                     $hastaNum  = (int) $cfg2['hasta_dia'];
                     $hastaHora = !empty($cfg2['hasta_hora']) ? $cfg2['hasta_hora'] : '23:59';
-                    $diff      = ($f['dia'] - $hastaNum + 7) % 7 ?: 7;
+                    $diff      = ($f['dia'] - $hastaNum + 7) % 7;
                     $fechaCi   = \Carbon\Carbon::parse($f['fecha'])->subDays($diff)->setTimeFromTimeString($hastaHora);
                     $partes[]  = "cierra el {$diasLabel[$hastaNum]} {$fechaCi->locale('es')->isoFormat('D [de] MMMM')} a las {$fechaCi->format('H:i')}hs";
                 } elseif ($globalHoraCorte) {
@@ -704,7 +699,14 @@ class BotService
                     return in_array($diaNum, $dNums, true);
                 });
                 if ($prodsDia->isNotEmpty()) {
-                    $partesDia[] = "{$f['texto']}: " . $prodsDia->pluck('des')->implode(', ');
+                    $itemsDia = $prodsDia->map(function ($p) use ($prodLocConfigs) {
+                        $cfg    = $prodLocConfigs->get($p->cod);
+                        $precio = ($cfg && $cfg->precio) ? $cfg->precio : $p->precio;
+                        $tipo   = $p->tipo === 'Unidad' ? 'u' : 'kg';
+                        $extra  = (!empty($p->descripcion) && $p->descripcion !== 'sinimagen.webp') ? " ({$p->descripcion})" : '';
+                        return "{$p->des}{$extra} \${$precio}/{$tipo}";
+                    })->implode(', ');
+                    $partesDia[] = "📅 {$f['texto']}: {$itemsDia}";
                 }
             }
             if (!empty($partesDia)) {
@@ -787,12 +789,17 @@ Nombre del cliente: {$nombre}. SIEMPRE usá este nombre para dirigirte al client
       . ($hayMultiplesFechas ? " También hay repartos disponibles para: " . implode(', ', array_filter(array_map(fn($f) => $f['fecha'] !== $fechaElegida ? $f['texto'] : null, $fechasDisponibles))) . ". Si el cliente quiere cambiar de fecha, usá elegir_reparto." : "")
     : ($fechasTexto ? "Repartos disponibles: {$fechasTexto}." : '')) . "
 
-" . ($needsProductList ? "Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : ($hayMultiplesFechas ? " (múltiples fechas disponibles — usá la lista por día de abajo para responder correctamente)" : " (disponibilidad puede variar según el día de reparto elegido)")) . ":\n{$lista}" . ($listaPorDia ? "\n\nPRODUCTOS POR DÍA DE REPARTO (usá esto para responder cuando el cliente pregunte por un día específico):\n{$listaPorDia}" : "") . "\n\n" : "Catálogo no incluido en este contexto. Si el cliente consulta por un producto específico, usá ver_producto.\n\n") . ($puedeSupgerir ? "════════════════════════════════
+" . ($needsProductList ? (
+    (!$fechaYaElegida && $hayMultiplesFechas)
+        ? "⚠️ El cliente NO eligió fecha de reparto todavía. ANTES de hablar de productos o tomar cualquier pedido, llamá elegir_reparto para que elija el día.\n"
+          . ($listaPorDia ? "Referencia por fecha (para ayudar al cliente a elegir, no para armar pedido):\n{$listaPorDia}\n\n" : "\n")
+        : "Productos disponibles" . ($fechaYaElegida ? " para el reparto del {$fechaElegidaTexto}" : "") . ":\n{$lista}\n\n"
+) : "Catálogo no incluido en este contexto. Si el cliente consulta por un producto específico, usá ver_producto.\n\n") . ($puedeSupgerir ? "════════════════════════════════
 FLUJO 1 — SUGERIR
 ════════════════════════════════
 Activar cuando: el cliente saluda, no sabe qué quiere, pide recomendación o menciona una ocasión (asado, cumpleaños, etc.).
 Pasos:
-" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.) y pregunta qué puede pedir, respondé SOLO con los productos de ese día según la lista 'PRODUCTOS POR DÍA DE REPARTO'. Si el cliente NO menciona un día y quiere pedir o no sabe qué quiere, usá elegir_reparto para que elija fecha primero." : "") . "
+" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. El cliente no eligió fecha de reparto. Antes de sugerir productos o armar pedido, llamá elegir_reparto. Si el cliente mencionó un día ('para el viernes', etc.), pasalo en fecha_sugerida para confirmarlo automáticamente. Podés mencionar brevemente qué hay cada día (usando la referencia de arriba) para ayudarlo a elegir." : "") . "
 1. Si menciona una ocasión, calculá cantidades según las porciones estándar y mostrá solo productos de la lista disponible.
 2. Si no menciona ocasión, sugerí sus favoritos que estén en la lista disponible (ignorá los que no estén en la lista)" . ($puedeMasVendidos ? " o los más populares" : "") . ".
 3. Ofrecé achuras cuando sea pertinente (una sola vez, sin insistir).
@@ -815,7 +822,7 @@ FLUJO 2 — TOMAR PEDIDO
 ════════════════════════════════
 Activar cuando: el cliente quiere agregar productos o ya tiene algo en mente.
 Pasos:
-" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. Si el cliente menciona un día específico ('para el viernes', 'el miércoles', etc.), llamá elegir_reparto con esa fecha ANTES de agregar al carrito — aunque ya sepas el producto y la cantidad. Si no menciona día, llamá elegir_reparto para que elija." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si el cliente pregunta por otras fechas o quiere cambiar, usá elegir_reparto." : "") : "")) . "
+" . ($hayMultiplesFechas && !$fechaYaElegida ? "0. El cliente no eligió fecha. Llamá elegir_reparto PRIMERO, siempre — incluso si ya sabés el producto y la cantidad. Si el cliente mencionó un día ('el viernes', 'para el miércoles', etc.), pasalo en fecha_sugerida para que se confirme sin mostrar botones. elegir_reparto te devuelve el catálogo del día confirmado — si el mensaje original ya incluía producto y cantidad, llamá agregar_al_carrito de inmediato en la misma respuesta sin pedirle nada más al cliente." : ($fechaYaElegida ? "0. El cliente ya eligió el reparto del {$fechaElegidaTexto}. Los productos de la lista son los disponibles para ese día." . ($hayMultiplesFechas ? " Si quiere cambiar de fecha, usá elegir_reparto." : "") : "")) . "
 1. En cuanto tenés producto + cantidad, llamá INMEDIATAMENTE agregar_al_carrito. No pidas confirmación ni resumas antes. Podés agregar múltiples productos en una sola llamada. Si el nombre del producto es reconocible (aunque no sea idéntico al de la lista), usá el más cercano sin preguntar. Para productos que se venden por peso, interpretá el número como kilos (ej: \'3 bondiolas\' = 3 kg) salvo que el cliente diga explícitamente \'unidades\' o \'u\'.
 1b. Si agregar_al_carrito devuelve un error con ACCIÓN REQUERIDA, seguí exactamente la instrucción del error: preguntale al cliente en un mensaje corto si quiere cambiar al día disponible. Si confirma, llamá elegir_reparto con ese día y luego agregar_al_carrito.
 2. Después de agregar, llamá DIRECTAMENTE crear_pedido. Esto le muestra al cliente el carrito con los botones de confirmar/cancelar. Si quiere agregar más, va a escribirte y volvés al paso 1.
@@ -1334,6 +1341,16 @@ Herramientas disponibles:
                 }
                 // Verificar disponibilidad para el día elegido
                 $fechaElegida = Cache::get('fecha_reparto_elegida_' . $client->id);
+
+                // Sin fecha elegida: si el producto tiene restricción de días, bloquear hasta que elijan fecha
+                if ($fechaElegida === null) {
+                    $diasCfgCheck = $localPrices->get($match->cod)->dias_reparto;
+                    if ($diasCfgCheck !== null && !empty($diasCfgCheck)) {
+                        $errores[] = "ACCIÓN REQUERIDA: Llamá elegir_reparto antes de agregar '{$match->des}' — ese producto solo se reparte ciertos días y necesito confirmar la fecha del pedido primero.";
+                        continue;
+                    }
+                }
+
                 if ($fechaElegida) {
                     $diaElegido = (int) \Carbon\Carbon::parse($fechaElegida)->format('w');
                     $diasCfg    = $localPrices->get($match->cod)->dias_reparto;
@@ -1566,7 +1583,7 @@ Herramientas disponibles:
                 $hastaNum  = $tieneHasta ? (int) $cfg['hasta_dia'] : null;
                 $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
                 if ($hastaNum !== null) {
-                    $diff        = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
+                    $diff        = ($diaSemana - $hastaNum + 7) % 7;
                     $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
                     if (now()->gt($fechaCierre)) $dentroDeVentana = false;
                 }
@@ -1579,7 +1596,7 @@ Herramientas disponibles:
                 $desdeNum  = $tieneDesde ? (int) $cfg['desde_dia'] : null;
                 $desdeHora = !empty($cfg['desde_hora']) ? $cfg['desde_hora'] : '00:00';
                 if ($desdeNum !== null) {
-                    $diff          = ($diaSemana - $desdeNum + 7) % 7 ?: 7;
+                    $diff          = ($diaSemana - $desdeNum + 7) % 7;
                     $fechaApertura = $candidato->copy()->subDays($diff)->setTimeFromTimeString($desdeHora);
                     if (now()->lt($fechaApertura)) $dentroDeVentana = false;
                 }
@@ -3382,21 +3399,35 @@ Herramientas disponibles:
      */
     private function mensajeNecesitaProductos(string $message, $cliente): bool
     {
-        // Si hay carrito activo con ítems, siempre incluir (está en medio de un pedido)
         $carrito = $this->getCarrito($cliente);
-        if ($carrito && !empty($carrito->items)) {
-            return true;
-        }
+        if ($carrito && !empty($carrito->items)) return true;
+        if (in_array($cliente->estado ?? '', ['eligiendo_reparto'], true)) return true;
 
-        // Si el cliente está en un estado de flujo activo de pedido
-        $estadosConProductos = ['eligiendo_reparto'];
-        if (in_array($cliente->estado ?? '', $estadosConProductos, true)) {
-            return true;
-        }
+        try {
+            $apiKey   = config('api.openai.key');
+            $response = Http::withToken($apiKey)
+                ->timeout(5)
+                ->post(self::OPENAI_URL, [
+                    'model'       => 'gpt-4.1-mini',
+                    'messages'    => [
+                        ['role' => 'system', 'content' => 'Clasificá el mensaje de un cliente de carnicería argentina. Respondé SOLO una palabra: "catalogo" si el mensaje requiere ver productos, precios o hacer un pedido; "operativo" si es saludo, agradecimiento, consulta de estado de pedido, horario, dirección u otra consulta sin productos.'],
+                        ['role' => 'user',   'content' => $message],
+                    ],
+                    'max_tokens'  => 5,
+                    'temperature' => 0,
+                ])->json();
 
+            $clasificacion = mb_strtolower(trim($response['choices'][0]['message']['content'] ?? ''));
+            return str_contains($clasificacion, 'catalogo');
+        } catch (\Throwable) {
+            return $this->mensajeNecesitaProductosFallback($message);
+        }
+    }
+
+    private function mensajeNecesitaProductosFallback(string $message): bool
+    {
         $msg = mb_strtolower(trim($message));
 
-        // Palabras que claramente necesitan catálogo
         $keywordsProductos = [
             'quiero', 'pedido', 'pedir', 'comprar', 'precio', 'cuánto', 'cuanto',
             'kilo', 'kg', 'unidad', 'carne', 'pollo', 'cerdo', 'vacio', 'vacío',
@@ -3409,12 +3440,9 @@ Herramientas disponibles:
         ];
 
         foreach ($keywordsProductos as $kw) {
-            if (str_contains($msg, $kw)) {
-                return true;
-            }
+            if (str_contains($msg, $kw)) return true;
         }
 
-        // Mensajes cortos ambiguos (≤3 palabras y no son operativos) → incluir por seguridad
         $palabras = str_word_count($msg);
         if ($palabras <= 3) {
             $keywordsOperativas = ['gracias', 'ok', 'listo', 'perfecto', 'buenísimo', 'genial',
@@ -3422,7 +3450,7 @@ Herramientas disponibles:
             foreach ($keywordsOperativas as $kw) {
                 if (str_contains($msg, $kw)) return false;
             }
-            return true; // corto y no operativo → mejor incluir
+            return true;
         }
 
         return false;

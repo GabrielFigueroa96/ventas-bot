@@ -134,7 +134,7 @@ class EnviarRecordatoriosVentana extends Command
             if (empty($cfg['desde_dia']) && empty($cfg['desde_hora'])) return null;
             $diaRef  = isset($cfg['desde_dia']) && $cfg['desde_dia'] !== null ? (int)$cfg['desde_dia'] : $diaSemana;
             $horaRef = !empty($cfg['desde_hora']) ? $cfg['desde_hora'] : '00:00';
-            $diff    = ($diaSemana - $diaRef + 7) % 7 ?: 7;
+            $diff    = ($diaSemana - $diaRef + 7) % 7;
             return $fechaReparto->copy()->subDays($diff)->setTimeFromTimeString($horaRef);
         }
 
@@ -142,7 +142,7 @@ class EnviarRecordatoriosVentana extends Command
         if (empty($cfg['hasta_dia']) && empty($cfg['hasta_hora'])) return null;
         $diaRef  = isset($cfg['hasta_dia']) && $cfg['hasta_dia'] !== null ? (int)$cfg['hasta_dia'] : $diaSemana;
         $horaRef = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
-        $diff    = ($diaSemana - $diaRef + 7) % 7 ?: 7;
+        $diff    = ($diaSemana - $diaRef + 7) % 7;
         return $fechaReparto->copy()->subDays($diff)->setTimeFromTimeString($horaRef)->subHours($horasAntes);
     }
 
