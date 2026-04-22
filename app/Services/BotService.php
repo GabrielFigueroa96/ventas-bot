@@ -308,8 +308,6 @@ class BotService
 
     private function cargarUltimoPedido($client): ?string
     {
-        $codcli = $client->cuenta?->cod ?? $client->id;
-
         // Buscar el último pedido confirmado del cliente
         $ultimoIa = Pedidosia::where('idcliente', $client->id)
             ->where('estado', '>=', Pedidosia::ESTADO_CONFIRMADO)
@@ -328,12 +326,24 @@ class BotService
             return ['descrip' => $p->descrip, 'cantidad' => $cantidad];
         })->toArray();
 
-        // Intentar cargar en el carrito
-        $resultado = $this->agregarAlCarrito($client, $items);
+        // Cargar en el carrito (valida disponibilidad, localidad y día elegido internamente)
+        $this->agregarAlCarrito($client, $items);
 
-        // Verificar si hubo errores graves (carrito vacío)
         $carrito = $this->getCarrito($client);
         if (!$carrito || empty($carrito->items)) return null;
+
+        // Detectar qué productos del pedido original NO entraron al carrito
+        $normalize = fn(string $s) => mb_strtolower(trim($s));
+        $cartDescs = collect($carrito->items)->keys(); // ya son lowercase (ver agregarAlCarrito)
+
+        $omitidos = $itemsPedido->filter(function ($p) use ($cartDescs, $normalize) {
+            $normP = $normalize($p->descrip);
+            foreach ($cartDescs as $desc) {
+                similar_text($normP, $desc, $pct);
+                if ($pct >= 70) return false;
+            }
+            return true;
+        })->pluck('descrip');
 
         // Líneas del carrito para el resumen
         $lineas = collect($carrito->items)->map(function ($i) {
@@ -348,7 +358,11 @@ class BotService
             ? \Carbon\Carbon::parse($fechaElegida)->locale('es')->isoFormat('dddd D [de] MMMM')
             : 'el próximo reparto';
 
-        return "Cargué tu último pedido:\n{$lineas}\n\n¿Lo confirmamos para {$fechaTexto}? Podés responder *sí* para confirmar, agregar más productos o cambiar algo.";
+        $omitidosTexto = $omitidos->isNotEmpty()
+            ? "\n\n⚠️ No pude agregar: " . $omitidos->implode(', ') . " (no disponibles para este reparto)."
+            : '';
+
+        return "Cargué tu último pedido:\n{$lineas}{$omitidosTexto}\n\n¿Lo confirmamos para {$fechaTexto}? Podés responder *sí* para confirmar, agregar más productos o cambiar algo.";
     }
 
     // -------------------------------------------------------------------------
