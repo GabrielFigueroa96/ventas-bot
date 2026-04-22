@@ -273,11 +273,96 @@ class BotService
             return $response;
         }
 
+        // Shortcut "lo mismo de siempre"
+        if ($this->esLoMismoDeSimepre($message)) {
+            $respuestaAtajo = $this->cargarUltimoPedido($client);
+            if ($respuestaAtajo !== null) {
+                $this->sendReply($client, $respuestaAtajo);
+                return $respuestaAtajo;
+            }
+        }
+
         $response = $this->askChatGPT($message, $client, $image);
         if ($response !== '') {
             $this->sendReply($client, $response);
         }
         return $response;
+    }
+
+    private function esLoMismoDeSimepre(string $message): bool
+    {
+        $msg = mb_strtolower(trim($message));
+        $patrones = [
+            '/\blo mismo de siempre\b/', '/\blo de siempre\b/', '/\blo mismo que siempre\b/',
+            '/\blo mismo de la (ultima|última) vez\b/', '/\blo mismo que la (ultima|última) vez\b/',
+            '/\brepetir (el )?pedido\b/', '/\brepetí (el )?pedido\b/',
+            '/\bel pedido habitual\b/', '/\bpedido habitual\b/',
+            '/\bigual que siempre\b/', '/\bigual que la (ultima|última) vez\b/',
+            '/\blo habitual\b/', '/\bel habitual\b/',
+        ];
+        foreach ($patrones as $patron) {
+            if (preg_match($patron, $msg)) return true;
+        }
+        return false;
+    }
+
+    private function cargarUltimoPedido($client): ?string
+    {
+        // Buscar el último pedido confirmado del cliente
+        $ultimoIa = Pedidosia::where('idcliente', $client->id)
+            ->where('estado', '>=', Pedidosia::ESTADO_CONFIRMADO)
+            ->where('estado', '<>', Pedidosia::ESTADO_CANCELADO)
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$ultimoIa) return null;
+
+        $itemsPedido = Pedido::where('nro', $ultimoIa->nro)->get();
+        if ($itemsPedido->isEmpty()) return null;
+
+        // Construir items en el formato de agregarAlCarrito
+        $items = $itemsPedido->map(function ($p) {
+            $cantidad = ($p->kilos > 0) ? $p->kilos : $p->cant;
+            return ['descrip' => $p->descrip, 'cantidad' => $cantidad];
+        })->toArray();
+
+        // Cargar en el carrito (valida disponibilidad, localidad y día elegido internamente)
+        $this->agregarAlCarrito($client, $items);
+
+        $carrito = $this->getCarrito($client);
+        if (!$carrito || empty($carrito->items)) return null;
+
+        // Detectar qué productos del pedido original NO entraron al carrito
+        $normalize = fn(string $s) => mb_strtolower(trim($s));
+        $cartDescs = collect($carrito->items)->keys(); // ya son lowercase (ver agregarAlCarrito)
+
+        $omitidos = $itemsPedido->filter(function ($p) use ($cartDescs, $normalize) {
+            $normP = $normalize($p->descrip);
+            foreach ($cartDescs as $desc) {
+                similar_text($normP, $desc, $pct);
+                if ($pct >= 70) return false;
+            }
+            return true;
+        })->pluck('descrip');
+
+        // Líneas del carrito para el resumen
+        $lineas = collect($carrito->items)->map(function ($i) {
+            if ($i['tipo'] !== 'Unidad' && $i['kilos'] > 0) {
+                return "• {$i['des']}: " . number_format($i['kilos'], 3, ',', '.') . " kg";
+            }
+            return "• {$i['des']}: {$i['cant']} u";
+        })->implode("\n");
+
+        $fechaElegida = Cache::get('fecha_reparto_elegida_' . $client->id);
+        $fechaTexto = $fechaElegida
+            ? \Carbon\Carbon::parse($fechaElegida)->locale('es')->isoFormat('dddd D [de] MMMM')
+            : 'el próximo reparto';
+
+        $omitidosTexto = $omitidos->isNotEmpty()
+            ? "\n\n⚠️ No pude agregar: " . $omitidos->implode(', ') . " (no disponibles para este reparto)."
+            : '';
+
+        return "Cargué tu último pedido:\n{$lineas}{$omitidosTexto}\n\n¿Lo confirmamos para {$fechaTexto}? Podés responder *sí* para confirmar, agregar más productos o cambiar algo.";
     }
 
     // -------------------------------------------------------------------------
@@ -491,8 +576,12 @@ class BotService
             ->get()
             ->reverse();
 
+        $soloDiaDisponible = count($fechasDisponibles) === 1;
         $favoritosTexto = $favoritosDisponibles
             ? "Productos que suele pedir disponibles para este reparto: {$favoritosDisponibles}."
+            : '';
+        $pedidoRapidoTexto = ($soloDiaDisponible && $favoritosDisponibles)
+            ? "PEDIDO RÁPIDO: Si el cliente dice 'lo de siempre', 'lo mismo', 'repetir' o similar, podés cargar directamente {$favoritosDisponibles} con las cantidades habituales y llamar agregar_al_carrito + crear_pedido sin pedir confirmación previa."
             : '';
 
         $messages = [];
@@ -783,6 +872,7 @@ Hoy es {$fecha}.
 Nombre del cliente: {$nombre}. SIEMPRE usá este nombre para dirigirte al cliente. NUNCA uses el nombre de la cuenta comercial como nombre del cliente.{$cuentaTexto}
 Último pedido: {$ultimoPedidoTexto}
 {$favoritosTexto}
+{$pedidoRapidoTexto}
 {$ultimaDirTexto}{$configNegocio}
 " . ($fechaYaElegida
     ? "Reparto elegido: {$fechaElegidaTexto}. Los productos que ves son los disponibles para ese día."
@@ -873,7 +963,9 @@ Herramientas disponibles:
 " : "") . "- ver_precios → lista de precios actualizada (mostrala tal cual, sin reformatear)
 - ver_producto → detalle e imagen de un producto específico. Usá esta herramienta cuando el cliente pregunta por un producto (disponibilidad, precio, descripción, si hay X, cómo es el X). NUNCA respondas sobre un producto puntual sin llamar primero a esta herramienta. Los precios del historial pueden estar desactualizados — usá siempre ver_producto para el precio real.
 " . ($puedePedir ? "- Cuando el cliente responde afirmativamente ('sí', 'dale', 'sí quiero', etc.) luego de que se le mostró un producto: NO llamés ver_producto. Preguntale directamente la cantidad y llamá agregar_al_carrito con lo que confirme. Si ya dijo la cantidad, llamá agregar_al_carrito directamente.
-" : "") . "- Si recibís una imagen, describila e intentá relacionarla con un pedido.";
+" : "") . "- Si recibís una imagen, describila e intentá relacionarla con un pedido.
+
+IMPORTANTE — herramientas en paralelo: Podés llamar MÚLTIPLES herramientas en una sola respuesta cuando son independientes entre sí. Ejemplos: elegir_reparto + agregar_al_carrito (si el cliente ya eligió el día y el producto); ver_carrito + ver_pedidos; ver_producto para varios productos distintos a la vez. Esto hace la experiencia más rápida — usalo siempre que puedas en lugar de esperar a que el cliente confirme cada paso.";
 
         $messages[] = ['role' => 'system', 'content' => $systemContent];
 
@@ -1170,7 +1262,7 @@ Herramientas disponibles:
 
     private function handleToolCalls(array $choice, array $messages, $cliente, array $tools = [], bool $puedePedir = true): string
     {
-        for ($round = 0; $round < 5; $round++) {
+        for ($round = 0; $round < 8; $round++) {
             // Agregar el mensaje del asistente con todos sus tool_calls
             $messages[] = $choice['message'];
 
