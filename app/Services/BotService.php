@@ -440,14 +440,14 @@ class BotService
 
         // Top productos pedidos, filtrados al catálogo disponible del día elegido
         $topPedidos = Pedido::where('codcli', $codcli)
-            ->selectRaw('descrip, cod, COUNT(*) as veces')
-            ->groupBy('descrip', 'cod')
+            ->selectRaw('descrip, COUNT(*) as veces')
+            ->groupBy('descrip')
             ->orderByDesc('veces')
             ->get();
 
-        $productosCods       = $productos->pluck('cod')->map(fn($c) => (float) $c)->flip();
+        $productosDescs      = $productos->pluck('des')->map(fn($d) => mb_strtolower(trim($d)))->flip();
         $favoritosDisponibles = $topPedidos
-            ->filter(fn($p) => $productosCods->has((float) $p->cod))
+            ->filter(fn($p) => $productosDescs->has(mb_strtolower(trim($p->descrip))))
             ->take(3)
             ->pluck('descrip')
             ->implode(', ');
