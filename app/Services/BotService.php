@@ -581,7 +581,7 @@ class BotService
                     if ($tieneHasta) {
                         $hastaNum  = (int) $cfg['hasta_dia'];
                         $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
-                        $diff      = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
+                        $diff      = ($diaSemana - $hastaNum + 7) % 7;
                         $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
                         if (now()->gt($fechaCierre)) {
                             $fechasCortadasAviso[] = "el reparto del "
@@ -614,7 +614,7 @@ class BotService
                 if ($tieneHasta) {
                     $hastaNum  = (int) $cfg['hasta_dia'];
                     $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
-                    $diff      = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
+                    $diff      = ($diaSemana - $hastaNum + 7) % 7;
                     $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
                     if (now()->gt($fechaCierre)) {
                         $corteAviso = "⚠️ CIERRE DE PEDIDOS: Los pedidos para el reparto del "
@@ -628,7 +628,7 @@ class BotService
                 if ($tieneDesde) {
                     $desdeNum  = (int) $cfg['desde_dia'];
                     $desdeHora = !empty($cfg['desde_hora']) ? $cfg['desde_hora'] : '00:00';
-                    $diff      = ($diaSemana - $desdeNum + 7) % 7 ?: 7;
+                    $diff      = ($diaSemana - $desdeNum + 7) % 7;
                     $fechaApertura = $candidato->copy()->subDays($diff)->setTimeFromTimeString($desdeHora);
                     if (now()->lt($fechaApertura)) {
                         $corteAviso = "⚠️ PEDIDOS CERRADOS: Todavía no se pueden tomar pedidos para el reparto del "
@@ -660,14 +660,14 @@ class BotService
                 if ($tieneDesde) {
                     $desdeNum  = (int) $cfg2['desde_dia'];
                     $desdeHora = !empty($cfg2['desde_hora']) ? $cfg2['desde_hora'] : '00:00';
-                    $diff      = ($f['dia'] - $desdeNum + 7) % 7 ?: 7;
+                    $diff      = ($f['dia'] - $desdeNum + 7) % 7;
                     $fechaAp   = \Carbon\Carbon::parse($f['fecha'])->subDays($diff)->setTimeFromTimeString($desdeHora);
                     $partes[]  = "abre el {$diasLabel[$desdeNum]} {$fechaAp->locale('es')->isoFormat('D [de] MMMM')} a las {$fechaAp->format('H:i')}hs";
                 }
                 if ($tieneHasta) {
                     $hastaNum  = (int) $cfg2['hasta_dia'];
                     $hastaHora = !empty($cfg2['hasta_hora']) ? $cfg2['hasta_hora'] : '23:59';
-                    $diff      = ($f['dia'] - $hastaNum + 7) % 7 ?: 7;
+                    $diff      = ($f['dia'] - $hastaNum + 7) % 7;
                     $fechaCi   = \Carbon\Carbon::parse($f['fecha'])->subDays($diff)->setTimeFromTimeString($hastaHora);
                     $partes[]  = "cierra el {$diasLabel[$hastaNum]} {$fechaCi->locale('es')->isoFormat('D [de] MMMM')} a las {$fechaCi->format('H:i')}hs";
                 } elseif ($globalHoraCorte) {
@@ -1583,7 +1583,7 @@ Herramientas disponibles:
                 $hastaNum  = $tieneHasta ? (int) $cfg['hasta_dia'] : null;
                 $hastaHora = !empty($cfg['hasta_hora']) ? $cfg['hasta_hora'] : '23:59';
                 if ($hastaNum !== null) {
-                    $diff        = ($diaSemana - $hastaNum + 7) % 7 ?: 7;
+                    $diff        = ($diaSemana - $hastaNum + 7) % 7;
                     $fechaCierre = $candidato->copy()->subDays($diff)->setTimeFromTimeString($hastaHora);
                     if (now()->gt($fechaCierre)) $dentroDeVentana = false;
                 }
@@ -1596,7 +1596,7 @@ Herramientas disponibles:
                 $desdeNum  = $tieneDesde ? (int) $cfg['desde_dia'] : null;
                 $desdeHora = !empty($cfg['desde_hora']) ? $cfg['desde_hora'] : '00:00';
                 if ($desdeNum !== null) {
-                    $diff          = ($diaSemana - $desdeNum + 7) % 7 ?: 7;
+                    $diff          = ($diaSemana - $desdeNum + 7) % 7;
                     $fechaApertura = $candidato->copy()->subDays($diff)->setTimeFromTimeString($desdeHora);
                     if (now()->lt($fechaApertura)) $dentroDeVentana = false;
                 }
