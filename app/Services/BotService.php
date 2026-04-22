@@ -130,7 +130,11 @@ class BotService
         if ($client->estado === 'eligiendo_reparto') {
             $resp = $this->manejarRepartoTexto($client, trim($message));
             if ($resp !== null) {
-                $this->sendReply($client, $resp);
+                // '' = ya enviado internamente (fecha matcheada → process() recursivo)
+                // string = mensaje a enviar (no matcheó, repite opciones)
+                if ($resp !== '') {
+                    $this->sendReply($client, $resp);
+                }
                 return $resp;
             }
             // No se pudo parsear: resetear y dejar pasar a GPT
@@ -410,9 +414,9 @@ class BotService
             $puedePedir = $empresa?->bot_puede_pedir ?? true;
             $result = $this->handleToolCalls($choice, $messages, $cliente, $tools, $puedePedir);
 
-            // Si el cliente entró en flujo interactivo, los botones ya fueron enviados: no enviar texto adicional
+            // Si el cliente entró en flujo interactivo, el mensaje ya fue enviado: no enviar texto adicional
             $cliente->refresh();
-            if (str_starts_with($cliente->estado ?? '', 'confirmando_')) {
+            if (str_starts_with($cliente->estado ?? '', 'confirmando_') || $cliente->estado === 'eligiendo_reparto') {
                 return '';
             }
 
@@ -2469,8 +2473,9 @@ IMPORTANTE — herramientas en paralelo: Podés llamar MÚLTIPLES herramientas e
             $client->update(['estado' => null]);
             Cache::forget('reparto_opciones_' . $client->id);
             $aviso = $this->confirmarFechaReparto($client, $match);
-            // Procesar con IA para que muestre el catálogo del día
-            return $this->process($client, "El cliente eligió el reparto del " . ucfirst($match['texto']) . ". {$aviso} Mostrá los productos disponibles y preguntá qué quiere pedir.");
+            // process() llama sendReply internamente; retornamos '' para que el caller no envíe de nuevo
+            $this->process($client, "El cliente eligió el reparto del " . ucfirst($match['texto']) . ". {$aviso} Mostrá los productos disponibles y preguntá qué quiere pedir.");
+            return '';
         }
 
         // No coincidió: repetir las opciones
