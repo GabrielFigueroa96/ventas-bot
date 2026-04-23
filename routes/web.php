@@ -72,6 +72,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'set.tenant'])->grou
     Route::post('/test-bot/mensaje', [AdminChatController::class, 'testBotMensaje'])->name('test_bot.mensaje');
     Route::post('/test-bot/reset',   [AdminChatController::class, 'testBotReset'])->name('test_bot.reset');
     Route::get ('/test-bot/estado',  [AdminChatController::class, 'testBotEstado'])->name('test_bot.estado');
+    Route::post('/test-bot/ia-paso', [AdminChatController::class, 'testBotIaPaso'])->name('test_bot.ia_paso');
 
     // Uso IA
     Route::get('/uso-ia', [AdminController::class, 'usoIa'])->name('uso_ia');

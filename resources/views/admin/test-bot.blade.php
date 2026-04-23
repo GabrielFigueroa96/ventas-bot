@@ -138,47 +138,20 @@
 const mensajeUrl  = '{{ route('admin.test_bot.mensaje') }}';
 const resetUrl    = '{{ route('admin.test_bot.reset') }}';
 const estadoUrl   = '{{ route('admin.test_bot.estado') }}';
+const iaPasoUrl   = '{{ route('admin.test_bot.ia_paso') }}';
 const csrfToken   = '{{ csrf_token() }}';
 
 const chatMessages = document.getElementById('chat-messages');
 const chatScroll   = document.getElementById('chat-scroll');
 const msgInput     = document.getElementById('msg-input');
 
-// ── Escenarios predefinidos ──────────────────────────────
-const ESCENARIOS = {
-    pedido_completo: [
-        'hola, quiero hacer un pedido',
-        // Si hay múltiples fechas, el bot muestra una lista numerada → elegimos la primera
-        '1',
-        // Pedimos productos sin asumir cuáles hay disponibles
-        '¿qué tenés disponible hoy?',
-        // El bot lista productos → pedimos el primero
-        'dame 2 de lo primero que mencionaste',
-        'sí',
-    ],
-    elegir_fecha: [
-        'quiero hacer un pedido para el viernes',
-        // Si hay viernes disponible, el bot lo confirma; si no, muestra lista
-        '¿qué productos hay para ese día?',
-        'quiero el primero de la lista, 1 unidad',
-        'sí',
-    ],
-    lo_mismo: [
-        'lo mismo de siempre',
-        'sí',
-    ],
-    consulta_estado: [
-        '¿cómo está mi pedido?',
-    ],
-    cambiar_de_opinion: [
-        'hola quiero pedir',
-        '1',
-        '¿qué tenés disponible?',
-        'poneme 2 del primero',
-        '¿cuánto me sale todo?',
-        'agregá también 1 del segundo producto que mencionaste',
-        'sí',
-    ],
+// ── Objetivos de escenarios IA ───────────────────────────
+const OBJETIVOS = {
+    pedido_completo:    'Hacer un pedido completo: elegir fecha de entrega, pedir al menos 2 unidades de algún producto disponible y confirmar el pedido.',
+    elegir_fecha:       'Elegir una fecha de entrega disponible, consultar qué productos hay para ese día y agregar uno al carrito.',
+    lo_mismo:          'Pedir lo mismo que el pedido anterior ("lo mismo de siempre") y confirmarlo.',
+    consulta_estado:    'Consultar el estado de tu último pedido.',
+    cambiar_de_opinion: 'Iniciar un pedido, agregar productos al carrito y luego cancelar o cambiar de opinión antes de confirmar.',
 };
 
 function scrollBottom() { chatScroll.scrollTop = chatScroll.scrollHeight; }
@@ -251,26 +224,59 @@ msgInput.addEventListener('input', function() {
     this.style.height = Math.min(this.scrollHeight, 100) + 'px';
 });
 
-// ── Escenarios automáticos ───────────────────────────────
+// ── Escenarios automáticos con IA ────────────────────────
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+function getHistorial() {
+    const rows = chatMessages.querySelectorAll('.msg-row');
+    const hist = [];
+    rows.forEach(row => {
+        const bubble = row.querySelector('.bubble');
+        if (!bubble) return;
+        const direction = row.classList.contains('msg-row-in') ? 'incoming' : 'outgoing';
+        hist.push({ direction, message: bubble.innerText });
+    });
+    return hist;
+}
+
+async function pedirSiguienteMensajeIA(objetivo) {
+    const historial = getHistorial();
+    try {
+        const res = await fetch(iaPasoUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+            body: JSON.stringify({ objetivo, historial }),
+        });
+        return await res.json(); // { fin: bool, mensaje: string|null }
+    } catch (e) {
+        return { fin: true, mensaje: null };
+    }
+}
+
 async function correrEscenario(nombre) {
-    const mensajes = ESCENARIOS[nombre];
-    if (!mensajes) return;
+    const objetivo = OBJETIVOS[nombre];
+    if (!objetivo) return;
 
     const btns = document.querySelectorAll('.esc-btn');
     btns.forEach(b => { b.disabled = true; });
-    document.getElementById('esc-status').classList.remove('hidden');
+    const statusEl = document.getElementById('esc-status');
+    statusEl.classList.remove('hidden');
 
-    for (const msg of mensajes) {
-        msgInput.value = msg;
-        await sleep(700);
-        await enviarMensaje(msg);
-        await sleep(1200);
+    const MAX_PASOS = 12;
+    for (let paso = 0; paso < MAX_PASOS; paso++) {
+        statusEl.textContent = `🤖 IA pensando paso ${paso + 1}...`;
+        const { fin, mensaje } = await pedirSiguienteMensajeIA(objetivo);
+
+        if (fin || !mensaje) break;
+
+        await sleep(400);
+        await enviarMensaje(mensaje);
+        await sleep(900);
     }
 
     btns.forEach(b => { b.disabled = false; });
-    document.getElementById('esc-status').classList.add('hidden');
+    statusEl.textContent = '⏳ Ejecutando escenario...';
+    statusEl.classList.add('hidden');
 }
 
 document.querySelectorAll('.esc-btn').forEach(btn => {

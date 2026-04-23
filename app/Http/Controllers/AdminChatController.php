@@ -15,6 +15,7 @@ use App\Services\BotService;
 use App\Services\TenantManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -366,6 +367,65 @@ class AdminChatController extends Controller
         $cliente->update(['estado' => 'activo', 'modo' => 'bot', 'memoria_ia' => null]);
 
         return response()->json(['ok' => true]);
+    }
+
+    public function testBotIaPaso(Request $request)
+    {
+        $request->validate([
+            'objetivo'  => 'required|string|max:500',
+            'historial' => 'nullable|array|max:40',
+        ]);
+
+        $objetivo  = $request->input('objetivo');
+        $historial = $request->input('historial', []);
+
+        $system = <<<PROMPT
+Sos un cliente de una distribuidora de alimentos que está chateando con un bot de ventas por WhatsApp.
+Tu objetivo es: {$objetivo}
+
+Reglas:
+- Respondé SOLO con el mensaje que mandarías como cliente (texto plano, como si fuera WhatsApp).
+- Sé natural y conciso. No expliques lo que hacés.
+- Si el objetivo ya fue cumplido (el pedido fue confirmado, la consulta fue respondida, etc.), respondé exactamente con la palabra: FIN
+- Si el bot te pide elegir una opción numerada, elegí la primera (respondé "1").
+- Si el bot te pide confirmar con sí/no, respondé "sí".
+- Si el bot te pide un nombre, inventá uno (ej: "Juan").
+- Si el bot te pide una dirección, inventá una (ej: "San Martín 123").
+PROMPT;
+
+        $messages = [['role' => 'system', 'content' => $system]];
+
+        foreach ($historial as $h) {
+            $role = ($h['direction'] ?? '') === 'incoming' ? 'user' : 'assistant';
+            $messages[] = ['role' => $role, 'content' => $h['message'] ?? ''];
+        }
+
+        // Si no hay historial, el cliente inicia la conversación
+        if (empty($historial)) {
+            $messages[] = ['role' => 'user', 'content' => 'Iniciá la conversación para cumplir el objetivo.'];
+        }
+
+        try {
+            $response = Http::withToken(config('api.openai.key'))
+                ->timeout(20)
+                ->post('https://api.openai.com/v1/chat/completions', [
+                    'model'       => 'gpt-4.1-mini',
+                    'messages'    => $messages,
+                    'max_tokens'  => 80,
+                    'temperature' => 0.4,
+                ]);
+
+            $texto = trim($response->json('choices.0.message.content') ?? '');
+        } catch (\Throwable $e) {
+            Log::error("TestBot IA paso error: {$e->getMessage()}");
+            return response()->json(['fin' => true, 'mensaje' => null]);
+        }
+
+        if (strtoupper($texto) === 'FIN' || $texto === '') {
+            return response()->json(['fin' => true, 'mensaje' => null]);
+        }
+
+        return response()->json(['fin' => false, 'mensaje' => $texto]);
     }
 
     private function getTestCliente(?int $localidadId = null): Cliente
